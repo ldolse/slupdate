@@ -87,6 +87,8 @@ sl_dat_mapping = {
     }   
    }
 
+
+
 try:
     infodict
 except:
@@ -516,7 +518,7 @@ def restore_session():
     infodict = dataset['infodict']
     myanswers = dataset['sl_redump_titlemap']
     return myanswers
-        
+
 def history(search=None):
     import readline
     for i in range(readline.get_current_history_length()):
@@ -541,6 +543,77 @@ def compare_redump_to_sl(sllist,san_redumplst,answers):
             continue
         else:
             print(title)
+            
+def update_sl_descriptions(xml_file, answerdict):
+    # Parse the XML file using lxml
+    parser = etree.XMLParser(remove_blank_text=False)
+    tree = etree.parse(xml_file, parser)
+
+    for original_desc, new_desc in answerdict.items():
+        if new_desc == 'No Match':
+            continue
+        else:
+            print('rewriting '+original_desc)
+            try:
+                # Find the software element with the original description
+                software = tree.xpath(f"//software[description=$subs]",subs=original_desc)[0]
+                # Update the description element with the new description
+                description = software.xpath("description")[0]
+                description.text = new_desc
+            except Exception as e:
+                print('new description: '+new_desc+' failed')
+                print(e)
+                continue
+
+    # Write the updated XML to disk while preserving the original comments
+    output = etree.tostring(
+        tree,
+        pretty_print=True,
+        xml_declaration=True,
+        encoding="UTF-8",
+        doctype='<!DOCTYPE softwarelist SYSTEM "softwarelist.dtd">'
+    ).decode("UTF-8")
+
+    with open(xml_file, "w") as f:
+        f.write(output)
+
+
+def add_redump_names_to_slist(xml_file, answerdict):
+    # Parse the XML file using lxml
+    parser = etree.XMLParser(remove_blank_text=False)
+    tree = etree.parse(xml_file, parser)
+    root = tree.getroot()
+
+    for soft_desc, redump_name in answerdict.items():
+        if redump_name == 'No Match':
+            continue
+        elif redump_name not in redump_name_list:
+            continue
+        else:
+            print('inserting tag in '+soft_desc)
+        for software in root.findall('.//software'):
+            description = software.find('description').text
+            if description == soft_desc:
+
+                # Create the redump_name tag and insert it before the part tag
+                new_tag = etree.Element('info', {'name': 'redump_name', 'value': redump_name})
+                new_tag.tail = '\n\t\t'
+                # Find the index of the part tag
+                part_index = software.index(software.xpath('part')[0])
+                software.insert(part_index, new_tag)
+
+    # Write the updated XML to disk while preserving the original comments
+    output = etree.tostring(
+        tree,
+        pretty_print=True,
+        xml_declaration=True,
+        encoding="UTF-8",
+        doctype='<!DOCTYPE softwarelist SYSTEM "softwarelist.dtd">'
+    ).decode("UTF-8")
+
+    with open(xml_file, "w") as f:
+        f.write(output)
+
 
 chdman_version = chdman_ver()
 online = False
