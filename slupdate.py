@@ -5,270 +5,128 @@ against[Redump](http://redump.org/) dats.
 
 https://github.com/ldolse/slupdate
 """
-
-
 import os
-import re
-import sys
-import glob
-import pickle
-import traceback
-import xmltodict
-import pykakasi
-import pprint
-import pathlib
-import subprocess
-import tempfile
-import logging
+import re, pprint
 import inquirer
-import requests
-from requests.adapters import HTTPAdapter
-from requests.packages.urllib3.util.retry import Retry
-from  lxml import etree
-from difflib import get_close_matches
-from bs4 import BeautifulSoup
+from modules.utils import save_data,restore_data
+from modules.dat import get_dat_name
 
-# Require at least Python 3.8
-assert sys.version_info >= (3, 8)
+
+
 
 __version__ = '.1'
 
-datpaths = {
-    'sl' : '../mame/hash/',
-    'redump' : '../'
-}
 
-def pickling(dataset):
-    with open('dataset.cache', 'wb') as f:
-        pickle.dump(dataset, f)
+settings = {}
+user_answers = {}
+softlist_dict = {}
+dat_dict = {}
+mappings = {}
+stats = {}
 
-def unpickling():
-    try:
-        with open('dataset.cache', 'rb') as f:
-            return pickle.load(f)
-    except:
-        return None
+consoles = {  'Atari Jaguar' : 'jaguar',
+                'Amiga CDTV' : 'cdtv',
+                'Amiga CD32' : 'cd32',
+               'FM Towns CD' : 'fmtowns_cd',
+          'IBM PC/AT CD-ROM' : 'ibm5170_cdrom',
+    'PC Engine / TurboGrafx' : 'pcecd',
+              'Philips CD-i' : 'cdi',
+            'Pippin CD-ROMs' : 'pippin',
+                 'NEC PC-FX' : 'pcfx',
+                   'Sega CD' : 'segacd',
+     'Sega Mega CD (Europe)' : 'megacd',
+      'Sega Mega CD (Japan)' : 'megacdj',
+               'Sega Saturn' : 'saturn',
+            'Sega Dreamcast' : 'dc',
+             'SNK NeoGeo CD' : 'neocd',
+          'Sony Playstation' : 'psx',
+                       '3DO' : '3do_m2'
+        }
+# key for the menu correlates to the key for the menu's item list
+menu_msgs = {'0' : 'Main Menu, select an option',
+             '1' : 'This function will process software lists and dat files, finding source files to build chds, please select a platform',
+             '2' : 'Choose a console to build CHD\'s for current match list',
+             '3' : 'Choose an assisted mapping task to identify other sources for softlist entries',
+             'new' : 'This function will look for DAT entries which don\'t appear in software lists and assist with creating Software List records, continue?',
+             '5' : 'MAME hash directory and dat directories for at least one platform must be configured.',
+             'save' : 'Save asisted mapping answers and other user generated data?  This will overwrite anything previously written to disk',
+             'restore' : 'Restore data from an earlier session?  This will overwrite any currently residing in memory',
+             '2a' : 'Begin building CHDs?',
+             '2b' : 'Update the Software List with new hashes?',
+             '4a' : 'Do you want to create alternate softlist entries for both redump and TOSEC, or do you want to avoid duplicating entries?  In order to avoid duplicating entries TOSEC sourced entries must first be matched to redump.',
+             'soft' : 'Please select the MAME Software List XML directory',
+             'chd' : 'CHD Builder Destination Directory',
+             'dat' : 'DAT Source Directories',
+             'rom' : 'ROM Source Directories',
+             '5b' : 'Select a console to configure DAT and ROM Source directories',
+             'dir_d' : 'Select a Directory to Remove',
+             'romvault' : 'Are you using ROMVault to manage DATs and ROMs?'
+    }
+# unless a list entry maps to a function it should always map to another menu in the tree
+# This allows completed functions to go back to their parent menu automatically
+menu_lists = {'0' : [('1. Automatic Title/Disc Mapping', 'automap_function'),
+                     ('2. CHD Builder', '2'),
+                     ('3. Assisted Title/Disc Mapping', '3'),
+                     ('4. Create New Entries','4'),
+                     ('5. Settings','5'),
+                     ('6. Save Session','save_function'),
+                     ('7. Restore Previous Session', 'restore_function')],
+             '1' : [('a. Run Mapping based on source hashes in comments','hash_automap_function'),
+                    ('b. Run Mapping based on Names (hash matches take precedence)','name_automap_function'),
+                    ('c. Back', '0')],
+             '2' : [('a. Console List','chd_build_function'),
+                    ('b. Back', '0')],
+             '3' : [('Map entries with no source information to Redump sources','no_src_map_function'),
+                    ('Remap entries with TOSEC sources to Redump sources','tosec_map_function'),
+                    ('Back', '0')],
+             '5' : [('a. MAME Software List XML Directory', 'slist_dir_function'),
+                    ('b. Configure Root DAT/ROM Directories (ROMvault)', 'root_dirs_function'),
+                    ('c. Configure DAT/ROM Directories', 'dat'),
+                    ('d. Destination folder for CHDs', 'chd_dir_function'),
 
-def requests_retry_session(
-    retries=10,
-    backoff_factor=0.3,
-    status_forcelist=(500, 502, 504),
-    session=None,
-):
-    session = session or requests.Session()
-    retry = Retry(
-        total=retries,
-        read=retries,
-        connect=retries,
-        backoff_factor=backoff_factor,
-        status_forcelist=status_forcelist,
-    )
-    adapter = HTTPAdapter(max_retries=retry)
-    session.mount('http://', adapter)
-    session.mount('https://', adapter)
-    return session
-
-sl_dat_mapping = {
-    "dc" : {
-    "mame" : "dc.xml",
-    "redump" : "Sega - Dreamcast*.dat"
-    },
-    "psx" : {
-    "mame" : "psx.xml",
-    "redump" : "Sony - Dreamcast*.dat"
-    },
-    "saturn" : {
-    "mame" : "saturn.xml",
-    "redump" : "Sega - Saturn*.dat"
-    },
-    "megacd" : {
-    "mame" : "megacd.xml",
-    "redump" : "Sega - megacd*.dat"
-    }   
-   }
-
-
-
-try:
-    infodict
-except:
-    infodict = {}
-    # example of adding an item to this dict
-    # infodict['software title']['example'] = 2
-
-def get_dat_paths(platform, datpaths, sl_dat_map):
-    slpath = datpaths['sl']+sl_dat_map[platform]['mame']
-    redump_pattern = datpaths['redump']+sl_dat_map[platform]['redump']
-    files = glob.glob(redump_pattern)
-    redump_path = files[0]
-    return [slpath, redump_path]
-
-
-def chdman_ver():
-    try:
-        proc = subprocess.Popen('chdman', stdout=subprocess.PIPE)
-        output = proc.stdout.read()
-        version = re.findall(r'\d+\.\d+',output.decode('ascii'))
-    except:
-        logging.debug(f'chdman not in the system path or installed with slupdate')
-    return version[0]
+                    ('e. Back', '0')],
+             'dat' : [('Add Directories','platform_dat_rom_function'),
+                         ('Remove Directories','del_dirs_function'),
+                         ('Back', '5')],
+    }
 
 
-def slupdate_version():
-    return __version__
+def main_menu():
+    global settings
+    dir_types = ('dat','rom')
+    checksettings = restore_data('settings')
+    if checksettings:
+        settings = checksettings
+    #if len(settings) == 0:
+    #    menu_sel = '5'
+    #else:
+    menu_sel = '0'
+    complete = False
+    while not complete:
+        answer = list_menu(menu_sel,menu_lists[menu_sel],menu_msgs[menu_sel])
+        if any(file in answer.values() for file in dir_types):
+            platform = platform_select()
 
+        if answer[menu_sel].endswith('function'):
+            if any(f in answer for f in dir_types):     
+                globals()[answer[menu_sel]](platform['platforms'])
+                # return to the previous menu after completing the function
+                menu_sel = list(answer)[0]
+            else:
+                globals()[answer[menu_sel]]()
+                # return to the previous menu after completing the function
+                menu_sel = list(answer)[0]
 
-def get_sl_titles(soup):
-    softwares = soup.find_all('software')
-    titles = []
-    for soft in softwares:
-        titles.append(soft.description.text)
-    return titles.sort()
-    
-def input_to_soup(input):
-    with open(input, 'r') as f:
-        file = f.read()
-    soup = BeautifulSoup(file, 'xml')
-    return soup
-    
-def print_mame_names(softlist):
-    for item in my_soft['software']:
-        pprint.pprint(item['@name'])
-        
-
-def get_sl_descriptions(softlist,dat_type,field):
-    '''
-    softlist is a list of software list dictionaries
-    field is one of the field names in the soft list
-    '''
-    sl = []
-    for item in softlist[dat_type]:
-        sl.append(item[field])
-    return sl
-
-def redump_source(found):
-    if found: print("found a redump url")
-    else: print("no redump")
-
-def romhashes_to_dict(comment):
-    xmlheader = '<?xml version="1.0" ?><root>'
-    xmlclose = '</root>'
-    fixed_comment = xmlheader+comment+xmlclose
-    try:
-        commentdict = xmltodict.parse(fixed_comment)
-        return commentdict
-    except:
-        print('failed to parse comment')
-        return None
-    
-
-def process_comments(soft, infodict):
-    redumpurl = r'^http://redump'
-    romhash = r'^<rom name'
-
-    for comment in soft['#comment']:
-        if re.match(redumpurl,comment):
-            redumplist = re.split(r'(,|\s+)',comment)
-            discnum = 1
-            sourcedict = {}
-            for url in redumplist:
-                if re.match(redumpurl,url):
-                    sourcedict['disc'+str(discnum)+'source'] = url
-                    discnum += 1
-                else:
-                    print('other info mixed with redump source comment')
-            try:
-                infodict[soft['description']].update(sourcedict)
-            except:
-                urls = {soft['description']:sourcedict}
-                infodict.update(urls)
-            
-        elif re.match(romhash,comment):
-            #print('romhash')
-            commentdict = romhashes_to_dict(comment)
-            if commentdict: 
-                try:
-                    infodict[soft['description']].update(commentdict['root'])
-                except:
-                    itemhashes = {soft['description']:commentdict['root']}
-                    infodict.update(itemhashes)
-
-
-def build_infodict(softlist, infodict):
-    '''
-    grabs useful data and inserts into a simple to manage dict
-    '''
-    for item in softlist:
-        process_comments(item, infodict)
-
-
-def print_discs(softlist):
-    for item in my_soft['software']:
-        pprint.pprint(item['part'])
-
-def print_sha1s(softlist):
-    for item in my_soft['software']:
-        print('mame name is '+item['@name']+' and descrption is '+item['description'])
-        if isinstance(item['part'], list):
-            discnum = 1
-            for disc in item['part']:
-                #pprint.pprint(disc)
-                try:
-                    print('      disc '+str(discnum)+' sha1  is '+disc['diskarea']['disk']['@sha1'])
-                except:
-                    print('      disc '+str(discnum)+' has no sha1')
-                discnum += 1
+        elif menu_sel == '5' and answer[menu_sel] == '0':
+            print('saving settings ...')
+            # save settings when exiting settings and returning to main menu
+            save_data(settings,'settings')
+            menu_sel = answer[menu_sel]
         else:
-            print('     sha1  is '+item['part']['diskarea']['disk']['@sha1'])
+            menu_sel = answer[menu_sel]
 
-def get_sl_entry(search_list, title, type):
-    '''
-    dc example: get_sl_entry(mysoft['softwarelist']['software'],'4wt','mame')
-    '''
-    res = ''
-    if type == 'mame':
-        res = next((sub for sub in search_list if sub['@name'] == title), None)
-    elif type == 'redump':
-        res = next((sub for sub in search_list if sub['description'] == title), None)
-    else:
-        print('unsupported title type')
-    return res
 
-def convert__bincue_to_chd(chd_file_path: pathlib.Path, output_cue_file_path: pathlib.Path, show_command_output: bool):
-    # Use another temporary directory for the chdman output files to keep those separate from the binmerge output files:
-    with tempfile.TemporaryDirectory() as chdman_output_folder_path_name:
-        chdman_cue_file_path = pathlib.Path(chdman_output_folder_path_name, output_cue_file_path.name)
-
-        logging.debug(f'Converting "{chd_file_path.name}" to .bin/.cue format')
-        chdman_result = subprocess.run(["chdman", "createcd", "--input", str(chd_file_path), "--output", str(chdman_cue_file_path)], stdout=None if show_command_output else subprocess.DEVNULL)
-        if chdman_result.returncode != 0:
-            # chdman provides useful progress output on stderr so we don't want to capture stderr when running it. That means we can't provide actual error output to the exception, but I can't find a way around that.
-            raise ConversionException("Failed to convert .chd using chdman", chd_file_path, None)
-
-def convert_xml(file, comments=False):
-    #read xml content from the file
-    fileptr = open(file,"r")
-    xml_content= fileptr.read()
-    #print("XML content is:")
-    #print(xml_content)
-    my_ordered_dict=xmltodict.parse(xml_content, process_comments=comments)
-    return my_ordered_dict
-
-def discs_to_titles(disclist):
-    '''
-    redump entries are for individual discs, SL entries describe 
-    boxes/packages this function returns a new list with only titles
-    '''
-    title_list = []
-    discpat = r'\s\([D|d]isc\s\d+\)'
-    for disc in disclist:
-        softtitle  = re.sub(discpat,'',disc)
-        if softtitle not in title_list:
-            title_list.append(softtitle)
-    return title_list
-
-def opt_menu(key, options, prompt):
-    selection = options
+def list_menu(key, options, prompt):
     optconfirm = [
         inquirer.List(key,
                       message = prompt,
@@ -278,388 +136,271 @@ def opt_menu(key, options, prompt):
     answer = inquirer.prompt(optconfirm)
     return answer
 
-def check_rd_shorthand(soft,matchlist):
+
+def find_dat_matches(sl_platform_dict,dathash_platform_dict):
     '''
-    todo - handle taikenban / demo matching
-    '''
-    shorthand = ['proto','beta','sample']
-    for short in shorthand:
-        if short in soft.lower() and (s for s in matchlist if short in s.lower()):
-            print('prototype or beta/demo not in redump, skipping')
-            return True
-    return False
-        
-def select_from_redump(soft, soft_nointro, san_redumplst):
-    languages = re.compile(r'\s?\(((En|Ja|Fr|De|Es|It|Nl|Pt|Sv|No|Da|Fi|Zh|Ko|Pl),?)+\)')
-    matchlist = get_close_matches(soft, san_redumplst,n=5)
-    if len(matchlist) > 0:
-        closematch = next((s for s in matchlist if soft_nointro.lower() in s.lower()), None)
-        if not check_rd_shorthand(soft,matchlist):
-            if closematch:
-                stripped = re.sub(languages,'',closematch)
-                if soft_nointro.lower() == stripped.lower():
-                    return {soft:closematch}, True
-            print('')
-            print('   Mame Title: '+soft_nointro)
-            matchlist.append('No Match')
-            matchlist.append('Stop')
-            answer = opt_menu(soft, matchlist, '  Matches')
-            return answer, False
-        else:
-            return {soft:'No Match'}, True
-    else:
-        return {soft:'No Match'}, True
-
-def print_redump_info(redump_dict):
-    limited = re.compile(r'(Genteiban|Limited Edition|Shokai Genteiban)')
-    print('')
-    print('Redump.org Website details for this title:')
-    print('Redump Title: '+redump_dict['Redump Title'])
-    print('  Full Title: '+redump_dict['Full Title'])
-    if redump_dict['Region'] == 'Japan':
-        print('      Romaji: ', end='')
-        kks = pykakasi.kakasi()
-        jresult = kks.convert(redump_dict['Full Title'])
-        for item in jresult:
-            print('{} '.format(item['hepburn'].capitalize()), end='')
-        print('')
-    print('      Region: '+redump_dict['Region'])
-    print('   Languages: '+redump_dict['Languages'])
-    if redump_dict['Region'] == 'Japan' and re.match(limited,redump_dict['Edition']):
-        print('     Edition: '+redump_dict['Edition']+'  (Shokai Genteiban/Genteiban/Limited Edition)')        
-    else:
-        print('     Edition: '+redump_dict['Edition'])
-    print('')
-    
-
-
-def rtable_to_dict(bs_table):
-    gameinfo = {}
-    alt = re.compile(r'(Region|Languages)')
-    for bsr in bs_table:
-        if bsr.find('th') and not re.search(alt,bsr.find('th').text):
-            gameinfo.update({bsr.find('th').text:bsr.find('td').text})
-        elif bsr.find('th'):
-            gameinfo.update({bsr.find('th').text:bsr.find('img').get('title')})
-    return gameinfo
-    
-
-def get_redump_info(redumpurl):
-    rdict = {}
-    data = requests_retry_session().request("GET", redumpurl, timeout=3)
-    rsoup = BeautifulSoup(data.text, 'xml')
-    rdict.update({'Redump Title':rsoup.find('h1').text})
-    rdict.update({'Full Title':rsoup.find('h2').text})
-    rtable = rsoup.find( "table", {"class":"gameinfo"} )
-    rows=list()
-    for row in rtable.findAll("tr"):
-        rows.append(row)
-    rdict.update(rtable_to_dict(rows))
-    return rdict
-    
-def lkup_redump_url(soft_title):
-    try:
-        return infodict[soft_title]['disc1source']
-    except:
-        return None
-        
-def tweak_nointro(soft):
-    # sub common characters that aren't supported in the 
-    # nointro/redump standard to enable more automatic matches
-    soft_nointro = re.sub(r':',' -',soft)
-    soft_nointro = re.sub(r'/','-',soft_nointro)
-    return soft_nointro
-
-def compare_sl_with_redump(sllist,san_redumplst,answers={}):
-    '''
-    Expects:
-    - A list of SL descriptions
-    - A list of Redump descriptions sanitized to remove disc numbers
-    - optionally an answer dict to continue a previous session
-    
-    returns a dict of sl to redump title matches
-    todo - load redump url from SL entry, for title comparison, serial, etc
+    matches source hash fingerprints to the dat fingerprint dicts
+    updates the softlist dict to point to the dat for that source
     '''
     matches = 0
-    close_matches = 0
-    no_match = 0
-    autofix = 0
-    sllist.sort()
-    for soft in sllist:
-        if soft in answers:
-            continue
-        else:
-            print('checking '+soft)
-            process_comments(get_sl_entry(my_soft['software'],soft,'redump'), infodict)
-            soft_nointro = tweak_nointro(soft)
-        if soft in san_redumplst:
-            answers.update({soft:soft})
-            matches += 1
-        elif soft_nointro in san_redumplst and soft_nointro not in answers.values():
-            answers.update({soft:soft_nointro})
-            autofix += 1
-        else:
-            rurl = lkup_redump_url(soft)
-            if rurl and online:
-                rdict = get_redump_info(rurl)
-                print_redump_info(rdict)
-            answer, auto = select_from_redump(soft, soft_nointro, san_redumplst)
-            if answer[soft] == 'Stop':
-                break
-            elif answer[soft] == 'No Match':
-                no_match += 1
-                answers.update(answer)
-            else:
-                if answer[soft] in answers.values():
-                    print('title has already been selected')
-                    answer[soft] = 'No Match'
-                    no_match += 1
-                else:
-                    if auto:
-                        autofix += 1
-                    else:
-                        close_matches += 1
-                answers.update(answer)
-                
-
-    print(str(matches)+' titles had exact matches')
-    print(str(autofix)+' titles were automatically matched')
-    print(str(close_matches)+' titles had user selected matches')
-    print(str(no_match)+' titles had no match')
-    return answers
+    for sl_title, sl_data in sl_platform_dict.items():
+        if 'discs' in sl_data:
+            #print('checking '+sl_title)
+            for disc, sourcehash in sl_data['discs'].items():
+                for datfile, dathashdict in dathash_platform_dict.items():
+                    if sourcehash in dathashdict:
+                        print('Match Found:\nSoftlist: '+sl_title+'\n     Dat: '+dathashdict[sourcehash]['name'])
+                        sl_platform_dict[sl_title].update({'sourcedat':datfile})
     
-def update_title(soft):
-    print('Original Title is: '+soft)
-    question = [inquirer.Text(soft, message="    New Title")]
-    answer = inquirer.prompt(question)
+    for sl_title, sl_data in sl_platform_dict.items():
+        if 'sourcedat' in sl_data:
+            matches += 1
+    print('found '+str(matches)+' matches out of '+str(len(sl_platform_dict))+' total entries')
+
+
+def get_configured_platforms():
+    '''
+    Builds a tuple list of the configured platforms
+    dir_type variable is based on what type of directory is required
+    for the sub-function
+    '''
+    configured = []
+    for name, platform in consoles.items():
+        if platform in settings and len(settings[platform]) > 0:
+            configured.append((name,platform))
+    return configured
+
+def platform_select(allplatforms=True):
+    if allplatforms:
+        platforms = [(k, v) for k, v in consoles.items()]
+    else:
+        platforms = get_configured_platforms()
+    answer = list_menu('platforms', platforms, menu_msgs['5b'])
     return answer
 
-def update_nonmatch(answers, san_redumplst):
-    '''
-    requires a populated answer list from the first pass and
-    the sanitised title list from a redump dat (disc# stripped)
-    '''
-    for soft, redump in answers.items():
-        confirmq = [
-            inquirer.Confirm("inredump", message="Check "+soft+" against Redump titles?"),
-        ]
-        if redump == 'No Match':
-            process_comments(get_sl_entry(my_soft['software'],soft,'redump'), infodict)
-            inredump = inquirer.prompt(confirmq)
-            if inredump['inredump']:
-                rurl = lkup_redump_url(soft)
-                if rurl and online:
-                    rdict = get_redump_info(rurl)
-                    print_redump_info(rdict)
-                softnointro = tweak_nointro(soft)
-                answer, auto = select_from_redump(soft, softnointro, san_redumplst)
-                if answer[soft] == 'Stop':
-                    break
-                elif answer[soft] in answers.values():
-                    if answer[soft] != 'No Match':
-                        print('title has already been selected')
-                    try:
-                        answer = update_title(soft)
-                        if answer[soft] not in answers.values():
-                            answers.update(answer)
-                        else:
-                            print('title has already been selected')
-                    except:
-                        continue
-                elif answer[soft] == 'No Match':
-                    try:
-                        answer = update_title(soft)
-                        if answer[soft] not in answers.values():
-                            answers.update(answer)
-                        else:
-                            print('title has already been selected')
-                    except:
-                        continue
-                else:
-                    answers.update(answer)
-                    if not rurl:
-                        # if user provided a confirmation here then they likely have the 
-                        # redump URL for the title, ask and store it here
-                        addurl = inquirer.prompt(
-                                 [inquirer.Confirm('redumpurl',message='Add redump URL?',default=True)
-                                  ])
-                        if addurl['redumpurl']:
-                            redumpquery = [inquirer.Text('disc1source', message="Redump URL")]
-                            redumpurl = inquirer.prompt(redumpquery)
-                            #iteminfo = {soft:redumpurl}
-                            infodict.update({soft:redumpurl})        
-            else:
-                try:
-                    answer = update_title(soft)
-                    answers.update(answer)
-                except:
-                    continue
-    return answers
+# functions called from the menus
+'''
 
-def zip_slredump_infodict(sl_re_map,infodict):
-   for soft, redump in sl_re_map.items():
-        try:
-            infodict[soft].update({'redumpmap':redump})
-        except:
-            infodict.update({soft:{'redumpmap':redump}})
+no_src_map_function
+tosec_map_function
 
-def save_session():
-    dataset = {}
-    save = inquirer.prompt(
-                [inquirer.Confirm('save',message='Save Session?',default=True)
-                ])
+'''
+
+def automap_function():
+    from modules.dat import build_dat_dict, build_sl_dict
+    from modules.utils import convert_xml
+    platform = platform_select(False)['platforms']
+    # process the software list into a dict, creating hash based fingerprints
+    print('processing '+platform+' software list')
+    process_comments = True
+    raw_sl_dict = convert_xml(settings['sl_dir']+os.sep+platform+'.xml',process_comments)
+    softdict = dict(raw_sl_dict['softwarelist'])
+    if platform not in softlist_dict:
+        softlist_dict.update({platform:{}})
+    build_sl_dict(softdict['software'], softlist_dict[platform])
+    # process each DAT to build a list of fingerprints
+    print('processing '+platform+' DAT Files')
+    if platform not in dat_dict:
+        dat_dict.update({platform:{}})
+    for dat in settings[platform]:
+        print('processing '+dat)
+        raw_dat_dict = convert_xml(dat)
+        build_dat_dict(dat,raw_dat_dict['datafile'],dat_dict[platform])
+    # iterate through each fingerprint in the software list and search for matching hashes
+    find_dat_matches(softlist_dict[platform],dat_dict[platform])
+        
+
+def hash_automap():
+    '''
+    parses Softlist for rom source comments or source fingerprint tags
+    builds fingerprints from configured dat files
+    creates a mapping of fingerprint matches between Softlist and DAT files
+    '''
+    
+
+def name_automap():
+    '''
+    parses Softlist descriptions and maps them against redump names
+    '''
+    platform = platform_select(False)
+    print('automatic name mapping placeholder')
+    pass
+
+
+def chd_build_function():
+    '''
+    checks the mapped fingerprints against available ROMs, converts complete ROMs
+    to CHD.  CHD hash is added to the soft-dict.  If a CHD already exists in the
+    build directory then only the hash is checked.
+    '''
+    from modules.chd import find_rom_zips,create_chd_from_zip
+    platform = platform_select(False)['platforms']
+    find_rom_zips(softlist_dict[platform], dat_dict[platform],settings[platform])
+    build = inquirer.confirm('Begin Creating CHDs?', default=False)
+    if build:
+        for soft, soft_data in softlist_dict[platform].items():
+            for disc_data in soft_data['parts'].values():
+                if 'source_rom' in disc_data:
+                    chd_name = disc_data['chd_filename']+'.chd'
+                    chd_path = os.path.join(settings['chd'],chd_name)
+                    if not os.path.isfile(chd_path):
+                        print('Decompressing ROM files for CHD: '+chd_name)
+                        create_chd_from_zip(disc_data['source_rom'],chd_path)
+
+
+             
+def save_function():
+    confirm_message = menu_msgs['save']
+    save = inquirer.confirm(confirm_message, default=False)
+                               
     if save:
-        dataset.update({'sl_redump_titlemap':myanswers})
-        dataset.update({'infodict':infodict})
-        pickling(dataset)
-
-def restore_session():
-    dataset = unpickling()
-    infodict = dataset['infodict']
-    myanswers = dataset['sl_redump_titlemap']
-    return myanswers
-
-def history(search=None):
-    import readline
-    for i in range(readline.get_current_history_length()):
-        if search:
-            if re.search(search,readline.get_history_item(i + 1)):
-                print (readline.get_history_item(i + 1))
-        else:
-            print (readline.get_history_item(i + 1))
-
-def main_menu():
-    options = [
-        'Update SL Titles to match Redump Names',
-        'Edit non-matching SL Titles',
-        'Session Settings',
-        'Save Session',
-        'Load Previous Session'
-        ]
-
-def compare_redump_to_sl(sllist,san_redumplst,answers):
-    for title in san_redumplst:
-        if title in answers.values():
-            continue
-        else:
-            print(title)
-            
-def update_sl_descriptions(xml_file, answerdict):
-    # Parse the XML file using lxml
-    parser = etree.XMLParser(remove_blank_text=False)
-    tree = etree.parse(xml_file, parser)
-
-    for original_desc, new_desc in answerdict.items():
-        if new_desc == 'No Match':
-            continue
-        else:
-            print('rewriting '+original_desc)
-            try:
-                # Find the software element with the original description
-                software = tree.xpath(f"//software[description=$subs]",subs=original_desc)[0]
-                # Update the description element with the new description
-                description = software.xpath("description")[0]
-                description.text = new_desc
-            except Exception as e:
-                print('new description: '+new_desc+' failed')
-                print(e)
-                continue
-
-    # Write the updated XML to disk while preserving the original comments
-    output = etree.tostring(
-        tree,
-        pretty_print=True,
-        xml_declaration=True,
-        encoding="UTF-8",
-        doctype='<!DOCTYPE softwarelist SYSTEM "softwarelist.dtd">'
-    ).decode("UTF-8")
-
-    with open(xml_file, "w") as f:
-        f.write(output)
-
-
-def add_redump_names_to_slist(xml_file, answerdict):
-    # Parse the XML file using lxml
-    parser = etree.XMLParser(remove_blank_text=False)
-    tree = etree.parse(xml_file, parser)
-    root = tree.getroot()
-
-    for soft_desc, redump_name in answerdict.items():
-        if redump_name == 'No Match':
-            continue
-        elif redump_name not in redump_name_list:
-            continue
-        else:
-            print('inserting tag in '+soft_desc)
-        for software in root.findall('.//software'):
-            description = software.find('description').text
-            if description == soft_desc:
-
-                # Create the redump_name tag and insert it before the part tag
-                new_tag = etree.Element('info', {'name': 'redump_name', 'value': redump_name})
-                new_tag.tail = '\n\t\t'
-                # Find the index of the part tag
-                part_index = software.index(software.xpath('part')[0])
-                software.insert(part_index, new_tag)
-
-    # Write the updated XML to disk while preserving the original comments
-    output = etree.tostring(
-        tree,
-        pretty_print=True,
-        xml_declaration=True,
-        encoding="UTF-8",
-        doctype='<!DOCTYPE softwarelist SYSTEM "softwarelist.dtd">'
-    ).decode("UTF-8")
-
-    with open(xml_file, "w") as f:
-        f.write(output)
-
-
-chdman_version = chdman_ver()
-online = False
-
-files = get_dat_paths('dc', datpaths, sl_dat_mapping)
-
-# strip the root comment from the softwarelist so xmltodict can parse it
-fileptr = open(files[0],"r")
-xml = fileptr.read()
-sltree = etree.fromstring(bytes(xml, encoding='utf-8'))
-
-raw_sl_dict = convert_xml(files[0],True)
-raw_redump_dict = convert_xml(files[1])
-
-#change xml format to ordered dict
-
-#print("Ordered Dictionary is:")
-#pprint.pprint(my_ordered_slist)
-#print("Softlist description is:")
-#pprint.pprint(my_ordered_slist['softwarelist']['software'])
-
-xml_output = xmltodict.unparse(raw_sl_dict, pretty=True)
-#print("XML format data is:")
-#print(xml_output)
- 
-#Use contents of ordered dict to make python dictionary
-my_soft = dict(raw_sl_dict['softwarelist'])
-redumps = dict(raw_redump_dict['datafile'])
-
-#print(raw_sl_dict['softwarelist']['software'][0]['@name'])
-
-sl_description_list = get_sl_descriptions(my_soft,'software','description')
-redump_name_list = get_sl_descriptions(redumps,'game','@name')
-
-redump_titles = discs_to_titles(redump_name_list)
-
-
-
-def main(gui_input=''): 
+        save_data(user_answers,'answers')
     return
 
+def restore_function():
+    confirm_message = menu_msgs['restore']
+    load = inquirer.confirm(confirm_message, default=False)
+    if load:
+        user_answers = restore_data('user_answers')
 
-#if __name__ == '__main__':
-#    try:
-#        main()
-#    except Exception:
-#        print(f'{Font.error_bold}\n\n* Unexpected error:\n\n{Font.end}')
-#        traceback.print_exc()
-#        input(f'{Font.error_bold}\n\nPress any key to quit slupdate{Font.end}')
+'''
+directory selection functions
+'''
+def root_dirs_function():
+    single_dir_function('datroot','Root DAT Directory')
+    single_dir_function('romroot','Root ROM Directory')
+    confirm_message = menu_msgs['romvault']
+    romvault = inquirer.confirm(confirm_message, default=False)
+    settings.update({'romvault' : romvault})
+
+def del_dirs_function(dir_type,platform):
+    dirlist = settings[platform][dir_type]
+    dirlist.append('back')
+    answer = list_menu('dir', platforms, menu_msgs['5d'])
+    if answer['dir'] == back:
+        return
+    else:
+        settings[platform][dir_type].pop(answer['dir'])
+
+
+def slist_dir_function():
+    single_dir_function('sl_dir','MAME Software List')
+
+def chd_dir_function():
+    single_dir_function('chd','CHD Destination Directory')
+
+def single_dir_function(dirtype,prompt):
+    # queries and stores the software list hash directory
+    directory = select_directory(prompt)
+    settings.update({dirtype : directory})
+
+def get_platform_dir(dirtype,platform):
+    if dirtype not in settings[platform]:
+        settings[platform].update({dirtype:[]})
+    directory = select_directory(dirtype)
+    if directory not in settings[platform][dirtype]:
+        settings[platform][dirtype].append(directory)
+
+def romvault_dat_to_romfolder(dat_directory,dat_files):
+    '''
+    RomVault maps the ROM directories based on the file structure in DATroot
+    DAT directories with multiple DATs will create subfolders based on the DAT title
+    returns a dict with the DAT to ROM folder mapping
+    '''
+    print('dat dir is '+dat_directory)
+    #rom_dir = settings['romroot']+re.sub(settings['datroot'],'',dat_directory)
+    rom_dir = settings['romroot']+dat_directory.replace(settings['datroot'], '')
+    print('rom dir is '+rom_dir)
+    if len(dat_files) == 1:
+        if os.path.isdir(rom_dir):
+            return {dat_directory+os.sep+dat_files[0] : rom_dir}
+        else:
+            print('Unable to locate '+rom_dir+' directory in ROMroot')
+            if inquirer.confirm('Do you want to manually select a directory?', default=False):
+                return select_directory('Correct ROM folder',settings['romroot'])
+            else:
+                return {}
+    else:
+        dat_rom_dict = {}
+        for dat in dat_files:
+            dat_path = dat_directory+os.sep+dat
+            # rom subfolder is based on dat name, get name
+            name = get_dat_name(dat_path)
+            full_rom_dir = rom_dir+os.sep+name
+            if not os.path.isdir(full_rom_dir):
+                print('Unable to locate "'+name+'" directory in platform ROM folder')
+                if inquirer.confirm('Do you want to manually select a directory?', default=False):
+                    full_rom_dir = select_directory(', please specify',settings['romroot'])
+                else:
+                    continue
+            dat_rom_dict.update({dat_path:full_rom_dir})
+        return dat_rom_dict
+
+
+def platform_dat_rom_function(platform):
+    if platform not in settings:
+        settings.update({platform : {}})
+    # get the dat dir first
+    if 'datroot' not in settings:
+        single_dir_function('datroot','Root DAT Directory')
+    dat_directory = select_directory('dat',settings['datroot'])
+    dat_files = [f for f in os.listdir(dat_directory) if f.endswith('.dat')]
+    print(f"DAT files in {dat_directory}: {dat_files}")
+    # if using romvault map the ROM directores for the DATs automatically
+    if settings['romvault']:
+        datrom_dirmap = romvault_dat_to_romfolder(dat_directory, dat_files)
+        settings[platform].update(datrom_dirmap)
+
+def get_os_dirs(path):
+    """
+    Returns a list of directories in the given path
+    """
+    directories = [d for d in os.listdir(path) if os.path.isdir(os.path.join(path, d))]
+    directories.sort()
+    directories.insert(0,'Parent Directory')
+    directories.append('Select the current directory')
+    return directories
+
+def select_directory(filetype=None,start_dir=None):
+    """
+    Displays a list of directories in the current directory and prompts the user to select one
+    """
+    selected = False
+    origin_path = os.getcwd()
+    if not start_dir:
+        path_query = [
+            inquirer.Path(name='path', message=filetype+" Path (or starting point)")]
+        start_path = inquirer.prompt(path_query)  
+        try:
+            # remove any trailing slash, if the user enters anything that triggers an
+            # exception then just use the current working directory as a starting point
+            pattern = os.sep+'$'
+            current_path = re.sub(pattern,'',start_path['path'])
+        except:
+            current_path = os.getcwd()
+    else:
+        current_path = start_dir
+    while not selected:
+        questions = [
+            inquirer.List(filetype,
+                          message="Select a directory current:("+current_path+")",
+                          choices=get_os_dirs(current_path))
+            ]
+        answers = inquirer.prompt(questions)
+        if answers[filetype] == 'Select the current directory':
+            selected = True
+            os.chdir(origin_path)
+            return current_path
+        elif answers[filetype] == 'Parent Directory':
+            current_path = os.path.dirname(current_path)
+            os.chdir(os.path.dirname(current_path))         
+        else:
+            parent_path = current_path
+            current_path = current_path+os.sep+answers[filetype]
+            os.chdir(current_path)
+
+
+
+
+
+
