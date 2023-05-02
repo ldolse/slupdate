@@ -48,7 +48,10 @@ def process_sl_rom_sources(softdict):
         if 'rom' in game_data:
             toc_list = []
             for rom in game_data['rom']:
-                rom_size = int(rom['@size'])
+                try:
+                    rom_size = int(rom['@size'])
+                except:
+                    print('size error for Softlist Entry source ROM: '+game_title)
                 if not rom['@name'].endswith(('.cue', '.gdi')):
                     total_size += rom_size
 
