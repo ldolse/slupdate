@@ -6,16 +6,33 @@ import subprocess
 import tempfile
 import zipfile
 from io import BytesIO
+import logging
 
-def chdman_ver():
+def chdman_info(chd=None):
+    '''
+    returns the data sha1 if a CHD path is provided
+    otherwise returns chdman version
+    '''
+    if chd:
+        command = ['chdman', 'info', '-i', chd]
+    else:
+        command = 'chdman'
     try:
-        proc = subprocess.Popen('chdman', stdout=subprocess.PIPE)
-        output = proc.stdout.read()
-        version = re.findall(r'\d+\.\d+',output.decode('ascii'))
+        proc = subprocess.Popen(command, stdout=subprocess.PIPE)
+        output = proc.stdout.read().decode('ascii').split('\n')
     except:
-        logging.debug(f'chdman not in the system path or installed with slupdate')
-    return version[0]
-    
+        logging.debug(f'chdman not in the system path or installed with slupdate, possibly corrupted CHD\n'+chd)
+        pass
+    if chd:
+        for line in output:
+            if re.findall(r'^\s*SHA1', line):
+                info = re.sub(r'\s*SHA1:\s*','',line)
+                #info = re.sub(r'\s*Data\sSHA1:\s*','',line)
+                break
+    else:
+        info = re.findall(r'\d+\.\d+',output[0])[0] # return version
+    return info
+
 
 def extract_zip_to_tempdir(zip_path):
     with zipfile.ZipFile(zip_path, 'r') as zip_file:
@@ -43,23 +60,23 @@ def create_chd_from_zip(zip_path, chd_path):
                 break
         if not toc_file:
             raise ValueError('No .gdi or .cue file found in the zip archive')
+    try:
+        with zipfile.ZipFile(zip_path, 'r') as zip_file:
+            temp_dir = tempfile.mkdtemp()
 
-    with zipfile.ZipFile(zip_path, 'r') as zip_file:
-        temp_file = tempfile.SpooledTemporaryFile(max_size=2*1024*1024*1024) # 2GB max size
-        temp_dir = tempfile.mkdtemp()
+            # extract all files to temp directory
+            for file_info in zip_file.infolist():
+                file_path = os.path.join(temp_dir, file_info.filename)
+                with open(file_path, 'wb') as f:
+                    f.write(zip_file.read(file_info.filename))
 
-        # extract all files to temp directory
-        for file_info in zip_file.infolist():
-            file_path = os.path.join(temp_dir, file_info.filename)
-            with open(file_path, 'wb') as f:
-                f.write(zip_file.read(file_info.filename))
+            os.chdir(temp_dir)
 
-        # seek to beginning of file to read its name
-        temp_file.seek(0)
-        os.chdir(temp_dir)
-
-        command = ['chdman', 'createcd', '-i', toc_file, '-o', chd_path]
-        subprocess.run(command, check=True)
+            command = ['chdman', 'createcd', '-i', toc_file, '-o', chd_path]
+            subprocess.run(command, check=True)
+    finally:
+        os.chdir(origin_path)
+        shutil.rmtree(temp_dir)
 
 
 

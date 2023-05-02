@@ -6,19 +6,18 @@ against[Redump](http://redump.org/) dats.
 https://github.com/ldolse/slupdate
 """
 import os
-import re, pprint
+import re
 import inquirer
-from modules.utils import save_data,restore_data
+from modules.utils import save_data,restore_dict
 from modules.dat import get_dat_name
-
-
 
 
 __version__ = '.1'
 
 
-settings = {}
-user_answers = {}
+settings = restore_dict('settings')
+user_answers = restore_dict('user_answers')
+
 softlist_dict = {}
 dat_dict = {}
 mappings = {}
@@ -94,13 +93,10 @@ menu_lists = {'0' : [('1. Automatic Title/Disc Mapping', 'automap_function'),
 def main_menu():
     global settings
     dir_types = ('dat','rom')
-    checksettings = restore_data('settings')
-    if checksettings:
-        settings = checksettings
-    #if len(settings) == 0:
-    #    menu_sel = '5'
-    #else:
-    menu_sel = '0'
+    if len(settings) == 0:
+        menu_sel = '5'
+    else:
+        menu_sel = '0'
     complete = False
     while not complete:
         answer = list_menu(menu_sel,menu_lists[menu_sel],menu_msgs[menu_sel])
@@ -189,6 +185,7 @@ tosec_map_function
 def automap_function():
     from modules.dat import build_dat_dict, build_sl_dict
     from modules.utils import convert_xml
+    from modules.mapping import name_serial_map
     platform = platform_select(False)['platforms']
     # process the software list into a dict, creating hash based fingerprints
     print('processing '+platform+' software list')
@@ -208,15 +205,14 @@ def automap_function():
         build_dat_dict(dat,raw_dat_dict['datafile'],dat_dict[platform])
     # iterate through each fingerprint in the software list and search for matching hashes
     find_dat_matches(softlist_dict[platform],dat_dict[platform])
-        
-
-def hash_automap():
-    '''
-    parses Softlist for rom source comments or source fingerprint tags
-    builds fingerprints from configured dat files
-    creates a mapping of fingerprint matches between Softlist and DAT files
-    '''
-    
+    print('Next step will be to map entries based on name and disc serial number')
+    print('This will require connecting to redump once for each platform to get additional info')
+    print('If you want to proceed just based on the hash matches already found then this')
+    print('step can be skipped')
+    name_serial = inquirer.confirm('Begin Serial/Name Mapping?', default=False)
+    if name_serial:
+        name_serial_map(platform, softlist_dict[platform],dat_dict[platform])
+            
 
 def name_automap():
     '''
@@ -233,7 +229,7 @@ def chd_build_function():
     to CHD.  CHD hash is added to the soft-dict.  If a CHD already exists in the
     build directory then only the hash is checked.
     '''
-    from modules.chd import find_rom_zips,create_chd_from_zip
+    from modules.chd import find_rom_zips,create_chd_from_zip,chdman_info
     platform = platform_select(False)['platforms']
     find_rom_zips(softlist_dict[platform], dat_dict[platform],settings[platform])
     build = inquirer.confirm('Begin Creating CHDs?', default=False)
@@ -241,11 +237,24 @@ def chd_build_function():
         for soft, soft_data in softlist_dict[platform].items():
             for disc_data in soft_data['parts'].values():
                 if 'source_rom' in disc_data:
+                    # create platform directory
+                    chd_dir = os.path.join(settings['chd'],platform)
+                    if not os.path.exists(chd_dir):
+                        os.mkdir(chd_dir)
                     chd_name = disc_data['chd_filename']+'.chd'
-                    chd_path = os.path.join(settings['chd'],chd_name)
+                    chd_path = os.path.join(chd_dir,chd_name)
                     if not os.path.isfile(chd_path):
                         print('Decompressing ROM files for CHD: '+chd_name)
                         create_chd_from_zip(disc_data['source_rom'],chd_path)
+                    
+                    if os.path.isfile(chd_path):
+                        new_chd_hash = chdman_info(chd_path)
+                        if new_chd_hash == disc_data['chd_sha1']:
+                            print('hash matches softlist: '+chd_name)
+                        else:
+                            print('Updated hash for softlist: '+chd_name)
+
+                        
 
 
              
@@ -261,7 +270,7 @@ def restore_function():
     confirm_message = menu_msgs['restore']
     load = inquirer.confirm(confirm_message, default=False)
     if load:
-        user_answers = restore_data('user_answers')
+        user_answers = restore_dict('user_answers')
 
 '''
 directory selection functions

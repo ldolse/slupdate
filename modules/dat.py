@@ -38,13 +38,13 @@ def process_sl_rom_sources(softdict):
     time.  multiple discs are listed serially in the same object, so cue/gdi are used as
     separators
     '''
+    print('Building Source fingerprints from software list')
     for game_title, game_data in softdict.items():
         total_size = 0
         concatenated_hashes = {}
         source_fingerprints = {}
         current_disc_number = 0
         current_concatenated_hash = None
-        print('processing '+game_title)
         if 'rom' in game_data:
             toc_list = []
             for rom in game_data['rom']:
@@ -78,7 +78,10 @@ def process_comments(soft, sl_dict):
     romhash = r'<rom name'
     notedict = {}
     notenum = 1
-    comments = soft['#comment']
+    if '#comment' in soft:
+        comments = soft['#comment']
+    else:
+        return None
     if isinstance(comments, str):
         comments = [comments]
     for comment in comments:
@@ -126,13 +129,23 @@ def build_sl_dict(softlist, sl_dict):
     '''
     grabs useful sofltist data and inserts into a simple to manage dict
     '''
-    
-    
     for soft in softlist:
-        sl_dict.update({soft['@name']:{'description':soft['description']}})
+        soft_id = soft['@name']
+        soft_description = soft['description']
+        print('creating softlist entry for '+soft_description)
+        soft_entry = {
+            'description' : soft_description,
+        }
+        # process info tags
+        if 'info' in soft:
+            for tag in soft['info']:
+                if tag['@name'] == 'serial':
+                    soft_entry.update({'serial':tag['@value']})
+                if tag['@name'] == 'release':
+                    soft_entry.update({'release':tag['@value']})
+        sl_dict.update({soft_id:soft_entry})
         # converts comments to dict
         process_comments(soft, sl_dict)
-        print('processing soft '+soft['@name'])
         if not isinstance(soft['part'], list):
             if soft['part']['@name'] == 'cdrom':
                 # rename single cd name to match 1st of multiple
@@ -298,9 +311,6 @@ def create_dat_hash_dict(raw_dat_dict):
     for game in raw_dat_dict['game']:
         file_list = {}
         name = game['@name']
-        print('processing '+name)
-        if not isinstance(game['rom'], list):
-            game['rom'] = [game['rom']]
         files = len(game['rom'])
         size = 0
         sha1 = hashlib.sha1()
@@ -320,6 +330,9 @@ def create_dat_hash_dict(raw_dat_dict):
 
 
 def create_dat_hash_dict_xml(datroot):
+    '''
+    same as create_dat_hash_dict but uses xml the whole time
+    '''
     result = {}
     for game in datroot.findall('game'):
         name = game.get('name')

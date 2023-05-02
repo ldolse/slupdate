@@ -9,12 +9,12 @@ def save_data(data_to_save,name):
     with open(name+'.cache', 'wb') as f:
         pickle.dump(data_to_save, f)
 
-def restore_data(name):
+def restore_dict(name):
     try:
         with open(name+'.cache', 'rb') as f:
             return pickle.load(f)
     except:
-        return None
+        return {}
 
 
 def slupdate_version():
@@ -34,7 +34,7 @@ def convert_xml(file, comments=False):
     xml_content= fileptr.read()
     #print("XML content is:")
     #print(xml_content)
-    my_ordered_dict=xmltodict.parse(xml_content, process_comments=comments)
+    my_ordered_dict=xmltodict.parse(xml_content, process_comments=comments, force_list=('info','rom',))
     return my_ordered_dict
     
 def history(search=None):
