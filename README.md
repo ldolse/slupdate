@@ -1,5 +1,5 @@
 # slupdate
-MAME CD Media Software List Updater
+MAME CD Media CHD Builder / Software List Updater
  
 ## Introduction
 slupdate parses MAME CD Media Software Lists to find source ROM information, and then maps those source references to externally managed DAT and ROM files. In the event that source information in the Software List can be matched to a DAT entry, it will then check to see if ROM files exist for that DAT entry. Valid matches can then be converted to CHDs, and if the Software List CHD hash is out of date it can update the Software List.
@@ -48,7 +48,7 @@ On first run you'll be automatically directed to configure mandatory settings:
 * Redump sources for Philips CDI are not yet supported
 * This does not yet monitor the Chdman output for warnings which would indicate an invalid CHD, this will be added later.  Please use caution and review the logs for warnings.
 
-## Required Pythont Modules
+## Required Python Modules
 ### To build CHDs
 xmltodict, inquirer,
 

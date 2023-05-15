@@ -1,9 +1,11 @@
-import requests, re
-from requests.adapters import HTTPAdapter
-from requests.packages.urllib3.util.retry import Retry
+import re
+import requests
+#from bs4 import BeautifulSoup
+#from requests.adapters import HTTPAdapter
+#from requests.packages.urllib3.util.retry import Retry
 from modules.utils import save_data, restore_dict
 import inquirer
-from bs4 import BeautifulSoup
+
 
 redump_site_dict = restore_dict('redump_site_dict')
 redump_site_dict.pop('segacd')
