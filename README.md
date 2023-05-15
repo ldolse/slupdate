@@ -48,9 +48,9 @@ On first run you'll be automatically directed to configure mandatory settings:
 * Redump sources for Philips CDI are not yet supported
 * This does not yet monitor the Chdman output for warnings which would indicate an invalid CHD, this will be added later.  Please use caution and review the logs for warnings.
 
-## Required Python Modules
-### To build CHDs
-xmltodict, inquirer,
+### Required Python Modules
+#### To build CHDs
+xmltodict, inquirer
 
 ### Future functions
  requests, beautifulsoup4, pykakasi
