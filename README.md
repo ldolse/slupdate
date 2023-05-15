@@ -16,8 +16,10 @@ Ensure the required Python modules are installed using pip or your preferred Pyt
 
 ## Using the Software
 ### Typical Usage
-* Ensure a set of DATs for your target platform is configured under settings
-* Select A
+* Ensure a set of DATs for your target platform are configured under settings
+* Select 'Mapping Functions' choose a platform and DAT matches and then valid source ROMs will be displayed
+* If desired build CHDs and update the Softlist with any changed hashes
+
 ### First Run
 On first run you'll be automatically directed to configure mandatory settings:
 1. The location of the MAME 'hash' directory containing the Software List XML files
