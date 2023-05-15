@@ -5,8 +5,12 @@ import shutil
 import subprocess
 import tempfile
 import zipfile
-from io import BytesIO
 import logging
+from distutils.version import LooseVersion
+
+
+def is_greater_than_0_176(version_string):
+    return LooseVersion(version_string) > LooseVersion('0.176')
 
 def chdman_info(chd=None):
     '''
@@ -115,7 +119,7 @@ def find_softlist_zips(soft_list, platform_dats,dat_rom_map):
     checks the platform_dats for the description to calculate the name
     gets the ROM folder from the dat_rom_map to find a matching ZIP
     Checks the ZIP contents, returns the list of valid matches
-    TODO - add 7zip support
+    deprecated in favor of doing the check rom by rom from another function
     '''
     print('checking all source zip files')
     valid_zips = {}

@@ -10,7 +10,10 @@ import re
 import sys
 import inquirer
 from modules.utils import save_data,restore_dict
-from modules.dat import get_dat_name
+from modules.dat import get_dat_name,update_softlist_chd_sha1s
+from modules.chd import find_softlist_zips,create_chd_from_zip,chdman_info,is_greater_than_0_176
+
+
 
 
 __version__ = '.1'
@@ -42,7 +45,7 @@ consoles = {  #'Atari Jaguar' : 'jaguar',
                'FM Towns CD' : 'fmtowns_cd',
           'IBM PC/AT CD-ROM' : 'ibm5170_cdrom',
  'PC Engine / TurboGrafx CD' : 'pcecd',
-              #'Philips CD-i' : 'cdi',
+              'Philips CD-i' : 'cdi',
             'Pippin CD-ROMs' : 'pippin',
                  'NEC PC-FX' : 'pcfx',
                    'Sega CD' : 'segacd',
@@ -215,7 +218,6 @@ def get_configured_platforms(action_type):
     for name, platform in consoles.items():
         if platform in settings and len(settings[platform]) > 0:
             configured.append((name,platform))
-    print(configured)
     return configured
 
 def platform_select(list_type):
@@ -265,6 +267,7 @@ def automap_function(platform):
     # flag that this stage is completed for this platform
     if platform not in mapping_stage['source_map']:
         mapping_stage['source_map'].append(platform)
+    '''
     print('Next step will be to map entries based on name and disc serial number')
     print('This will require connecting to redump once for each platform to get additional info')
     print('If you want to proceed just based on the hash matches already found then this')
@@ -272,6 +275,11 @@ def automap_function(platform):
     name_serial = inquirer.confirm('Begin Serial/Name Mapping?', default=False)
     if name_serial:
         name_serial_automap_function(platform)
+    '''
+    build_chds = inquirer.confirm('Begin building CHDs?', default=False)
+    if build_chds:
+        chd_builder(platform) 
+
 
 def name_serial_automap_function(platform):
     from modules.mapping import name_serial_map
@@ -279,75 +287,83 @@ def name_serial_automap_function(platform):
     # flag that this stage is completed for this platform
     if platform not in mapping_stage['name_serial_map']:
         mapping_stage['name_serial_map'].append(platform)
+        
 
-def chd_build_function():
+def chd_builder(platform):
     '''
     checks the mapped fingerprints against available ROMs, converts complete ROMs
     to CHD.  CHD hash is added to the soft-dict.  If a CHD already exists in the
     build directory then only the hash is checked.
     '''
-    from modules.chd import find_softlist_zips,create_chd_from_zip,chdman_info
-    from modules.dat import update_softlist_chd_sha1s
+    new_hashes = False
+    built_sources = {}
+    for soft, soft_data in softlist_dict[platform].items():
+        for disc_data in soft_data['parts'].values():
+            if 'source_rom' in disc_data:
+                # create platform directory
+                if not os.path.exists(os.path.join(settings['chd'],platform)):
+                    os.mkdir(os.path.join(settings['chd'],platform))
+                chd_dir = os.path.join(settings['chd'],platform,soft)
+                if not os.path.exists(chd_dir):
+                    os.mkdir(chd_dir)
+                chd_name = disc_data['chd_filename']+'.chd'
+                chd_path = os.path.join(chd_dir,chd_name)
+                print('building chd for '+soft_data['description']+':')
+                print('            CHD: '+chd_name)
+                print('     Source Zip: '+os.path.basename(disc_data['source_rom']))
+                if not os.path.isfile(chd_path):
+                    if disc_data['source_rom'] not in built_sources:
+                        try:
+                            create_chd_from_zip(disc_data['source_rom'],chd_path,settings)
+                            built_sources.update({disc_data['source_rom']:chd_path})
+                        except:
+                            print('CHD Creation Failed')
+                            try:
+                                os.remove(chd_path)
+                            except:
+                                print('Failed to delete partial file:\n'+chd_path)
+                                print('Please ensure this is deleted to avoid corrupted files/hashes')
+                            continue_build = inquirer.confirm('Do you want to continue?', default=False)
+                            if continue_build:
+                                continue
+                            else:
+                                break
+                    # if the exact same chd was built earlier then just symlink to it
+                    elif disc_data['source_rom'] in built_sources:
+                        os.symlink(built_sources[disc_data['source_rom']],chd_path)
+                        built_sources.update({disc_data['source_rom']:chd_path})
+                # if the chd was created as a part of this run or if the flag to trust existing chds is enabled check the sha1 against the softlist
+                if os.path.isfile(chd_path):
+                    if disc_data['source_rom'] in built_sources or get_sha_from_existing_chd:
+                        new_chd_hash = chdman_info(chd_path)
+                        if new_chd_hash == disc_data['chd_sha1']:
+                            print('     Hash matches softlist: '+chd_name+'\n')
+                        else:
+                            new_hashes = True
+                            print('     Updated hash for softlist: '+chd_name+'\n')
+                            disc_data.update({'new_sha1':new_chd_hash})
+                    else:
+                        print('     Chd file already exists in this location\n')
+                        
+    if new_hashes:
+        write_new_hashes = inquirer.confirm('Update the Software List with new CHD Hashes?', default=False)
+        if write_new_hashes:
+            update_softlist_chd_sha1s(settings['sl_dir']+os.sep+platform+'.xml',softlist_dict[platform])
+
+
+
+def chd_build_function():
+    if not is_greater_than_0_176(chdman_info()):
+        print('Outdated Chdman, please upgrade to a recent version')
+        return None
     # get configured platforms and map selected from the returned key
     platform = platform_select('chd')['platforms']
+    if platform not in softlist_dict:
+        print('No mapping has been run for this platform yet, please go back and run a mapping function\n')
+        return None
     build = inquirer.confirm('Begin Creating CHDs?', default=False)
-    print(build)
     if build:
-        new_hashes = False
-        built_sources = {}
-        for soft, soft_data in softlist_dict[platform].items():
-            for disc_data in soft_data['parts'].values():
-                if 'source_rom' in disc_data:
-                    # create platform directory
-                    if not os.path.exists(os.path.join(settings['chd'],platform)):
-                        os.mkdir(os.path.join(settings['chd'],platform))
-                    chd_dir = os.path.join(settings['chd'],platform,soft)
-                    if not os.path.exists(chd_dir):
-                        os.mkdir(chd_dir)
-                    chd_name = disc_data['chd_filename']+'.chd'
-                    chd_path = os.path.join(chd_dir,chd_name)
-                    print('building chd for '+soft_data['description']+':')
-                    print('            CHD: '+chd_name)
-                    print('     Source Zip: '+os.path.basename(disc_data['source_rom']))
-                    if not os.path.isfile(chd_path):
-                        if disc_data['source_rom'] not in built_sources:
-                            try:
-                                create_chd_from_zip(disc_data['source_rom'],chd_path,settings)
-                                built_sources.update({disc_data['source_rom']:chd_path})
-                            except:
-                                print('CHD Creation Failed')
-                                try:
-                                    os.remove(chd_path)
-                                except:
-                                    print('Failed to delete partial file:\n'+chd_path)
-                                    print('Please ensure this is deleted to avoid corrupted files/hashes')
-                                continue_build = inquirer.confirm('Do you want to continue?', default=False)
-                                if continue_build:
-                                    continue
-                                else:
-                                    break
-                        # if the exact same chd was built earlier then just symlink to it
-                        elif disc_data['source_rom'] in built_sources:
-                            os.symlink(built_sources[disc_data['source_rom']],chd_path)
-                            built_sources.update({disc_data['source_rom']:chd_path})
-                    # if the chd was created as a part of this run or if the flag to trust existing chds is enabled check the sha1 against the softlist
-                    if os.path.isfile(chd_path):
-                        if disc_data['source_rom'] in built_sources or get_sha_from_existing_chd:
-                            new_chd_hash = chdman_info(chd_path)
-                            if new_chd_hash == disc_data['chd_sha1']:
-                                print('     Hash matches softlist: '+chd_name+'\n')
-                            else:
-                                new_hashes = True
-                                print('     Updated hash for softlist: '+chd_name+'\n')
-                                disc_data.update({'new_sha1':new_chd_hash})
-                        else:
-                            print('     Chd file already exists in this location\n')
-                            
-        if new_hashes:
-            write_new_hashes = inquirer.confirm('Update the Software List with new CHD Hashes?', default=False)
-            if write_new_hashes:
-                update_softlist_chd_sha1s(settings['sl_dir']+os.sep+platform+'.xml',softlist_dict[platform])
-
+        chd_builder(platform)
 
 def save_function():
     confirm_message = menu_msgs['save']
@@ -382,8 +398,9 @@ def del_dats_function(platform):
     if answer['dat'] == 'back':
         return
     else:
-        dat_path = settings['datroot']+dat
-        settings[platform].pop(answer[dat_path])
+        dat_path = settings['datroot']+answer['dat']
+        print(dat_path)
+        settings[platform].pop(dat_path)
 
 
 def slist_dir_function():
@@ -461,9 +478,11 @@ def platform_dat_rom_function(platform):
         if 'romroot' not in settings:
             single_dir_function('romroot','Root ROM Directory')
         for dat in dat_files:
-            print('Select ROM Directory for DAT:\n'+dat+'\n')
-            rom_directory = select_directory('rom',settings['romroot'])
-            datrom_dirmap.update({dat_directory+os.sep+dat:rom_directory})
+            if not dat.endswith('.xml'):
+                dat_path = dat_directory+os.sep+dat
+                print('Select ROM Directory for DAT:\n'+dat+'\n')
+                rom_directory = select_directory('rom',settings['romroot'])
+                datrom_dirmap.update({dat_path:rom_directory})
     settings[platform].update(datrom_dirmap)
 
 def get_os_dirs(path):
