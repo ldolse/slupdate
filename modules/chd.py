@@ -50,7 +50,7 @@ def extract_zip_to_tempdir(zip_path):
         return temp_file, temp_dir
 
 
-def create_chd_from_zip(zip_path, chd_path):
+def create_chd_from_zip(zip_path, chd_path, settings):
     origin_path = os.getcwd()
     with zipfile.ZipFile(zip_path, 'r') as zip_file:
         toc_file = None
@@ -62,7 +62,7 @@ def create_chd_from_zip(zip_path, chd_path):
             raise ValueError('No .gdi or .cue file found in the zip archive')
     try:
         with zipfile.ZipFile(zip_path, 'r') as zip_file:
-            temp_dir = tempfile.mkdtemp()
+            temp_dir = tempfile.mkdtemp(dir=settings['zip_temp'])
 
             # extract all files to temp directory
             for file_info in zip_file.infolist():
@@ -78,9 +78,6 @@ def create_chd_from_zip(zip_path, chd_path):
         os.chdir(origin_path)
         shutil.rmtree(temp_dir)
 
-
-
-
 def convert__bincue_to_chd(chd_file_path: pathlib.Path, output_cue_file_path: pathlib.Path, show_command_output: bool):
     # Use another temporary directory for the chdman output files to keep those separate from the binmerge output files:
     with tempfile.TemporaryDirectory() as chdman_output_folder_path_name:
@@ -91,9 +88,28 @@ def convert__bincue_to_chd(chd_file_path: pathlib.Path, output_cue_file_path: pa
         if chdman_result.returncode != 0:
             # chdman provides useful progress output on stderr so we don't want to capture stderr when running it. That means we can't provide actual error output to the exception, but I can't find a way around that.
             raise ConversionException("Failed to convert .chd using chdman", chd_file_path, None)
-            
 
-def find_rom_zips(soft_list, platform_dats,dat_rom_map):
+
+def find_rom_zips(dat,soft_entry_data,dathashdict,dat_rom_map):
+    hash_type = 'source_sha'
+    zips = []
+    for disc, disc_info in soft_entry_data['parts'].items():
+        if hash_type not in disc_info:
+            hash_type = 'source_crc_sha'
+        if hash_type in disc_info and disc_info[hash_type] in dathashdict:
+            sha = disc_info[hash_type]
+            dat_game_entry = dathashdict[sha]
+            goodzip = check_valid_zips(dat_game_entry,dat_rom_map[dat])
+            if goodzip:
+                disc_info.update({'source_rom':goodzip})
+                zips.append(os.path.basename(goodzip))
+    if zips:
+        return zips
+    else:
+        return None
+
+
+def find_softlist_zips(soft_list, platform_dats,dat_rom_map):
     '''
     iterates through the soft_list to check source DAT and fingerprint
     checks the platform_dats for the description to calculate the name
@@ -101,13 +117,17 @@ def find_rom_zips(soft_list, platform_dats,dat_rom_map):
     Checks the ZIP contents, returns the list of valid matches
     TODO - add 7zip support
     '''
+    print('checking all source zip files')
     valid_zips = {}
     for soft, softdata in soft_list.items():
         if 'sourcedat' in softdata:
             dat = softdata['sourcedat']
+            hash_type = 'source_sha'
             for disc, disc_info in softdata['parts'].items():
-                if 'source_sha' in disc_info and disc_info['source_sha'] in platform_dats[dat]:
-                    sha = disc_info['source_sha']
+                if hash_type not in disc_info:
+                    hash_type = 'source_crc_sha'
+                if hash_type in disc_info and disc_info[hash_type] in platform_dats[dat]:
+                    sha = disc_info[hash_type]
                     game_entry = platform_dats[dat][sha]
                     goodzip = check_valid_zips(game_entry,dat_rom_map[dat])
                     if goodzip:
@@ -124,6 +144,7 @@ def check_valid_zips(dat_entry,rom_folder):
     TODO - add 7zip support
     '''
     name_with_zip = dat_entry['name'] + '.zip'
+    #print('checking '+name_with_zip+' in folder '+rom_folder)
     zip_path = os.path.join(rom_folder, name_with_zip)
     if os.path.isfile(zip_path):
         with zipfile.ZipFile(zip_path, 'r') as zip_file:

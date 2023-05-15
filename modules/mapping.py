@@ -6,6 +6,7 @@ import inquirer
 from bs4 import BeautifulSoup
 
 redump_site_dict = restore_dict('redump_site_dict')
+redump_site_dict.pop('segacd')
 
 redump__platform_paths = { 'jaguar':'ajcd',
                        'cdtv':'cdtv',
@@ -76,14 +77,34 @@ def lkup_redump_url(soft_title):
         return None
 
 
-def select_from_redump(soft, soft_nointro, san_redumplst):
+def redump_to_softstyle(redump_name):
     languages = re.compile(r'\s?\(((En|Ja|Fr|De|Es|It|Nl|Pt|Sv|No|Da|Fi|Zh|Ko|Pl),?)+\)')
+    discpat = r'\s\([D|d]isc\s\d+\)'
+    softtitle  = re.sub(discpat,'',redump_name)
+    return re.sub(languages,'',softtitle)
+
+def dat_discs_to_titles(disclist):
+    '''
+    redump entries are for individual discs, SL entries describe 
+    boxes/packages this function returns a new list with only titles
+    '''
+    title_list = []
+    discpat = r'\s\([D|d]isc\s\d+\)'
+    for disc in disclist:
+        softtitle  = re.sub(discpat,'',disc)
+        if softtitle not in title_list:
+            title_list.append(softtitle)
+    return title_list
+
+
+
+def select_from_redump(soft, soft_nointro, san_redumplst):
     matchlist = get_close_matches(soft, san_redumplst,n=5)
     if len(matchlist) > 0:
         closematch = next((s for s in matchlist if soft_nointro.lower() in s.lower()), None)
         if not check_rd_shorthand(soft,matchlist):
             if closematch:
-                stripped = re.sub(languages,'',closematch)
+                stripped = redump_to_softstyle(closematch)
                 if soft_nointro.lower() == stripped.lower():
                     return {soft:closematch}, True
             print('')
@@ -99,7 +120,7 @@ def select_from_redump(soft, soft_nointro, san_redumplst):
 
 
         
-def tweak_nointro_dat(stitle,languages=None,region=None):
+def tweak_nointro_dat(stitle,languages=[],region=''):
     '''
     if only title is supplied, sub common characters that aren't supported in the 
     nointro/redump dat standard to increase likelihood of an auto-match
@@ -122,7 +143,9 @@ def tweak_nointro_dat(stitle,languages=None,region=None):
           'Finnish' : 'Fi',
           'Chinese' : 'Zh',
            'Korean' : 'Ko',
-           'Polish' : 'Pl'
+           'Polish' : 'Pl',
+           'Russian': 'Ru',
+           'Arabic' : 'Ar'
          }
     disc_pat = r'\s\(Disc\s\d+\)'
     disc_match = re.findall(disc_pat,stitle)
@@ -142,10 +165,14 @@ def tweak_nointro_dat(stitle,languages=None,region=None):
         dat_lang = dat_lang+')'
     else:
         dat_lang = ''
+    if region:
+        region = ' ('+region+')'
+    # fix for some region shorthand
+    stitle = re.sub(r'\(Euro\)','(Europe)',stitle)
     stitle = re.sub(disc_pat,'',stitle)
     stitle = re.sub(r':',' -',stitle)
     stitle = re.sub(r'/','-',stitle)
-    return stitle+' ('+region+')'+dat_lang+disc
+    return stitle+region+dat_lang+disc
 
 def compare_sl_with_redump(sllist,san_redumplst,sl_dict,answers={}):
     '''
@@ -309,22 +336,36 @@ def name_serial_map(platform, softlst_platform,dat_platform):
     redump_platform = redump_site_dict[platform]
     for soft_title, soft in softlst_platform.items():
         # skip titles where a source is identified
+        redump_info = {}
         if 'sourcedat' in soft:
             pass
         elif 'serial' in soft:
             try:
                 redump_info = redump_platform[soft['serial']]
-                for rtitle,info in redump_info.items():
-                    print('found match:')
-                    print(soft['description'])
-                    print(rtitle)
             except:
-                #print('key error for '+soft['description'])
-                #print(soft['serial'])
+                # serial not in redump table - note some softlist titles have multiple
+                # serials, not handled at this point
                 pass
-        
+            if len(redump_info) > 1:
+                print('multiple associated with this serial: '+str(len(redump_info))+' discs')
+            for rtitle,info in redump_info.items():
+                if soft_redump_match(rtitle, soft['description']):
+                    for dat in dat_platform['redump_unmatched'].keys():
+                        if rtitle in dat_platform['redump_unmatched'][dat]:
+                            print('Got a DAT match for '+soft['description']+' and '+rtitle)
+                            
             
-            
+def soft_redump_match(redump_title,softlist_title):
+    # convert the description to comply with nointro/redump
+    nointrofix = tweak_nointro_dat(softlist_title)
+    # convert the redump title to better match softlist standards
+    redump_soft = redump_to_softstyle(redump_title)
+    if nointrofix.lower() == redump_soft.lower():
+        return True
+    else:
+        print('No match: '+nointrofix+', '+redump_soft)
+        return False
+      
 
 def build_redump_site_dict(platform):
     import time
@@ -338,7 +379,6 @@ def build_redump_site_dict(platform):
     for page in range(2,max_page+1):
         time.sleep(3)
         url = redump_url+'?page='+str(page)
-        print('parsing page '+str(page)+', '+url)
         html = requests_retry_session().request("GET", url, timeout=3)
         soup = BeautifulSoup(html.text, 'xml')
         games_dict.update(parse_games_table(games_dict,soup))
@@ -388,8 +428,6 @@ def parse_games_table(games_dict, soup):
         status = cols[7].find('img')['alt']
 
         dat_title = tweak_nointro_dat(rtitle,languages,region)
-        print('processing '+rtitle+'\n dat style: '+dat_title+'\nSerials:')
-        print(serials)
         game_entry = {
             'db_title' : rtitle,
             'dat_style' : dat_title, # needs more work
@@ -410,8 +448,10 @@ def parse_games_table(games_dict, soup):
                 games_dict[serial] = {}
             if dat_title in games_dict[serial]:
                 # handle different revisions with the same serial number
-                print('duplicate title for serial '+serial+':\n'+dat_title)
-                revtitle = dat_title+'('+version+')'
+                if version:
+                    revtitle = dat_title+'('+version+')'
+                else:
+                    revtitle = dat_title+'('+re.sub(r'/disc/(\d+)/',r'\1',disc_href)+')'
                 rev_list.update({serial:revtitle})
                 if revtitle in games_dict[serial]:
                     print('duplicate title for serial '+serial+':\n'+revtitle)
