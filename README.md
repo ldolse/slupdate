@@ -52,7 +52,4 @@ On first run you'll be automatically directed to configure mandatory settings:
 ### To build CHDs
 xmltodict, inquirer,
 
-### Future functions
- requests, beautifulsoup4, pykakasi
-
 
