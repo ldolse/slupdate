@@ -69,7 +69,7 @@ menu_msgs = {'0' : 'Main Menu, select an option',
              'chd' : 'CHD Builder Destination Directory',
              'dat' : 'DAT Source Directories',
              'rom' : 'ROM Source Directories',
-             '5b' : 'Select a console to configure',
+             '5b' : 'Select a console to configure ',
              '5c' : 'Select a DAT to remove',
              'dir_d' : 'Select a Directory to Remove',
              'romvault' : 'Are you using ROMVault to manage DATs and ROMs?'
@@ -103,19 +103,32 @@ menu_lists = {'0' : [('1. Mapping Functions', 'map'),
                       ('Back', '5')],
     }
 
+def first_run():
+    print('Please Configure the MAME Softlist hash directory location.\n')
+    slist_dir_function()
+    print('\nPlease Confgure the root directory locations for your DAT and ROM files')
+    print('This will be used to simplify navigation for DAT and ROM directory selection')
+    print('RomVault compatibility can also be enabled here to automate ROM directory configuration\n')
+    root_dirs_function()
+    print('\nPlease configure DATs for the first Platform (more can be configured later)\n')
+    platform = platform_select('dat')
+    platform_dat_rom_function(platform['platforms'])
+    print('\nPlease configure the destination directory for created CHDs - note this directory should not contain CHDs from other sources')
+    chd_dir_function()
 
 def main_menu():
     global settings
     dir_types = ('dat','rom','map')
+    menu_sel = '0'
     if len(settings) == 0:
-        menu_sel = '5'
-    else:
-        menu_sel = '0'
+        # walk through all the mandatory settings one by one on the first run
+        first_run()
+        save_data(settings,'settings')
     complete = False
     while not complete:
         answer = list_menu(menu_sel,menu_lists[menu_sel],menu_msgs[menu_sel])
         if any(file in answer.values() for file in dir_types):
-            platform = platform_select(list(answer)[0])
+            platform = platform_select(answer[menu_sel])
 
         if answer[menu_sel].endswith('function'):
             if any(f in answer for f in dir_types):     
@@ -202,6 +215,7 @@ def get_configured_platforms(action_type):
     for name, platform in consoles.items():
         if platform in settings and len(settings[platform]) > 0:
             configured.append((name,platform))
+    print(configured)
     return configured
 
 def platform_select(list_type):
@@ -442,7 +456,15 @@ def platform_dat_rom_function(platform):
     # if using romvault map the ROM directores for the DATs automatically
     if settings['romvault']:
         datrom_dirmap = romvault_dat_to_romfolder(dat_directory, dat_files)
-        settings[platform].update(datrom_dirmap)
+    else:
+        datrom_dirmap = {}
+        if 'romroot' not in settings:
+            single_dir_function('romroot','Root ROM Directory')
+        for dat in dat_files:
+            print('Select ROM Directory for DAT:\n'+dat+'\n')
+            rom_directory = select_directory('rom',settings['romroot'])
+            datrom_dirmap.update({dat_directory+os.sep+dat:rom_directory})
+    settings[platform].update(datrom_dirmap)
 
 def get_os_dirs(path):
     """
