@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 """ slupdate.py: Interactively Update Optical Media based Software Lists 
 against[Redump](http://redump.org/) dats.
@@ -119,16 +119,11 @@ def first_run():
     print('\nPlease configure the destination directory for created CHDs - note this directory should not contain CHDs from other sources')
     chd_dir_function()
 
-def main_menu():
+def main_menu(exit):
     global settings
     dir_types = ('dat','rom','map')
     menu_sel = '0'
-    if len(settings) == 0:
-        # walk through all the mandatory settings one by one on the first run
-        first_run()
-        save_data(settings,'settings')
-    complete = False
-    while not complete:
+    while not exit:
         answer = list_menu(menu_sel,menu_lists[menu_sel],menu_msgs[menu_sel])
         if any(file in answer.values() for file in dir_types):
             platform = platform_select(answer[menu_sel])
@@ -148,7 +143,8 @@ def main_menu():
             save_data(settings,'settings')
             menu_sel = answer[menu_sel]
         elif answer[menu_sel] == 'Exit':
-            complete = True
+            exit = True
+            return exit
         else:
             menu_sel = answer[menu_sel]
 
@@ -495,6 +491,27 @@ def get_os_dirs(path):
     directories.append('Select the current directory')
     return directories
 
+def get_start_dir(filetype=None):
+    start_path = None
+
+    while not start_path:
+        path_query = [
+            inquirer.Path(name='path', message=filetype+" Path (or starting point to browse filesystem)")]
+        path_entry = inquirer.prompt(path_query) 
+
+        # remove any trailing slash, if the user enters
+        pattern = os.sep+'$'
+        path_entry = re.sub(pattern,'',path_entry['path'])
+        if not os.path.exists(path_entry):
+            print('invalid path, try again')
+            # could potentially count failures and switch to working dir
+            #current_path = os.getcwd()
+            continue
+        else:
+            start_path = path_entry
+    return start_path
+
+
 def select_directory(filetype=None,start_dir=None):
     """
     Displays a list of directories in the current directory and prompts the user to select one
@@ -502,23 +519,14 @@ def select_directory(filetype=None,start_dir=None):
     selected = False
     origin_path = os.getcwd()
     if not start_dir:
-        path_query = [
-            inquirer.Path(name='path', message=filetype+" Path (or starting point)")]
-        start_path = inquirer.prompt(path_query)  
-        try:
-            # remove any trailing slash, if the user enters anything that triggers an
-            # exception then just use the current working directory as a starting point
-            pattern = os.sep+'$'
-            current_path = re.sub(pattern,'',start_path['path'])
-        except:
-            current_path = os.getcwd()
+        current_path = get_start_dir(filetype)
     else:
         current_path = start_dir
     while not selected:
         questions = [
             inquirer.List(filetype,
-                          message="Select a directory current:("+current_path+")",
-                          choices=get_os_dirs(current_path))
+                          message = "Select a directory - current: ["+current_path+"]",
+                          choices = get_os_dirs(current_path))
             ]
         answers = inquirer.prompt(questions)
         if answers[filetype] == 'Select the current directory':
@@ -534,7 +542,12 @@ def select_directory(filetype=None,start_dir=None):
             os.chdir(current_path)
 
 
+if __name__ == '__main__':
 
-
-
-
+    if len(settings) == 0:
+        # walk through all the mandatory settings one by one on the first run
+        first_run()
+        save_data(settings,'settings')
+    complete = False
+    while not complete:
+        complete = main_menu(complete)
