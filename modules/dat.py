@@ -1,7 +1,7 @@
 import re, xmltodict, hashlib
 import xml.etree.ElementTree as ET
 import html
-from  lxml import etree
+from  lxml import etree, html
 
 
 '''
@@ -499,6 +499,54 @@ def create_dat_hash_dict_xml(datroot):
             'size': size,
         }
     return result
+    
+def shift_sibling_comments(xml_file):
+    import lxml.etree, lxml.html
+    parser = etree.XMLParser(remove_blank_text=False, strip_cdata=False)
+    tree = etree.parse(xml_file, parser)
+    root = tree.getroot()
+
+    for child in root.iterchildren():
+        # if the child is software tag
+        if len(child) > 1 and child.tag == "software":
+            firstsibling = True
+            for sibling in child.itersiblings(preceding=True):
+                if not firstsibling:
+                    break
+                if isinstance(sibling, lxml.etree._Comment):
+                    comment_string = etree.tostring(sibling)
+                    #comment_bytes = str(lxml.html.tostring(sibling))
+                    #comment_string = comment_bytes.decode('UTF-8')
+                    if comment_string.endswith(b'-->\n\t'):
+                        print('shifting comment\n',lxml.html.tostring(sibling))
+                        sibling.tail = '\n\t\t'
+                        child.insert(0,sibling)
+                firstsibling = False
+
+            # iterate through the child's siblings to find any comments outside the set of tags
+#            if isinstance(child[-1], lxml.etree._Comment):
+#                print('sibling minus one is:\n',lxml.html.tostring(child[-1]))
+#            previous_child = child[-1]
+#            for sibling in previous_child.itersiblings(preceding=True):
+
+#                if isinstance(sibling, lxml.etree._Comment): # check if sibling is a comment
+#                    print('found a comment')
+#                    # move the comment inside the last tag of the set
+#                    child[-1].insert(-1, sibling)
+
+        # save the modified XML document
+    output = etree.tostring(
+        tree,
+        pretty_print=True,
+        xml_declaration=True,
+        encoding="UTF-8",
+        doctype='<!DOCTYPE softwarelist SYSTEM "softwarelist.dtd">'
+    ).decode("UTF-8")
+
+    with open(xml_file, "w") as f:
+        f.write(output)
+
+
 
 def get_dat_header_info(dat_path,field):
     tree = ET.parse(dat_path)
