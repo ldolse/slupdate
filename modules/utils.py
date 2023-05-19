@@ -5,8 +5,8 @@ import re
 import pickle
 import pprint
 
-def save_data(data_to_save,name):
-    with open(name+'.cache', 'wb') as f:
+def save_data(data_to_save,name,directory):
+    with open(directory+os.sep+name+'.cache', 'wb') as f:
         pickle.dump(data_to_save, f)
 
 def restore_dict(name):

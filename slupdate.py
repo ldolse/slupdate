@@ -9,6 +9,18 @@ import os
 import re
 import sys
 import inquirer
+import builtins
+
+try:
+    # get the script location directory to ensure settings are saved and update environment var
+    script_dir = os.path.abspath(os.path.dirname(__file__))
+except:
+    # set it to current working dir for this scenario, which is most likely when running from interpreter
+    script_dir =  os.getcwd()
+
+# bit of a hack to pass the script dir to the chd module
+builtins.script_dir = script_dir
+
 from modules.utils import save_data,restore_dict
 from modules.dat import get_dat_name,update_softlist_chd_sha1s
 from modules.chd import find_softlist_zips,create_chd_from_zip,chdman_info,is_greater_than_0_176
@@ -24,6 +36,7 @@ assert sys.version_info >= (3, 2)
 
 settings = restore_dict('settings')
 user_answers = restore_dict('user_answers')
+
 
 softlist_dict = {}
 dat_dict = {}
@@ -314,11 +327,12 @@ def chd_builder(platform):
                             built_sources.update({disc_data['source_rom']:chd_path})
                         except:
                             print('CHD Creation Failed')
-                            try:
-                                os.remove(chd_path)
-                            except:
-                                print('Failed to delete partial file:\n'+chd_path)
-                                print('Please ensure this is deleted to avoid corrupted files/hashes')
+                            if os.path.isfile(chd_path):
+                                try:
+                                    os.remove(chd_path)
+                                except:
+                                    print('Failed to delete partial file:\n'+chd_path)
+                                    print('Please ensure this is deleted to avoid corrupted files/hashes')
                             continue_build = inquirer.confirm('Do you want to continue?', default=False)
                             if continue_build:
                                 continue
@@ -333,10 +347,10 @@ def chd_builder(platform):
                     if disc_data['source_rom'] in built_sources or get_sha_from_existing_chd:
                         new_chd_hash = chdman_info(chd_path)
                         if new_chd_hash == disc_data['chd_sha1']:
-                            print('     Hash matches softlist: '+chd_name+'\n')
+                            print('\nHash matches softlist: '+chd_name+'\n')
                         else:
                             new_hashes = True
-                            print('     Updated hash for softlist: '+chd_name+'\n')
+                            print('\nUpdated hash for softlist: '+chd_name+'\n')
                             disc_data.update({'new_sha1':new_chd_hash})
                     else:
                         print('     Chd file already exists in this location\n')
@@ -547,7 +561,7 @@ if __name__ == '__main__':
     if len(settings) == 0:
         # walk through all the mandatory settings one by one on the first run
         first_run()
-        save_data(settings,'settings')
+        save_data(settings,'settings',script_dir)
     complete = False
     while not complete:
         complete = main_menu(complete)

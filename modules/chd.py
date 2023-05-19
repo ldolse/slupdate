@@ -6,8 +6,17 @@ import subprocess
 import tempfile
 import zipfile
 import logging
+import builtins
 from distutils.version import LooseVersion
 
+if hasattr(builtins, "script_dir"):
+    script_dir = builtins.script_dir
+else:
+    script_dir = os.getcwd()
+
+
+# set environment to include script directory directory in addition to path - for chdman placed with script
+env_with_script_dir = {**os.environ, 'PATH': script_dir + ':' + os.environ['PATH']}
 
 def is_greater_than_0_176(version_string):
     return LooseVersion(version_string) > LooseVersion('0.176')
@@ -21,8 +30,8 @@ def chdman_info(chd=None):
         command = ['chdman', 'info', '-i', chd]
     else:
         command = 'chdman'
+    proc = subprocess.Popen(command, stdout=subprocess.PIPE, env=env_with_script_dir)
     try:
-        proc = subprocess.Popen(command, stdout=subprocess.PIPE)
         output = proc.stdout.read().decode('ascii').split('\n')
     except:
         logging.debug(f'chdman not in the system path or installed with slupdate, possibly corrupted CHD\n'+chd)
@@ -70,14 +79,16 @@ def create_chd_from_zip(zip_path, chd_path, settings):
 
             # extract all files to temp directory
             for file_info in zip_file.infolist():
-                file_path = os.path.join(temp_dir, file_info.filename)
-                with open(file_path, 'wb') as f:
-                    f.write(zip_file.read(file_info.filename))
+                # handle manually zipped garbage added by osx
+                if not file_info.filename.startswith('__MACOSX/'):
+                    file_path = os.path.join(temp_dir, file_info.filename)
+                    with open(file_path, 'wb') as f:
+                        f.write(zip_file.read(file_info.filename))
 
             os.chdir(temp_dir)
 
             command = ['chdman', 'createcd', '-i', toc_file, '-o', chd_path]
-            subprocess.run(command, check=True)
+            subprocess.run(command, check=True, env=env_with_script_dir)
     finally:
         os.chdir(origin_path)
         shutil.rmtree(temp_dir)
@@ -88,7 +99,7 @@ def convert__bincue_to_chd(chd_file_path: pathlib.Path, output_cue_file_path: pa
         chdman_cue_file_path = pathlib.Path(chdman_output_folder_path_name, output_cue_file_path.name)
 
         logging.debug(f'Converting "{chd_file_path.name}" to .bin/.cue format')
-        chdman_result = subprocess.run(["chdman", "createcd", "--input", str(chd_file_path), "--output", str(chdman_cue_file_path)], stdout=None if show_command_output else subprocess.DEVNULL)
+        chdman_result = subprocess.run(["chdman", "createcd", "--input", str(chd_file_path), "--output", str(chdman_cue_file_path)], stdout=None if show_command_output else subprocess.DEVNULL, env=env_with_script_dir)
         if chdman_result.returncode != 0:
             # chdman provides useful progress output on stderr so we don't want to capture stderr when running it. That means we can't provide actual error output to the exception, but I can't find a way around that.
             raise ConversionException("Failed to convert .chd using chdman", chd_file_path, None)
