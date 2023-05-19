@@ -449,7 +449,6 @@ def create_dat_hash_dict(raw_dat_dict,crc_hashlookup):
         sha1_digest = sha1.hexdigest()
         if sha1_digest in keyresult:
             print('duplicate dat entry for '+name)
-            print('overwriting '+keyresult[sha1_digest]['name'])
         keyresult[sha1_digest] = {
             'name': name,
             'files': files,
