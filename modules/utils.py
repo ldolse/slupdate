@@ -1,6 +1,7 @@
 
 import xmltodict
 import glob
+import os
 import re
 import pickle
 import pprint
