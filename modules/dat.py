@@ -236,7 +236,7 @@ def get_lxml_replacements(softlist_xml_file):
     be changed back after lxml has updated the xml
     '''
     entity_list = re.compile(r'>[^<]+?(&quot;)[^<]+?<')
-    with open(softlist_xml_file, 'r') as f:
+    with open(softlist_xml_file, 'r', encoding='utf-8') as f:
         xml_string = f.read()
     tag_regex = re.compile(r'<[^>]+? />')
     lxml_changes = {}
