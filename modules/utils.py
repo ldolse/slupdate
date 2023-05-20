@@ -31,7 +31,7 @@ def get_dat_paths(platform, datpaths, sl_dat_map):
     
 def convert_xml(file, comments=False):
     #read xml content from the file
-    fileptr = open(file,"r")
+    fileptr = open(file,"r",encoding='utf-8')
     xml_content= fileptr.read()
     #print("XML content is:")
     #print(xml_content)
