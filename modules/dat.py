@@ -299,7 +299,7 @@ def update_softlist_chd_sha1s(softlist_xml_file, soft_dict):
     # put back the whitespace lxml deleted
     for old_string, new_string in tags_with_whitespace.items():
         output = output.replace(old_string, new_string)
-    with open(softlist_xml_file, "w") as f:
+    with open(softlist_xml_file, "w",encoding='utf-8') as f:
         f.write(output)
 
 
@@ -350,7 +350,7 @@ def update_sl_descriptions(softlist_xml_file, answerdict):
         doctype='<!DOCTYPE softwarelist SYSTEM "softwarelist.dtd">'
     ).decode("UTF-8")
 
-    with open(softlist_xml_file, "w") as f:
+    with open(softlist_xml_file, "w",encoding='utf-8') as f:
         f.write(output)
 
 def add_redump_names_to_slist(softlist_xml_file, answerdict,redump_name_list):
@@ -391,7 +391,7 @@ def add_redump_names_to_slist(softlist_xml_file, answerdict,redump_name_list):
         doctype='<!DOCTYPE softwarelist SYSTEM "softwarelist.dtd">'
     ).decode("UTF-8")
 
-    with open(softlist_xml_file, "w") as f:
+    with open(softlist_xml_file, "w",encoding='utf-8') as f:
         f.write(output)
 
 

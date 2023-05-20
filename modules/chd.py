@@ -39,7 +39,7 @@ def chdman_info(chd=None):
     if chd:
         for line in output:
             if re.findall(r'^\s*SHA1', line):
-                info = re.sub(r'\s*SHA1:\s*','',line)
+                info = re.sub(r'\s*SHA1:\s*','',line).strip()
                 #info = re.sub(r'\s*Data\sSHA1:\s*','',line)
                 break
     else:
