@@ -111,7 +111,7 @@ menu_lists = {'0' : [('1. Mapping Functions', 'map'),
                     ('Back', '0')],
              '5' : [('a. MAME Software List XML Directory', 'slist_dir_function'),
                     ('b. Configure Root DAT/ROM Directories (ROMvault)', 'root_dirs_function'),
-                    ('c. Configure DAT/ROM Directories', 'dat'),
+                    ('c. Configure DAT/ROM Platform Directories', 'dat'),
                     ('d. Destination folder for CHDs', 'chd_dir_function'),
                     ('e. Back', '0')],
              'dat' : [('Add Directories','platform_dat_rom_function'),
@@ -153,7 +153,7 @@ def main_menu(exit):
 
         elif menu_sel == '5' and answer[menu_sel] == '0':
             # save settings when exiting settings and returning to main menu
-            save_data(settings,'settings')
+            save_data(settings,'settings',script_dir)
             menu_sel = answer[menu_sel]
         elif answer[menu_sel] == 'Exit':
             exit = True
@@ -379,7 +379,7 @@ def save_function():
     confirm_message = menu_msgs['save']
     save = inquirer.confirm(confirm_message, default=False)
     if save:
-        save_data(user_answers,'answers')
+        save_data(user_answers,'answers',script_dir)
     return
 
 def restore_function():
