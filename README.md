@@ -12,7 +12,7 @@ slupdate parses MAME CD Media Software Lists to find source ROM information, and
 ## Installation
 Download the source and unzip into a folder, ensure Python 3.x and chdman are in the path, or optionally place a chdman binary in the slupdate directory if you don't want it in the system path.
 
-Ensure the required Python modules are installed using pip or your preferred Python package manager.
+Ensure the required Python modules (see below for the list) are installed using pip or your preferred Python package manager.
 
 ## Using the Software
 ### Typical Usage
@@ -49,7 +49,7 @@ On first run you'll be automatically directed to configure mandatory settings:
 * This does not yet monitor the Chdman output for warnings which would indicate an invalid CHD, this will be added later.  Please use caution and review the logs for warnings.
 
 ### Required Python Modules
-#### To build CHDs
-xmltodict, inquirer
+
+xmltodict, inquirer, lxml
 
 
