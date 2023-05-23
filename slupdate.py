@@ -183,13 +183,22 @@ def find_dat_matches(platform,sl_platform_dict,dathash_platform_dict):
     disc_matches = 0
     dat_matches = 0
     zips = 0
+    # use a list instead of a counter as multiple dats are looped through
+    chd_count = []
     for datfile, dathashdict in dathash_platform_dict['hashes'].items():
         for sl_title, sl_data in sl_platform_dict.items():
             sl_title_match = False
             dat_name_list = []
+            chds_exist = False
             for disc, disc_data in sl_data['parts'].items():
                 if 'source_rom' in disc_data:
                     continue # skip when a source ROM was identified from an earlier DAT
+                if 'chd_filename' in disc_data:
+                    chd_path = settings['chd']+os.sep+platform+os.sep+sl_title+os.sep+disc_data['chd_filename']+'.chd'
+                    if os.path.isfile(chd_path):
+                        # add chd path to a list, check for unique files later
+                        chd_count.append(chd_path)
+                        chds_exist = True
                 if 'source_sha' in disc_data and disc_data['source_sha'] in dathashdict:
                     sourcehash = disc_data['source_sha']
                     disc_matches += 1
@@ -206,7 +215,7 @@ def find_dat_matches(platform,sl_platform_dict,dathash_platform_dict):
                 sl_platform_dict[sl_title].update({'sourcedat':datfile})
                 if dathashdict[sourcehash]['name'] in dathash_platform_dict['redump_unmatched'][datfile]:
                     dathash_platform_dict['redump_unmatched'][datfile].pop(dathashdict[sourcehash]['name'])
-        # check to see if there is a valid zip for this rom
+            # check to see if there is a valid zip for this rom
             zip_name = find_rom_zips(datfile,sl_data,dathashdict,settings[platform])
             if zip_name:
                 dat_zips = dict(zip(dat_name_list,zip_name))
@@ -214,7 +223,12 @@ def find_dat_matches(platform,sl_platform_dict,dathash_platform_dict):
                 for datname,zipname in dat_zips.items():
                     print('       Dat: '+datname+'\n       Zip: '+zipname)
                     zips += 1
-    print('found:\n  '+str(title_dat_matches)+' title matches out of '+str(len(sl_platform_dict))+' total entries\n  '+str(disc_matches)+' disc matches\n  '+str(zips)+' valid zip files')
+                    if chds_exist:
+                        print('       CHD(s) for this title found')
+    print('found:\n  '+str(title_dat_matches)+' / '+str(len(sl_platform_dict))+' Software List Entries have DAT matches')
+    print('  '+str(disc_matches)+' individual disc matches')
+    print('  '+str(zips)+' valid zip files')
+    print('  '+str(len(set(chd_count)))+' chds already exist in the destination directory')
 
 
 def get_configured_platforms(action_type):
@@ -306,7 +320,10 @@ def chd_builder(platform):
     '''
     new_hashes = False
     built_sources = {}
+    discontinue = False
     for soft, soft_data in softlist_dict[platform].items():
+        if discontinue:
+            break
         for disc_data in soft_data['parts'].values():
             if 'source_rom' in disc_data:
                 # create platform directory
@@ -317,10 +334,11 @@ def chd_builder(platform):
                     os.mkdir(chd_dir)
                 chd_name = disc_data['chd_filename']+'.chd'
                 chd_path = os.path.join(chd_dir,chd_name)
-                print('building chd for '+soft_data['description']+':')
-                print('            CHD: '+chd_name)
-                print('     Source Zip: '+os.path.basename(disc_data['source_rom']))
                 if not os.path.isfile(chd_path):
+                    print('\nbuilding chd for '+soft_data['description']+':')
+                    print('            CHD: '+chd_name)
+                    print('     Source Zip: '+os.path.basename(disc_data['source_rom']))
+
                     if disc_data['source_rom'] not in built_sources:
                         try:
                             create_chd_from_zip(disc_data['source_rom'],chd_path,settings)
@@ -337,11 +355,14 @@ def chd_builder(platform):
                             if continue_build:
                                 continue
                             else:
+                                discontinue = True
                                 break
                     # if the exact same chd was built earlier then just symlink to it
                     elif disc_data['source_rom'] in built_sources:
                         os.symlink(built_sources[disc_data['source_rom']],chd_path)
                         built_sources.update({disc_data['source_rom']:chd_path})
+                else:
+                    print('chd for '+soft_data['description']+' already exists, skipping')
                 # if the chd was created as a part of this run or if the flag to trust existing chds is enabled check the sha1 against the softlist
                 if os.path.isfile(chd_path):
                     if disc_data['source_rom'] in built_sources or get_sha_from_existing_chd:
@@ -353,7 +374,7 @@ def chd_builder(platform):
                             print('\nUpdated hash for softlist: '+chd_name+'\n')
                             disc_data.update({'new_sha1':new_chd_hash})
                     else:
-                        print('     Chd file already exists in this location\n')
+                        continue
                         
     if new_hashes:
         write_new_hashes = inquirer.confirm('Update the Software List with new CHD Hashes?', default=False)

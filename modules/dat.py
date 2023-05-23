@@ -61,7 +61,7 @@ def process_sl_rom_sources(softdict):
             if cue_count <= 1:
                 current_disc_number = 1
             if cue_count == 0:
-                print(game_title+' has no TOC file in source reference, may be an outdated source')
+                print(game_title+' has no cue or gdi file in source reference, not supported at this time')
             first = True
             for rom in game_data['rom']:
                 toc = False
@@ -250,10 +250,8 @@ def get_lxml_replacements(softlist_xml_file):
     for match in entity_list.finditer(xml_string):
         # get the matched tag as a string
         entity_str = match.group(0)
-        print('entity string is:\n'+entity_str)
         # unescape the entities to create the new key
         new_key = html.unescape(entity_str)
-        print('new key is:\n'+new_key)
         # add the new key and the matched tag as the value to the dictionary
         lxml_changes[new_key] = entity_str
     return lxml_changes
