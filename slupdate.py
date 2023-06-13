@@ -448,12 +448,13 @@ def chd_builder(platform):
 
 
 
-def chd_build_function():
+def chd_build_function(platform=None):
     if not is_greater_than_0_176(chdman_info()):
         print('Outdated Chdman, please upgrade to a recent version')
         return None
-    # get configured platforms and map selected from the returned key
-    platform = platform_select('chd')['platforms']
+    if not platform:
+        # get configured platforms and map selected from the returned key
+        platform = platform_select('chd')['platforms']
     if platform not in softlist_dict:
         print('No mapping has been run for this platform yet, please go back and run a mapping function\n')
         return None
