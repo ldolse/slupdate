@@ -8,7 +8,25 @@ from  lxml import etree, html
 Softlist processing functions
 '''
 
+def get_source_stats(sl_platform_dict):
+    from collections import defaultdict
+    group_counts = defaultdict(int)
 
+    for soft_entry in sl_platform_dict.values():
+        for part in soft_entry['parts'].values():
+            if 'source_group' in part:
+                group_counts[part['source_group']] += 1
+
+    return dict(group_counts)
+
+def print_source_stats(source_stats,total_source_ref):
+    known_sum = 0
+    for group, group_count in source_stats.items():
+        known_sum += group_count
+        percentage = (group_count / total_source_ref) * 100
+        print(f"  {group}: {percentage:.1f}%")
+    other_percent = ((total_source_ref - known_sum) / total_source_ref) * 100
+    print(f"  Uknown: {other_percent:.1f}%")
 
 def get_sl_descriptions(softlist,dat_type,field):
     '''
@@ -33,6 +51,100 @@ def sl_romhashes_to_dict(comment):
         print('\033[0;31mfailed to parse romhash comment\033[00m')
         return None
 
+def update_sl_rom_source_ids(concatenated_hashes,soft_title,soft_data,source_type,sizes,known_disc=''):
+    '''
+    takes concatenated hashes and calculates a sha1 checksum source_type defines the type
+    of hash used.  both are added to a tuple which is then added to the disc
+    known_disc is used for cases where this function is called for a single known disc name
+    total binary size is also updated here but not currently added to the tuple
+    '''
+    source_fingerprints = {}
+    for disc_number, disc_hash in concatenated_hashes.items():
+        # if the disc reference is submitted during the call use that
+        if known_disc:
+            disc_ref = known_disc
+        # otherwise calculate the disc reference from the number keys in the dict
+        else:
+            # single disc sets use zero for the first reference, no number added
+            if disc_number == 0:
+                disc_ref = 'cdrom'
+            else:
+                # multi-disc sets always start with the disc number appended to cdrom
+                disc_ref = f'cdrom{disc_number}'
+
+        sha1 = hashlib.sha1(disc_hash.encode('utf-8')).hexdigest()
+        source_fingerprints[f'disc{disc_number}_sha1'] = sha1
+        try:
+            soft_data['parts'][disc_ref]['source_sha'] = (sha1,source_type)
+            soft_data['parts'][disc_ref]['bin_size'] = sizes[disc_number]
+        except:
+            print(f'\nkey error for {disc_ref}, in entry \''+soft_title+'\'. The softlist entry may not use the correct disc numbering convention,')
+            print('or the source references don\'t use the toc file as a delimiter.  Single disc sets use \'cdrom\' for the first')
+            print('disc part name, while multi-disk sets use \'cdrom1\' for the first disc part in the set\n')
+            continue
+
+    soft_data.update({'discs': source_fingerprints})
+
+
+def rom_entries_to_source_ids(soft_title,raw_rom_source_data):
+    hashtype = '@sha1'
+    source_type = 'sha1'
+    total_size = 0
+    sizes = {}
+    concatenated_hashes = {}
+    source_fingerprints = {}
+    current_disc_number = 0
+    current_concatenated_hash = ''
+    if not isinstance(raw_rom_source_data, list):
+        raw_rom_source_data = [raw_rom_source_data]
+    # some older soft lists put the cue at the end of the list of roms, handle automatically for single discs
+    cue_count = sum(1 for rom in raw_rom_source_data if rom['@name'].lower().endswith('.cue') or rom['@name'].endswith('.gdi'))
+    iso_count = sum(1 for rom in raw_rom_source_data if rom['@name'].lower().endswith('.iso'))
+    if cue_count == 0 and iso_count == 0:
+        print(soft_title+' non-iso source has no cue or gdi toc file in source reference, may not be supported')
+    first = True
+    for rom in raw_rom_source_data:
+        toc = False
+        if rom['@name'].lower().endswith(('.cue', '.gdi')) and first:
+            # expected case, continue
+            pass
+        # if the first file wasn't a TOC but this is a multi-disc set, increment disc number
+        # multi disc sets always append an integer to 'cdrom'
+        elif first and cue_count > 1:
+            current_disc_number += 1
+        elif first and iso_count > 1:
+            current_disc_number += 1
+        if rom['@name'].lower().endswith(('.cue', '.gdi')):
+            toc = True
+        try:
+            rom_size = int(rom['@size'])
+        except:
+            print('size error for Softlist Entry source ROM: '+soft_title)
+            rom_size = 0
+        if not toc:
+            total_size += rom_size
+
+        if toc and cue_count > 1:
+            current_disc_number += 1
+            current_concatenated_hash = ''
+            total_size = 0
+        elif not toc:
+            if hashtype not in rom:
+                hashtype = '@crc'
+                source_type = 'crc'
+            try:
+                current_concatenated_hash += rom[hashtype]
+            except:
+                print(soft_title+' has an error in the commented rom listing') 
+                continue
+        if first:
+           first = False
+        if current_concatenated_hash:
+            concatenated_hashes.update({current_disc_number : current_concatenated_hash})
+            sizes.update({current_disc_number : total_size})
+
+    return concatenated_hashes, source_type, sizes
+
 
 def process_sl_rom_sources(softdict):
     '''
@@ -42,141 +154,98 @@ def process_sl_rom_sources(softdict):
     separators
     '''
     print('Building Source fingerprints from software list')
-    crc_hashlookup = False
-    for game_title, game_data in softdict.items():
-        hashtype = '@sha1'
-        source_type = 'source_sha'
-        total_size = 0
-        sizes = {}
-        concatenated_hashes = {}
-        source_fingerprints = {}
-        current_disc_number = 0
-        current_concatenated_hash = ''
-        #print(game_title)
-        if 'rom' in game_data:
-            if not isinstance(game_data['rom'], list):
-                game_data['rom'] = [game_data['rom']]
-            # some older soft lists put the cue at the end of the list of roms, handle automatically for single discs
-            cue_count = sum(1 for rom in game_data['rom'] if rom['@name'].lower().endswith('.cue') or rom['@name'].endswith('.gdi'))
-            if cue_count <= 1:
-                current_disc_number = 1
-            if cue_count == 0:
-                print(game_title+' has no cue or gdi file in source reference, not supported at this time')
-            first = True
-            for rom in game_data['rom']:
-                toc = False
-                normal_toc = False
-                reverse_toc = False
-                if hashtype not in rom:
-                    crc_hashlookup = True
-                    hashtype = '@crc'
-                    source_type = 'source_crc_sha'
-                if rom['@name'].lower().endswith(('.cue', '.gdi')) and first:
-                    normal_toc = True
-                elif first and cue_count > 1:
-                    current_disc_number += 1
-                if rom['@name'].lower().endswith(('.cue', '.gdi')):
-                    toc = True
-                try:
-                    rom_size = int(rom['@size'])
-                except:
-                    print('size error for Softlist Entry source ROM: '+game_title)
-                    rom_size = 0
-                if not rom['@name'].lower().endswith(('.cue', '.gdi')):
-                    total_size += rom_size
+    for soft_title, soft_data in softdict.items():
+        if 'rom' in soft_data:
+            concatenated_hashes, source_type, sizes = rom_entries_to_source_ids(soft_title,soft_data['rom'])
+            # update the softlist dict with source ids
+            update_sl_rom_source_ids(concatenated_hashes,soft_title,soft_data,source_type,sizes)
 
-                if toc and cue_count > 1:
-                    current_disc_number += 1
-                    current_concatenated_hash = ''
-                    total_size = 0
-                elif not toc:
-                    try:
-                        current_concatenated_hash += rom[hashtype]
-                    except:
-                        print(game_title+' has an error in the commented rom listing') 
-                        continue
-                if first:
-                   first = False
-                if current_concatenated_hash:
-                    concatenated_hashes.update({current_disc_number : current_concatenated_hash})
-                    sizes.update({current_disc_number : total_size})
-        
-            for disc_number, disc_hash in concatenated_hashes.items():
-                sha1 = hashlib.sha1(disc_hash.encode('utf-8')).hexdigest()
-                source_fingerprints[f'disc{disc_number}_sha1'] = sha1
-                try:
-                    game_data['parts'][f'cdrom{disc_number}'][source_type] = sha1
-                    game_data['parts'][f'cdrom{disc_number}']['bin_size'] = sizes[disc_number]
-                except:
-                    print(f'\nkey error for cdrom{disc_number}, in entry \''+game_title+'\'. The softlist entry may not use the correct disc numbering')
-                    print('convention.  Single disc sets use \'cdrom\' for the first disc part name, while multi-disk sets use \'cdrom1\'')
-                    print('for the first disc part in the set\n')
-                    continue
-            game_data.update({'discs': source_fingerprints})
-    if crc_hashlookup:
-        print('some titles did not contain sha1 hashes in sources, crc was also used')
-    return crc_hashlookup
-
-
-def process_comments(soft, sl_dict):
-    redumpurl = r'http://redump\.org'
+def comment_to_sl_dict(soft,raw_comment_dict,sl_dict):
     redump_url = r'http://redump\.org/disc/\d{4,6}/?'
     romhash = r'^(\s+)?<rom name'
     trurip = '(Trurip|trurip)'
-    notedict = {}
     notenum = 1
-    if '#comment' in soft:
-        comments = soft['#comment']
-        discnum = 1
-    else:
-        return None
-    if isinstance(comments, str):
-        comments = [comments]
-    for comment in comments:
+    discnum = 1
+    for comment_location, comments in raw_comment_dict.items():
         note_entry = ''
         rom_entry = ''
         sourcedict = {}
-        commentlines = comment.split('\n')
-        for line in commentlines:
-            redump_sources = re.findall(redump_url,line)
-            if redump_sources:
-                for url in redump_sources:
-                    sourcedict['disc'+str(discnum)+'source'] = url
-                    discnum += 1
-            elif re.match(romhash,line):
-                rom_entry = rom_entry+line.strip()+'\n'
-            else:
-                note_entry = note_entry+line.strip()+'\n'
+        notedict = {}
+        for comment in comments:
+            commentlines = comment.split('\n')
+            for line in commentlines:
+                redump_sources = re.findall(redump_url,line)
+                if redump_sources:
+                    for url in redump_sources:
+                        sourcedict['disc'+str(discnum)+'source'] = url.strip()
+                        discnum += 1
+                elif re.match(romhash,line):
+                    rom_entry = rom_entry+line.strip()+'\n'
+                else:
+                    note_entry = note_entry+line.strip()+'\n'
+        # set the proper destinations based on whether the comment came from the root of 
+        # the softlist or if it came from a disc part
+        if comment_location == 'main_entry':
+            comment_dest = sl_dict[soft['@name']]
+            except_dest_outer = sl_dict
+            except_dest_inner = soft['@name']
+        else:
+            comment_dest = sl_dict[soft['@name']]['parts'][comment_location]
+            except_dest_outer = sl_dict[soft['@name']]['parts'][comment_location]
+            except_dest_inner = comment_location
+        # if sources were found add them to the softlist entry
         if sourcedict:
             try:
-                sl_dict[soft['@name']].update(sourcedict)
+                comment_dest.update(sourcedict)
             except:
-                sl_dict.update({soft['@name']:sourcedict})
+                except_dest_outer.update({except_dest_inner:sourcedict})
         if rom_entry:
             # convert commented DAT entries to a dict list
-            commentdict = sl_romhashes_to_dict(rom_entry)
-            if commentdict: 
-                try:
-                    sl_dict[soft['@name']].update(commentdict['root'])
-                except:
-                    sl_dict.update({soft['@name']:commentdict['root']})
+            rom_dict = sl_romhashes_to_dict(rom_entry)
+            # concatenate the hashes from the rom dict if it was directly associated with a disc
+            if comment_location.startswith('cdrom'):
+                concatenated_hashes, source_type, sizes = rom_entries_to_source_ids(soft['@name'],rom_dict['root']['rom'])
+                update_sl_rom_source_ids(concatenated_hashes,soft['@name'],sl_dict[soft['@name']],source_type,sizes,comment_location)
+            # store the raw source info for troubleshooting purposes
+            try:
+                comment_dest.update(rom_dict['root'])
+            except:
+                except_dest_outer.update({comment_location:rom_dict['root']})
+
         if note_entry:
             notedict['note'+str(notenum)] = note_entry
             notenum += 1
             try:
-                sl_dict[soft['@name']].update(notedict)
+                comment_dest.update(notedict)
             except:
-                sl_dict.update({soft['@name']:notedict})
+                except_dest_outer.update({except_dest_inner:notedict})
+
+def process_comments(soft, sl_dict):
+    raw_comment_dict = {}
+    if '#comment' in soft:
+        if not isinstance(soft['#comment'], list):
+            soft['#comment'] = [soft['#comment']]
+        raw_comment_dict.update({'main_entry':soft['#comment']})
+    for disc in soft['part']:
+        if '#comment' in disc:
+            if not isinstance(disc['#comment'], list):
+                disc['#comment'] = [disc['#comment']]
+            raw_comment_dict.update({disc['@name']:disc['#comment']})
+    if len(raw_comment_dict) == 0:
+        return None
+    else:
+        comment_to_sl_dict(soft,raw_comment_dict,sl_dict)
         
 def build_sl_dict(softlist, sl_dict):
     '''
-    grabs useful sofltist data and inserts into a simple to manage dict
+    grabs useful sofltist data and inserts into a simpler dict object
     '''
     for soft in softlist:
         soft_id = soft['@name']
         soft_description = soft['description']
         soft_entry = {
             'description' : soft_description,
+            'source_found' : False,
         }
         # process info tags
         if 'info' in soft:
@@ -186,28 +255,22 @@ def build_sl_dict(softlist, sl_dict):
                 if tag['@name'] == 'release':
                     soft_entry.update({'release':tag['@value']})
         sl_dict.update({soft_id:soft_entry})
-        # converts comments to dict
-        process_comments(soft, sl_dict)
         if not isinstance(soft['part'], list):
-            if soft['part']['@name'] == 'cdrom':
-                # rename single cd name to match 1st of multiple
-                soft['part']['@name'] = 'cdrom1'
             soft['part'] = [soft['part']]
         sl_dict[soft['@name']].update({'parts':{}})
         for disc in soft['part']:
+            # skip data area references used for non optical media types
+            if 'dataarea' in disc:
+                continue
             disk_entry = {disc['@name']:{'chd_filename': disc['diskarea']['disk']['@name']}}
             if '@sha1' in disc['diskarea']['disk']:
                 disk_entry[disc['@name']].update({'chd_sha1' : disc['diskarea']['disk']['@sha1']})
+            disk_entry[disc['@name']].update({'chd_found' : False})
             sl_dict[soft['@name']]['parts'].update(disk_entry)
+        # converts comments to dict
+        process_comments(soft, sl_dict)
     # build source hashes based on parsed comments
-    crc_hashlookup = process_sl_rom_sources(sl_dict)
-    return crc_hashlookup
-
-
-def print_discs(softlist):
-    for item in my_soft['software']:
-        pprint.pprint(item['part'])
-
+    process_sl_rom_sources(sl_dict)
 
 def print_sha1s(softlist):
     for item in my_soft['software']:
@@ -215,7 +278,6 @@ def print_sha1s(softlist):
         if isinstance(item['part'], list):
             discnum = 1
             for disc in item['part']:
-                #pprint.pprint(disc)
                 try:
                     print('      disc '+str(discnum)+' sha1  is '+disc['diskarea']['disk']['@sha1'])
                 except:
@@ -398,9 +460,11 @@ def add_redump_names_to_slist(softlist_xml_file, answerdict,redump_name_list):
 '''
 dat processing functions
 '''
-def build_dat_dict(datfile,raw_dat_dict,dat_dict,crc_hashlookup):
+def build_dat_dict(datfile,raw_dat_dict,dat_dict):
     '''
     grabs data from dat structure puts it into a new dict
+    raw_dat_dict is the raw dat source xml converted to a dict
+    dat_dict is the dict object which will store all the lookup tables with dat info for this platform
     '''
     if 'dat_group' not in dat_dict:
         dat_dict.update({'dat_group':{}})
@@ -408,16 +472,55 @@ def build_dat_dict(datfile,raw_dat_dict,dat_dict,crc_hashlookup):
         dat_dict.update({'redump_unmatched':{}})
     if 'hashes' not in dat_dict:
         dat_dict.update({'hashes':{}})
-    keyresult, nameresult = create_dat_hash_dict(raw_dat_dict,crc_hashlookup)
-    dat_dict['hashes'].update({datfile : keyresult})
-    dat_dict['redump_unmatched'].update({datfile : nameresult})
-    group = get_dat_header_info(datfile,'url').lower()    
-    if 'tosec' in group:
-        dat_dict['dat_group'].update({datfile : 'TOSEC'})
-    elif 'redump' in group:
-        dat_dict['dat_group'].update({datfile : 'redump'})
+    if 'duplicates' not in dat_dict:
+        dat_dict.update({'duplicates':{}})
+    try:
+        keyresult, nameresult = create_dat_hash_dict(raw_dat_dict)
+        dat_dict['hashes'].update({datfile : keyresult})
+        dat_dict['redump_unmatched'].update({datfile : nameresult})
+        dat_dict['dat_group'].update({datfile : get_dat_group(datfile)})
+    except:
+        print('unexpected error processing '+datfile)
+
+
+def remove_dupe_dat_entries(platform_dat_dict):
+    # dedupe entries in other dats that exist in redump
+    dupe_count = 0
+    for lookup_dat, lookup_hash_dict in platform_dat_dict['hashes'].items():
+        pop_list = []
+        # get current dat group
+        dat_group = platform_dat_dict['dat_group'][lookup_dat]
+        # skip redump 
+        if dat_group == 'redump':
+            continue
+        # look for each source ID for this dat across all the DATs
+        for source_id in lookup_hash_dict:
+            for dat, hash_dict in platform_dat_dict['hashes'].items():
+                # skip cases where the source and dest is same group
+                if dat_group == platform_dat_dict['dat_group'][dat]:
+                    continue
+                if source_id in hash_dict:
+                    pop_list.append(source_id)
+
+        for to_delete in pop_list:
+            if to_delete in lookup_hash_dict:
+                lookup_hash_dict.pop(to_delete)
+                dupe_count += 1
+    print(f'removed {dupe_count} duplicate DAT entries')
+                
+
+
+
+def get_dat_group(datfile):
+    url = get_dat_header_info(datfile,'url').lower()    
+    if 'tosec' in url:
+        return 'TOSEC'
+    elif 'redump' in url:
+        return 'redump'
+    elif 'no-intro' in url:
+        return 'no-intro'
     else:
-        dat_dict['dat_group'].update({datfile : 'other'})
+        return 'other'
 
 
 def build_dat_dict_xml(datfile,dat_dict):
@@ -430,7 +533,12 @@ def build_dat_dict_xml(datfile,dat_dict):
 
 
 
-def create_dat_hash_dict(raw_dat_dict,crc_hashlookup):
+def create_dat_hash_dict(raw_dat_dict):
+    '''
+    takes the raw dat xml converted to a dict and parses each entry to build 
+    lookup keys based on concatenating rom sha1s and creating a new sha1
+    same is done for crc for old rom sources which don't use sha1
+    '''
     keyresult = {}
     nameresult = {}
     for game in raw_dat_dict['game']:
@@ -447,28 +555,31 @@ def create_dat_hash_dict(raw_dat_dict,crc_hashlookup):
         sha1_digest = sha1.hexdigest()
         if sha1_digest in keyresult:
             print('duplicate dat entry for '+name)
-        keyresult[sha1_digest] = {
+        # will add filecount later not calculated in the softlist processing yet
+        #keyresult[(sha1_digest,'sha1',files)] = {
+        keyresult[(sha1_digest,'sha1')] = {
             'name': name,
             'files': files,
             'size': size,
             'file_list': file_list
         }
-        # enabled if sources in softlist didn't always use sha1 hashes
-        if crc_hashlookup:
-            crc_sha1 = hashlib.sha1()
-            for rom in game['rom']:
-                if not rom['@name'].lower().endswith(('.cue', '.gdi')):
-                    crc_sha1.update(rom['@crc'].encode('utf-8'))
-            crc_sha1_digest = crc_sha1.hexdigest()
-            if crc_sha1_digest in keyresult:
-                print('duplicate dat entry for '+name)
-                print('overwriting '+keyresult[crc_sha1_digest]['name'])
-            keyresult[crc_sha1_digest] = {
-                'name': name,
-                'files': files,
-                'size': size,
-                'file_list': file_list
-            }
+        # repeat for crc for old rom sources
+        crc_sha1 = hashlib.sha1()
+        for rom in game['rom']:
+            if not rom['@name'].lower().endswith(('.cue', '.gdi')):
+                crc_sha1.update(rom['@crc'].encode('utf-8'))
+        crc_sha1_digest = crc_sha1.hexdigest()
+        if crc_sha1_digest in keyresult:
+            print('duplicate dat entry for '+name)
+            print('overwriting '+keyresult[crc_sha1_digest]['name'])
+        # will add filecount later not calculated in the softlist processing yet
+        #keyresult[(crc_sha1_digest,'crc',files)] = {
+        keyresult[(crc_sha1_digest,'crc')] = {
+            'name': name,
+            'files': files,
+            'size': size,
+            'file_list': file_list
+        }
         # enables name to hash lookups based on softlist descriptions/redump serials
         nameresult[name] = {
             'sha1_digest' : sha1_digest
