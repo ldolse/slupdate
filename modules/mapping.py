@@ -8,7 +8,6 @@ import inquirer
 
 
 redump_site_dict = restore_dict('redump_site_dict')
-redump_site_dict.pop('segacd')
 
 redump__platform_paths = { 'jaguar':'ajcd',
                        'cdtv':'cdtv',
@@ -339,7 +338,7 @@ def name_serial_map(platform, softlst_platform,dat_platform):
     for soft_title, soft in softlst_platform.items():
         # skip titles where a source is identified
         redump_info = {}
-        if 'sourcedat' in soft:
+        if 'source_dat' in soft:
             pass
         elif 'serial' in soft:
             try:
@@ -356,7 +355,7 @@ def name_serial_map(platform, softlst_platform,dat_platform):
                         if rtitle in dat_platform['redump_unmatched'][dat]:
                             print('Got a DAT match for '+soft['description']+' and '+rtitle)
                             
-            
+
 def soft_redump_match(redump_title,softlist_title):
     # convert the description to comply with nointro/redump
     nointrofix = tweak_nointro_dat(softlist_title)
@@ -463,6 +462,21 @@ def parse_games_table(games_dict, soup):
                 games_dict[serial][dat_title] = game_entry
     return games_dict
 
+def get_missing_zips(soft_platform_dict,dat_platform_dict):
+    for soft, soft_data in soft_platform_dict.items():
+        if 'source_found' in soft_data and soft_data['source_found']:
+            for disc, disc_data in soft_data['parts'].items():
+                if 'source_rom' not in disc_data:
+                    if 'source_sha' and 'source_dat' in disc_data:
+                        try:
+                            dat_title = dat_platform_dict['hashes'][disc_data['source_dat']][disc_data['source_sha']]['name']
+                            print(dat_title)
+                        except:
+                            print('    key error')
+                            print('    Title '+soft+': '+soft_data['description'])
+                            print('    source_sha: '+str(disc_data['source_sha']))
+                else:
+                    continue
 
 
 def update_title(soft):

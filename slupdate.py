@@ -21,9 +21,10 @@ except:
 # bit of a hack to pass the script dir to the chd module
 builtins.script_dir = script_dir
 
-from modules.utils import save_data,restore_dict
-from modules.dat import get_dat_name,update_softlist_chd_sha1s
-from modules.chd import find_softlist_zips,create_chd_from_zip,chdman_info,is_greater_than_0_176
+from modules.utils import save_data,restore_dict,convert_xml
+from modules.dat import *
+from modules.chd import *
+from modules.mapping import *
 
 
 
@@ -39,6 +40,7 @@ user_answers = restore_dict('user_answers')
 
 
 softlist_dict = {}
+
 dat_dict = {}
 
 # disabled by default, allows the script to populate chd sha1s on subsequent runs
@@ -52,11 +54,11 @@ mapping_stage = { 'source_map' : [],
                   'manual_map' : []
                   }
 
-consoles = {  #'Atari Jaguar' : 'jaguar',
-                'Amiga CDTV' : 'cdtv',
+consoles = {    'Amiga CDTV' : 'cdtv',
                 'Amiga CD32' : 'cd32',
                'FM Towns CD' : 'fmtowns_cd',
           'IBM PC/AT CD-ROM' : 'ibm5170_cdrom',
+       'NEC PC-9801 CD-ROMs' : 'pc98_cd',
  'PC Engine / TurboGrafx CD' : 'pcecd',
               'Philips CD-i' : 'cdi',
             'Pippin CD-ROMs' : 'pippin',
@@ -73,6 +75,7 @@ consoles = {  #'Atari Jaguar' : 'jaguar',
 # key for the menu correlates to the key for the menu's item list
 menu_msgs = {'0' : 'Main Menu, select an option',
              'map' : 'These functions will process software lists and dat files, mapping source files to build chds',
+             'map-2' : 'Next step after auto-mapping',
              '2' : 'Choose a console to build CHD\'s for current match list',
              '3' : 'Choose an assisted mapping task to identify other sources for softlist entries',
              'new' : 'This function will look for DAT entries which don\'t appear in software lists and assist with creating Software List records, continue?',
@@ -104,6 +107,11 @@ menu_lists = {'0' : [('1. Mapping Functions', 'map'),
                       #('c. Remap entries with TOSEC sources to Redump','tosec_map_function'),
                       #('d. Map entries with no source reference to Redump','no_src_map_function'),
                       ('e. Back', '0')],
+             'map-2' : [('a. List missing DAT entries','list_missing_function'),
+                        ('b. Build CHDs','chd_build_function'),
+                      #('c. Remap entries with TOSEC sources to Redump','tosec_map_function'),
+                      #('d. Map entries with no source reference to Redump','no_src_map_function'),
+                      ('e. Back', '0')],
              '2' : [('a. Console List','chd_build_function'),
                     ('b. Back', '0')],
              '3' : [('Map entries with no source information to Redump sources','no_src_map_function'),
@@ -118,6 +126,10 @@ menu_lists = {'0' : [('1. Mapping Functions', 'map'),
                       ('Remove DATs','del_dats_function'),
                       ('Back', '5')],
     }
+ 
+def list_missing_function(platform):
+    get_missing_zips(softlist_dict[platform],dat_dict[platform])
+    return '0'
 
 def first_run():
     print('Please Configure the MAME Softlist hash directory location.\n')
@@ -133,19 +145,29 @@ def first_run():
     chd_dir_function()
 
 def main_menu(exit):
+    '''
+    return a list answer value from any function called by this menu to get back to the 
+    chosen message / list based on the menu_msgs and menu_lists dicts
+    '''
     global settings
-    dir_types = ('dat','rom','map')
+    # any menus that have functions which should send the current platform are added here
+    send_platform = ('dat','rom','map','map-2')
     menu_sel = '0'
     while not exit:
+        print('\n')
         answer = list_menu(menu_sel,menu_lists[menu_sel],menu_msgs[menu_sel])
-        if any(file in answer.values() for file in dir_types):
+        if any(file in answer.values() for file in send_platform):
             platform = platform_select(answer[menu_sel])
 
         if answer[menu_sel].endswith('function'):
-            if any(f in answer for f in dir_types):     
-                globals()[answer[menu_sel]](platform['platforms'])
-                # return to the previous menu after completing the function
-                menu_sel = list(answer)[0]
+            if any(f in answer for f in send_platform):     
+                next_step = globals()[answer[menu_sel]](platform['platforms'])
+                if next_step:
+                    # next menu chosen based on return value from the function
+                    menu_sel = next_step
+                else:
+                    # return to the previous menu after completing the function
+                    menu_sel = list(answer)[0]
             else:
                 globals()[answer[menu_sel]]()
                 # return to the previous menu after completing the function
@@ -178,16 +200,9 @@ def find_dat_matches(platform,sl_platform_dict,dathash_platform_dict):
     matches source hash fingerprints to the dat fingerprint dicts
     updates the softlist dict to point to the dat for that source
     '''
-    from modules.chd import find_rom_zips
-    title_dat_matches = 0
-    disc_matches = 0
-    dat_matches = 0
-    zips = 0
-    # use a list instead of a counter as multiple dats are looped through
-    chd_count = []
     for datfile, dathashdict in dathash_platform_dict['hashes'].items():
+        dat_group = get_dat_group(datfile)
         for sl_title, sl_data in sl_platform_dict.items():
-            sl_title_match = False
             dat_name_list = []
             chds_exist = False
             for disc, disc_data in sl_data['parts'].items():
@@ -197,38 +212,62 @@ def find_dat_matches(platform,sl_platform_dict,dathash_platform_dict):
                     chd_path = settings['chd']+os.sep+platform+os.sep+sl_title+os.sep+disc_data['chd_filename']+'.chd'
                     if os.path.isfile(chd_path):
                         # add chd path to a list, check for unique files later
-                        chd_count.append(chd_path)
+                        disc_data.update({'chd_found':True})
                         chds_exist = True
-                if 'source_sha' in disc_data and disc_data['source_sha'] in dathashdict:
+                # get source hash key based on crc or sha
+                if 'source_sha' in disc_data:
                     sourcehash = disc_data['source_sha']
-                    disc_matches += 1
-                    sl_title_match = True
+                else:
+                    continue
+                if sourcehash in dathashdict:
+                    # add the dat source to the entry
+                    disc_data['source_dat'] = datfile
+                    # add the dat group to the entry
+                    disc_data['source_group'] = dat_group
                     dat_name_list.append(dathashdict[sourcehash]['name'])
-                elif 'source_crc_sha' in disc_data and disc_data['source_crc_sha'] in dathashdict:
-                    sourcehash = disc_data['source_crc_sha']
-                    disc_matches += 1
-                    sl_title_match = True
-                    dat_name_list.append(dathashdict[sourcehash]['name'])
-            if sl_title_match and 'sourcedat' not in sl_title:
-                title_dat_matches += 1
-            if sl_title_match: 
-                sl_platform_dict[sl_title].update({'sourcedat':datfile})
-                if dathashdict[sourcehash]['name'] in dathash_platform_dict['redump_unmatched'][datfile]:
-                    dathash_platform_dict['redump_unmatched'][datfile].pop(dathashdict[sourcehash]['name'])
-            # check to see if there is a valid zip for this rom
+                    if 'softlist_matches' not in dathashdict[sourcehash]:
+                        dathashdict[sourcehash]['softlist_matches'] = []
+                    dathashdict[sourcehash]['softlist_matches'].append(sl_title)
+
+                    # set boolean flag at the softlist level to flag a match
+                    sl_platform_dict[sl_title].update({'source_found':True})
+
+                    # pop this from the redump list to enable future mapping of remaining entries to redump
+                    if dathashdict[sourcehash]['name'] in dathash_platform_dict['redump_unmatched'][datfile]:
+                        dathash_platform_dict['redump_unmatched'][datfile].pop(dathashdict[sourcehash]['name'])
+            # check to see if there are valid zips for this softlist entry, creates 'source_rom' key(s) if so
             zip_name = find_rom_zips(datfile,sl_data,dathashdict,settings[platform])
             if zip_name:
                 dat_zips = dict(zip(dat_name_list,zip_name))
                 print('\nMatch Found:\n  Softlist: '+sl_data['description'])
                 for datname,zipname in dat_zips.items():
                     print('       Dat: '+datname+'\n       Zip: '+zipname)
-                    zips += 1
                     if chds_exist:
                         print('       CHD(s) for this title found')
-    print('found:\n  '+str(title_dat_matches)+' / '+str(len(sl_platform_dict))+' Software List Entries have DAT matches')
-    print('  '+str(disc_matches)+' individual disc matches')
-    print('  '+str(zips)+' valid zip files')
-    print('  '+str(len(set(chd_count)))+' chds already exist in the destination directory')
+    # Count the total number of softlist entries
+    total_softlist_entries = len(sl_platform_dict)
+    # count the total number of entries with source references
+    total_source_ref = sum(1 for softlist_entry in sl_platform_dict.values() for part in softlist_entry['parts'].values() if 'source_sha' in part)
+    # Count the number of entries where 'source_found' is True
+    total_source_found = sum(1 for softlist_entry in sl_platform_dict.values() if softlist_entry['source_found'])
+    # Count the total number of CHDs found
+    chd_count = sum(1 for softlist_entry in sl_platform_dict.values() for part in softlist_entry['parts'].values() if 'chd_found' in part and part['chd_found'])
+    # Count the total number of 'parts' across all entries
+    total_parts = sum(len(softlist_entry['parts']) for softlist_entry in sl_platform_dict.values())
+    # Count the number of parts that have a 'source_dat' entry
+    total_source_dat = sum(1 for softlist_entry in sl_platform_dict.values() for part in softlist_entry['parts'].values() if 'source_dat' in part)
+    # Count the number of parts that have a 'source_rom' entry
+    total_source_rom = len(list(part['source_rom'] for softlist_entry in sl_platform_dict.values() for part in softlist_entry['parts'].values() if 'source_rom' in part))
+
+    print(f'found:\n  {total_source_ref} / {total_parts} individual discs contain source references')
+    print(f'  {total_source_dat} individual discs can be matched to dat sources')
+    print(f'  {total_source_found} / {total_softlist_entries} Software List Entries have DAT matches')
+    print(f'  {total_source_rom} valid zip files')
+    print(f'  {chd_count} chds already exist in the destination directory\n')
+    print('\nDAT Groups:')
+    # get the stats on source groups 
+    source_stats = get_source_stats(sl_platform_dict)
+    print_source_stats(source_stats,total_source_ref)
 
 
 def get_configured_platforms(action_type):
@@ -268,23 +307,27 @@ def entry_create_function(platform):
 
 
 def automap_function(platform):
-    from modules.dat import build_dat_dict, build_sl_dict
-    from modules.utils import convert_xml
-    # process the software list into a dict, creating hash based fingerprints
-    print('processing '+platform+' software list')
-    process_comments = True
-    raw_sl_dict = convert_xml(settings['sl_dir']+os.sep+platform+'.xml',process_comments)
-    softdict = dict(raw_sl_dict['softwarelist'])
-    if platform not in softlist_dict:
-        softlist_dict.update({platform:{}})
-    crc_hashlookup = build_sl_dict(softdict['software'], softlist_dict[platform])
+
     # process each DAT to build a list of fingerprints
     print('processing '+platform+' DAT Files')
     if platform not in dat_dict:
         dat_dict.update({platform:{}})
     for dat in settings[platform]:
         raw_dat_dict = convert_xml(dat)
-        build_dat_dict(dat,raw_dat_dict['datafile'],dat_dict[platform],crc_hashlookup)
+        build_dat_dict(dat,raw_dat_dict['datafile'],dat_dict[platform])
+    # hashes may be identical across DAT groups, prioritise redump hashes and delete dupes in others
+    remove_dupe_dat_entries(dat_dict[platform])
+
+    # process the software list into a dict, creating hash based fingerprints from comments
+    print('processing '+platform+' software list')
+    process_comments = True
+    raw_sl_dict = convert_xml(settings['sl_dir']+os.sep+platform+'.xml',process_comments)
+    softdict = dict(raw_sl_dict['softwarelist'])
+    if platform not in softlist_dict:
+        softlist_dict.update({platform:{}})
+    # build the dict object with relevant softlist data for this script, return bool whether crc source keys are needed
+    build_sl_dict(softdict['software'], softlist_dict[platform])
+
     # iterate through each fingerprint in the software list and search for matching hashes
     find_dat_matches(platform,softlist_dict[platform],dat_dict[platform])
     # flag that this stage is completed for this platform
@@ -299,9 +342,9 @@ def automap_function(platform):
     if name_serial:
         name_serial_automap_function(platform)
     '''
-    build_chds = inquirer.confirm('Begin building CHDs?', default=False)
-    if build_chds:
-        chd_builder(platform) 
+    # map-2 menu prompts the user to build chds or list missing dat entries
+    return 'map-2'
+
 
 
 def name_serial_automap_function(platform):
@@ -314,9 +357,9 @@ def name_serial_automap_function(platform):
 
 def chd_builder(platform):
     '''
-    checks the mapped fingerprints against available ROMs, converts complete ROMs
-    to CHD.  CHD hash is added to the soft-dict.  If a CHD already exists in the
-    build directory then only the hash is checked.
+    checks each soft list entry for a matched source rom and builds chds using those ROM 
+    sources.  CHD hash is added to the soft-dict.  If a CHD already exists in the build 
+    directory it's skipped, but there is a flag to enable grabbing hashes for built CDs.
     '''
     new_hashes = False
     built_sources = {}
@@ -340,9 +383,29 @@ def chd_builder(platform):
                     print('     Source Zip: '+os.path.basename(disc_data['source_rom']))
 
                     if disc_data['source_rom'] not in built_sources:
+                        '''
+                        check the dat group here for any special handling that will be needed
+                        known things to handle:
+                          - Redump and cdi - need to rewrite the cue file (todo)
+                          - No-Intro - Cue file data doesn't match filenames (partial support)
+                        '''
+                        dat_group = get_dat_group(disc_data['source_dat'])
+                        special_logic = {'dat_group':dat_group}
+                        if dat_group == 'no-intro':
+                            game_entry = dat_dict[platform]['hashes'][disc_data['source_dat']][disc_data['source_sha']]
+                            special_logic.update(game_entry)
+                        elif dat_group == 'redump' and platform == 'cdi':
+                            # placeholder
+                            pass
+                        else:
+                            special_logic = None
                         try:
-                            create_chd_from_zip(disc_data['source_rom'],chd_path,settings)
-                            built_sources.update({disc_data['source_rom']:chd_path})
+                            error = create_chd_from_zip(disc_data['source_rom'],chd_path,settings,special_logic)
+                            if not error:
+                                built_sources.update({disc_data['source_rom']:chd_path})
+                            else:
+                                print(error)
+                                continue
                         except:
                             print('CHD Creation Failed')
                             if os.path.isfile(chd_path):
@@ -358,11 +421,13 @@ def chd_builder(platform):
                                 discontinue = True
                                 break
                     # if the exact same chd was built earlier then just symlink to it
+                    # these symlinks aren't cross platform, will revisit this
                     elif disc_data['source_rom'] in built_sources:
                         os.symlink(built_sources[disc_data['source_rom']],chd_path)
                         built_sources.update({disc_data['source_rom']:chd_path})
                 else:
-                    print('chd for '+soft_data['description']+' already exists, skipping')
+                    continue
+                    #print('chd for '+soft_data['description']+' already exists, skipping')
                 # if the chd was created as a part of this run or if the flag to trust existing chds is enabled check the sha1 against the softlist
                 if os.path.isfile(chd_path):
                     if disc_data['source_rom'] in built_sources or get_sha_from_existing_chd:

@@ -7,8 +7,10 @@ import tempfile
 import zipfile
 import logging
 import builtins
+import inquirer
 from distutils.version import LooseVersion
 
+# get the script directory for chdman
 if hasattr(builtins, "script_dir"):
     script_dir = builtins.script_dir
 else:
@@ -46,6 +48,14 @@ def chdman_info(chd=None):
         info = re.findall(r'\d+\.\d+',output[0])[0] # return version
     return info
 
+# no-intro cuesheets don't match filenames, need to update names before passing to chdman
+def parse_cue_sheet(cue_file_path):
+    with open(cue_file_path, 'r') as cue_file:
+        cue_contents = cue_file.read()
+    # Extract FILE entries using regular expressions
+    file_entries = re.findall(r'FILE "(.+?)"', cue_contents)
+    return file_entries
+
 
 def extract_zip_to_tempdir(zip_path):
     with zipfile.ZipFile(zip_path, 'r') as zip_file:
@@ -63,16 +73,16 @@ def extract_zip_to_tempdir(zip_path):
         return temp_file, temp_dir
 
 
-def create_chd_from_zip(zip_path, chd_path, settings):
-    origin_path = os.getcwd()
+def create_chd_from_zip(zip_path, chd_path, settings, special_info=None):
+    original_path = os.getcwd()
     with zipfile.ZipFile(zip_path, 'r') as zip_file:
         toc_file = None
         for file_info in zip_file.infolist():
-            if file_info.filename.endswith('.gdi') or file_info.filename.endswith('.cue'):
+            if file_info.filename.endswith('.gdi') or file_info.filename.endswith('.cue') or file_info.filename.endswith('.iso'):
                 toc_file = file_info.filename
                 break
         if not toc_file:
-            raise ValueError('No .gdi or .cue file found in the zip archive')
+            return 'No gdi, cue or iso file found in the zip archive'
     try:
         with zipfile.ZipFile(zip_path, 'r') as zip_file:
             temp_dir = tempfile.mkdtemp(dir=settings['zip_temp'])
@@ -86,15 +96,47 @@ def create_chd_from_zip(zip_path, chd_path, settings):
                         f.write(zip_file.read(file_info.filename))
 
             os.chdir(temp_dir)
+            
+            # if the final argument is populated then take action
+            if special_info:
+                # dat group will always be here
+                if special_info['dat_group'] == 'no-intro':
+                    manual_fix_check = False
+                    while not manual_fix_check:
+                        if toc_file.endswith('.cue'):
+                            # no-intro non redump files use original cues but changed the actual filenames
+                            cue_file_list = parse_cue_sheet(toc_file)
+                            # only handling renaming a single file at this time
+                            if len(cue_file_list) == 1:
+                                for file in special_info['file_list']:
+                                    if file.endswith('.gdi') or file.endswith('.cue'):
+                                        continue
+                                    else:
+                                        os.rename(file,cue_file_list[0])
+                                manual_fix_check = True
+                            else:
+                                print('DAT & cue file contents don\'t match')
+                                user_fix = inquirer.confirm('Do you want to manually fix the files?' , default=False)
+                                if user_fix:
+                                    print('Navigate to the temp directory configured for this script and ensure the filenames and cue contents match')
+                                    fixed = inquirer.confirm('Confirm Here when completed' , default=False)
+                                    if not fixed:
+                                        return 'no fix, continuing'
+                                    else:
+                                        manual_fix_check = True
+                                else:
+                                    return 'no fix, continuing'
+                        else:
+                            manual_fix_check = True
 
             command = ['chdman', 'createcd', '-i', toc_file, '-o', chd_path]
             subprocess.run(command, check=True, env=env_with_script_dir)
     finally:
-        os.chdir(origin_path)
+        os.chdir(original_path)
         shutil.rmtree(temp_dir)
 
 def convert__bincue_to_chd(chd_file_path: pathlib.Path, output_cue_file_path: pathlib.Path, show_command_output: bool):
-    # Use another temporary directory for the chdman output files to keep those separate from the binmerge output files:
+    # Use temporary directory for the chdman output files to keep those separate from the binmerge output files:
     with tempfile.TemporaryDirectory() as chdman_output_folder_path_name:
         chdman_cue_file_path = pathlib.Path(chdman_output_folder_path_name, output_cue_file_path.name)
 
@@ -105,20 +147,26 @@ def convert__bincue_to_chd(chd_file_path: pathlib.Path, output_cue_file_path: pa
             raise ConversionException("Failed to convert .chd using chdman", chd_file_path, None)
 
 
-def find_rom_zips(dat,soft_entry_data,dathashdict,dat_rom_map):
-    hash_type = 'source_sha'
+def find_rom_zips(dat,soft_entry_data,dathashdict,platform_settings):
     zips = []
+    zip_matches = False
     for disc, disc_info in soft_entry_data['parts'].items():
-        if hash_type not in disc_info:
-            hash_type = 'source_crc_sha'
-        if hash_type in disc_info and disc_info[hash_type] in dathashdict:
-            sha = disc_info[hash_type]
-            dat_game_entry = dathashdict[sha]
-            goodzip = check_valid_zips(dat_game_entry,dat_rom_map[dat])
+        if 'source_sha' in disc_info and disc_info['source_sha'] in dathashdict:
+            dat_game_entry = dathashdict[disc_info['source_sha']]
+            try:
+                # check the entry from the dat against the directory the DAT points to
+                goodzip = check_valid_zips(dat_game_entry,platform_settings[dat])
+            except:
+                print('key error for '+disc+', dat: '+dat)
+                continue
             if goodzip:
+                dat_game_entry.update({'source_rom':goodzip})
                 disc_info.update({'source_rom':goodzip})
                 zips.append(os.path.basename(goodzip))
-    if zips:
+                zip_matches = True
+            else:
+                zips.append('No Valid Zip')
+    if zip_matches:
         return zips
     else:
         return None
@@ -137,13 +185,9 @@ def find_softlist_zips(soft_list, platform_dats,dat_rom_map):
     for soft, softdata in soft_list.items():
         if 'sourcedat' in softdata:
             dat = softdata['sourcedat']
-            hash_type = 'source_sha'
             for disc, disc_info in softdata['parts'].items():
-                if hash_type not in disc_info:
-                    hash_type = 'source_crc_sha'
-                if hash_type in disc_info and disc_info[hash_type] in platform_dats[dat]:
-                    sha = disc_info[hash_type]
-                    game_entry = platform_dats[dat][sha]
+                if 'source_sha' in disc_info and disc_info['source_sha'] in platform_dats[dat]:
+                    game_entry = platform_dats[dat][disc_info['source_sha']]
                     goodzip = check_valid_zips(game_entry,dat_rom_map[dat])
                     if goodzip:
                         disc_info.update({'source_rom':goodzip})
