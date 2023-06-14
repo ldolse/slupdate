@@ -101,6 +101,10 @@ def rom_entries_to_source_ids(soft_title,raw_rom_source_data):
     # some older soft lists put the cue at the end of the list of roms, handle automatically for single discs
     cue_count = sum(1 for rom in raw_rom_source_data if rom['@name'].lower().endswith('.cue') or rom['@name'].endswith('.gdi'))
     iso_count = sum(1 for rom in raw_rom_source_data if rom['@name'].lower().endswith('.iso'))
+    ccd_count = sum(1 for rom in raw_rom_source_data if rom['@name'].lower().endswith('.ccd'))
+    if ccd_count >= 2:
+        print(f'{soft_title} contains multiple clonecd discs, this is not yet supported')
+        return concatenated_hashes, source_type, sizes
     if cue_count == 0 and iso_count == 0:
         print(soft_title+' non-iso source has no cue or gdi toc file in source reference, may not be supported')
     first = True
@@ -113,15 +117,18 @@ def rom_entries_to_source_ids(soft_title,raw_rom_source_data):
         # multi disc sets always append an integer to 'cdrom'
         elif first and cue_count > 1:
             current_disc_number += 1
-        elif first and iso_count > 1:
+        elif first and iso_count > 1 and cue_count != 1:
             current_disc_number += 1
+
         if rom['@name'].lower().endswith(('.cue', '.gdi')):
             toc = True
+
         try:
             rom_size = int(rom['@size'])
         except:
             print('size error for Softlist Entry source ROM: '+soft_title)
             rom_size = 0
+
         if not toc:
             total_size += rom_size
 
@@ -159,7 +166,8 @@ def process_sl_rom_sources(softdict):
         if 'rom' in soft_data:
             concatenated_hashes, source_type, sizes = rom_entries_to_source_ids(soft_title,soft_data['rom'])
             # update the softlist dict with source ids
-            update_sl_rom_source_ids(concatenated_hashes,soft_title,soft_data,source_type,sizes)
+            if concatenated_hashes:
+                update_sl_rom_source_ids(concatenated_hashes,soft_title,soft_data,source_type,sizes)
 
 def comment_to_sl_dict(soft,raw_comment_dict,sl_dict):
     redump_url = r'http://redump\.org/disc/\d{4,6}/?'
@@ -204,14 +212,15 @@ def comment_to_sl_dict(soft,raw_comment_dict,sl_dict):
             # convert commented DAT entries to a dict list
             rom_dict = sl_romhashes_to_dict(rom_entry)
             # concatenate the hashes from the rom dict if it was directly associated with a disc
-            if comment_location.startswith('cdrom'):
+            if rom_dict and comment_location.startswith('cdrom'):
                 concatenated_hashes, source_type, sizes = rom_entries_to_source_ids(soft['@name'],rom_dict['root']['rom'])
                 update_sl_rom_source_ids(concatenated_hashes,soft['@name'],sl_dict[soft['@name']],source_type,sizes,comment_location)
-            # store the raw source info for troubleshooting purposes
-            try:
-                comment_dest.update(rom_dict['root'])
-            except:
-                except_dest_outer.update({comment_location:rom_dict['root']})
+                # store the raw source info for troubleshooting purposes
+            elif rom_dict:
+                try:
+                    comment_dest.update(rom_dict['root'])
+                except:
+                    except_dest_outer.update({comment_location:rom_dict['root']})
 
         if note_entry:
             notedict['note'+str(notenum)] = note_entry
