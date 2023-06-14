@@ -42,14 +42,15 @@ On first run you'll be automatically directed to configure mandatory settings:
 
 ## Known Limitations
 * These are the known limitations, please file a bug if there are other issues that should be flagged and/or appropriately handled
-* Most Software Lists contain no direct source references, the following softlists include data which can be parsed:
+* Many Software Lists contain no direct source references, the following softlists include data which can be parsed:
   - Philips CDi
   - Amiga CDTV
   - Dreamcast
   - PSX
   - SegaCD/MegaCD
 * Only Software Lists which contain source ROM information in source comments that are nested 'inside' the software list entry are parsed at this point
-* Only ROMs using cue and gdi TOC files are supported at this time
+* clonecd is not supported
+* multi-disk sets using different types of dumps may not be parsed
 * Redump sources for Philips CDI are not yet supported
 * This does not yet monitor the Chdman output for warnings which would indicate an invalid CHD, this will be added later.  Please use caution and review the logs for warnings.
 
