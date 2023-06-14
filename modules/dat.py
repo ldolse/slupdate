@@ -25,8 +25,9 @@ def print_source_stats(source_stats,total_source_ref):
         known_sum += group_count
         percentage = (group_count / total_source_ref) * 100
         print(f"  {group}: {percentage:.1f}%")
-    other_percent = ((total_source_ref - known_sum) / total_source_ref) * 100
-    print(f"  Uknown: {other_percent:.1f}%")
+    if total_source_ref >= 1:
+        other_percent = ((total_source_ref - known_sum) / total_source_ref) * 100
+        print(f"  Uknown: {other_percent:.1f}%")
 
 def get_sl_descriptions(softlist,dat_type,field):
     '''
@@ -189,7 +190,7 @@ def comment_to_sl_dict(soft,raw_comment_dict,sl_dict):
             comment_dest = sl_dict[soft['@name']]
             except_dest_outer = sl_dict
             except_dest_inner = soft['@name']
-        else:
+        elif comment_location.startswith('cdrom'):
             comment_dest = sl_dict[soft['@name']]['parts'][comment_location]
             except_dest_outer = sl_dict[soft['@name']]['parts'][comment_location]
             except_dest_inner = comment_location
