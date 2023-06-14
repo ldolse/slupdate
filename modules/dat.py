@@ -27,7 +27,7 @@ def print_source_stats(source_stats,total_source_ref):
         print(f"  {group}: {percentage:.1f}%")
     if total_source_ref >= 1:
         other_percent = ((total_source_ref - known_sum) / total_source_ref) * 100
-        print(f"  Uknown: {other_percent:.1f}%")
+        print(f"  Unknown: {other_percent:.1f}%")
 
 def get_sl_descriptions(softlist,dat_type,field):
     '''
