@@ -9,6 +9,9 @@ Softlist processing functions
 '''
 
 def get_source_stats(sl_platform_dict):
+    '''
+    builds a dict with the total number of dumps which can be attributed to each source group
+    '''
     from collections import defaultdict
     group_counts = defaultdict(int)
 
@@ -20,6 +23,9 @@ def get_source_stats(sl_platform_dict):
     return dict(group_counts)
 
 def print_source_stats(source_stats,total_source_ref):
+    '''
+    prints the dict returned by get_source_stats as percentages
+    '''
     known_sum = 0
     for group, group_count in source_stats.items():
         known_sum += group_count
@@ -48,8 +54,8 @@ def sl_romhashes_to_dict(comment):
         commentdict = xmltodict.parse(fixed_comment)
         return commentdict
     except:
-        print(comment)
         print('\033[0;31mfailed to parse romhash comment\033[00m')
+        print(comment)
         return None
 
 def update_sl_rom_source_ids(concatenated_hashes,soft_title,soft_data,source_type,sizes,known_disc=''):
