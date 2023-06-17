@@ -38,10 +38,15 @@ assert sys.version_info >= (3, 2)
 settings = restore_dict('settings')
 user_answers = restore_dict('user_answers')
 
+try:
+    softlist_dict
+except:
+    softlist_dict = {}
 
-softlist_dict = {}
-
-dat_dict = {}
+try:
+    dat_dict
+except:
+    dat_dict = {}
 
 # disabled by default, allows the script to populate chd sha1s on subsequent runs
 # only enable if CHD destination folder ONLY contains chds created by this script
@@ -74,8 +79,9 @@ consoles = {    'Amiga CDTV' : 'cdtv',
         }
 # key for the menu correlates to the key for the menu's item list
 menu_msgs = {'0' : 'Main Menu, select an option',
-             'map' : 'These functions will process software lists and dat files, mapping source files to build chds',
-             'map-2' : 'Next step after auto-mapping',
+             'map' : 'Process software lists and dat files, mapping source files to build chds',
+             'map-2' : 'Next steps after auto-mapping',
+             'map-3' : 'Assisted Mapping Functions',
              '2' : 'Choose a console to build CHD\'s for current match list',
              '3' : 'Choose an assisted mapping task to identify other sources for softlist entries',
              'new' : 'This function will look for DAT entries which don\'t appear in software lists and assist with creating Software List records, continue?',
@@ -97,21 +103,26 @@ menu_msgs = {'0' : 'Main Menu, select an option',
 # This allows completed functions to go back to their parent menu automatically
 menu_lists = {'0' : [('1. Mapping Functions', 'map'),
                      ('2. CHD Builder', '2'),
-                     #('3. Assisted Title/Disc Mapping', '3'),
+                     ('3. Assisted Title/Disc Mapping', '3'),
                      #('4. Create New Entries','entry_create_function'),
                      ('5. Settings','5'),
-                     #('6. Save Session','save_function'),
+                     ('6. Save Session','save_function'),
                      ('7. Exit', 'Exit')],
              'map' : [('a. Automatically map based on source rom info','automap_function'),
-                      #('b. Map Based on Disc Serial & Name','name_serial_automap_function'),
-                      #('c. Remap entries with TOSEC sources to Redump','tosec_map_function'),
-                      #('d. Map entries with no source reference to Redump','no_src_map_function'),
-                      ('e. Back', '0')],
+                      ('b. Map Stage 2','map-2'),             
+                      ('c. Change Platform','change_platform'),
+                      ('d. Back', '0')],
              'map-2' : [('a. List missing DAT entries','list_missing_function'),
-                        ('b. Build CHDs','chd_build_function'),
-                      #('c. Remap entries with TOSEC sources to Redump','tosec_map_function'),
-                      #('d. Map entries with no source reference to Redump','no_src_map_function'),
-                      ('e. Back', '0')],
+                        ('b. Remap TOSEC sources to Redump','tosec_map_function'),
+                        ('b. List TOSEC sources','tosec_list_function'),
+                        ('c. Remap bad dumps to Redump','hash_map_function'),
+                        ('d. Build CHDs','chd_build_function'),
+                        ('e. Map Stage 3','map-3'),
+                        ('f. Back', 'map')],
+             'map-3' : [('a. Remap bad dumps to Redump','hash_map_function'),
+                        ('b. Re-Map Based on Disc Serial & Name','name_serial_automap_function'),
+                        ('c. Build CHDs','chd_build_function'),
+                        ('d. Back', 'map-2')],
              '2' : [('a. Console List','chd_build_function'),
                     ('b. Back', '0')],
              '3' : [('Map entries with no source information to Redump sources','no_src_map_function'),
@@ -129,7 +140,7 @@ menu_lists = {'0' : [('1. Mapping Functions', 'map'),
  
 def list_missing_function(platform):
     get_missing_zips(softlist_dict[platform],dat_dict[platform])
-    return '0'
+    return 'map'
 
 def first_run():
     print('Please Configure the MAME Softlist hash directory location.\n')
@@ -151,14 +162,19 @@ def main_menu(exit):
     '''
     global settings
     # any menus that have functions which should send the current platform are added here
-    send_platform = ('dat','rom','map','map-2')
+    send_platform = ('dat','rom','map','map-2','map-3')
     menu_sel = '0'
+    platform = ''
     while not exit:
         print('\n')
         answer = list_menu(menu_sel,menu_lists[menu_sel],menu_msgs[menu_sel])
         if any(file in answer.values() for file in send_platform):
+            if not platform:
+                platform = platform_select(answer[menu_sel])
+        elif answer.values() == 'change_platform':
             platform = platform_select(answer[menu_sel])
 
+        # if the answer ends with function then run that function passing the platform as an arg
         if answer[menu_sel].endswith('function'):
             if any(f in answer for f in send_platform):     
                 next_step = globals()[answer[menu_sel]](platform['platforms'])
@@ -293,10 +309,31 @@ def platform_select(list_type):
 
 # placeholder functions
 def no_src_map_function(platform):
-    print('no source mapping placeholder')
+    map_no_source_entries(softlist_dict[platform],dat_dict[platform])
+    return 'map'
+
 
 def tosec_map_function(platform):
-    print('tosec to redump placeholder')
+    redump_tuples = {}
+    if platform in softlist_dict:
+        '''
+        iterate through the dats and build a redump hash dict for mapping to TOSEC
+        this technique can have variations across consoles and may not work for all platforms
+        it takes advantage of the fact that for some types of consoles both groups ripping methods 
+        produce identical hashes for specific tracks/track types
+        '''
+        for dat, group in dat_dict[platform]['dat_group'].items():
+            if group == 'redump':
+                redump_tuples.update(build_redump_tosec_tuples(dat_dict[platform]['hashes'][dat],platform))
+
+        if redump_tuples:
+            tosec_matches = map_tosec_entries(softlist_dict[platform],dat_dict[platform],redump_tuples)
+            if tosec_matches:
+                # update softlist sources based on tosec/redump matches
+                update_rom_source_refs(settings['sl_dir']+os.sep+platform+'.xml', tosec_matches)
+    else:
+        print(f'No {platform} mapping, please run the auto-mapping function first')
+    return 'map'
     # flag that this stage is completed for this platform
     #if platform not in mapping_stage['tosec_remap']:
     #    mapping_stage['tosec_remap'].append(platform)
@@ -305,16 +342,14 @@ def entry_create_function(platform):
     print('new entry placeholder')
     proceed = inquirer.confirm(menu_msgs['new'], default=False)
 
-
-def automap_function(platform):
-
-    # process each DAT to build a list of fingerprints
+def setup_platform_dicts(platform):
+        # process each DAT to build a list of fingerprints
     print('processing '+platform+' DAT Files')
     if platform not in dat_dict:
         dat_dict.update({platform:{}})
+    dat_platform_dict = dat_dict[platform]
     for dat in settings[platform]:
-        raw_dat_dict = convert_xml(dat)
-        build_dat_dict(dat,raw_dat_dict['datafile'],dat_dict[platform])
+        build_dat_dict(dat,dat_platform_dict)
     # hashes may be identical across DAT groups, prioritise redump hashes and delete dupes in others
     remove_dupe_dat_entries(dat_dict[platform])
 
@@ -327,6 +362,10 @@ def automap_function(platform):
         softlist_dict.update({platform:{}})
     # build the dict object with relevant softlist data for this script, return bool whether crc source keys are needed
     build_sl_dict(softdict['software'], softlist_dict[platform])
+    
+
+def automap_function(platform):
+    setup_platform_dicts(platform)
 
     # iterate through each fingerprint in the software list and search for matching hashes
     find_dat_matches(platform,softlist_dict[platform],dat_dict[platform])
@@ -499,6 +538,16 @@ def del_dats_function(platform):
         print(dat_path)
         settings[platform].pop(dat_path)
 
+def tosec_list_function(platform):
+    print('\n\n  TOSEC Titles for this platform:')
+    for soft_entry in softlist_dict[platform].values():
+        tosec = False
+        for part in soft_entry['parts'].values():
+            if 'source_group' in part and part['source_group'] == 'TOSEC':
+                tosec = True
+        if tosec:
+            print(f"    {soft_entry['description']}")
+    print('\n\n')
 
 def slist_dir_function():
     single_dir_function('sl_dir','MAME Software List')

@@ -28,6 +28,85 @@ redump__platform_paths = { 'jaguar':'ajcd',
                      '3do_m2':'3do'
                     }
 
+def map_no_source_entries(sl_platform_dict,dat_platform_dict):
+    for soft, soft_data in sl_platform_dict.items():
+        if not soft_data['source_parsed']:
+            print(soft_data['description'])
+
+def build_redump_tosec_tuples(dat_hash_dict,platform):
+    supported_platforms = ['dc']
+    redump_tosec_tuples = {}
+    if platform not in supported_platforms:
+        return redump_tosec_tuples
+    else:
+        for source_id, source_info in dat_hash_dict.items():
+            entry_tuple = get_tosec_tuples(source_info['file_list'])
+            if entry_tuple:
+                redump_tosec_tuples[entry_tuple] = source_id
+        return redump_tosec_tuples
+
+
+def get_tosec_tuples(rom_entry):
+    '''
+    dreamcast - track 1 and track 3 share the same hashes for both groups
+    '''
+    track_hashes = []
+    for filename, crc_hash in rom_entry.items():
+        if filename.endswith('(Track 1).bin') or filename.endswith('track01.bin'):
+            track_hashes.append(crc_hash)
+        elif filename.endswith('(Track 3).bin') or filename.endswith('track03.bin'):
+            track_hashes.append(crc_hash)
+    if len(track_hashes) == 2:
+        return tuple(track_hashes)
+    else:
+        return None
+
+def map_tosec_entries(sl_platform_dict,dat_platform_dict,redump_tuples):
+    '''
+    for some platforms redump and tosec are identical for some or all tracks
+    cdi - all tracks are identical in most cases
+    '''
+    tosec_matches = {}
+    partial_matches = []
+    for soft, soft_data in sl_platform_dict.items():
+        match_tuples = []
+        if soft_data['source_found']:
+            tosec = False
+            for part, part_data in soft_data['parts'].items():
+                if 'source_group' in part_data and part_data['source_group'] == 'TOSEC':
+                    tosec = True
+                    # build the tuple
+                    tosec_tuple = get_tosec_tuples(dat_platform_dict['hashes'][part_data['source_dat']][part_data['source_sha']]['file_list'])
+                    tosec_title = dat_platform_dict['hashes'][part_data['source_dat']][part_data['source_sha']]['name']
+                    # if there is a match then get the redump hashes
+                    if tosec_tuple in redump_tuples:
+                        redump_lookup = redump_tuples[tosec_tuple]
+                        for dat, group in dat_platform_dict['dat_group'].items():
+                            if group == 'redump':
+                                if redump_lookup in dat_platform_dict['hashes'][dat]:
+                                    match_key = (soft,part)
+                                    match_tuples.append(match_key)
+                                    redump_title = dat_platform_dict['hashes'][dat][redump_lookup]['name']
+                                    # add the hashes to the matches dict
+                                    tosec_matches[match_key] = { 'raw_romlist':dat_platform_dict['hashes'][dat][redump_lookup]['raw_romlist'],
+                                                                   'tosec_title':tosec_title,
+                                                                   'redump_title':redump_title,
+                                                                   'soft_description':soft_data['description']
+                                                                 }
+        if match_tuples and len(match_tuples) != len(soft_data['parts'].items()):
+            print(f'match tuples:{len(match_tuples)}  Soft data parts: {len(soft_data["parts"].items())}')
+            partial_matches.append(soft_data['description'])
+    if partial_matches:
+        print('\n\n The number of discs with new hashes does not equal the number of discs in these software list')
+        print(' items. Source hashes will be deleted from the original comment, the missing hash will need to')
+        print(' be manually added back')
+        print('\n Titles:')
+        for description in partial_matches:
+            print(f'    {description}')
+        print('\n\n')
+    return tosec_matches
+
+
 def requests_retry_session(
     retries=4,
     backoff_factor=0.3,
@@ -271,7 +350,7 @@ def update_nonmatch(answers, san_redumplst):
                     if answer[soft] != 'No Match':
                         print('title has already been selected')
                     try:
-                        answer = update_title(soft)
+                        answer = update_description(soft)
                         if answer[soft] not in answers.values():
                             answers.update(answer)
                         else:
@@ -280,7 +359,7 @@ def update_nonmatch(answers, san_redumplst):
                         continue
                 elif answer[soft] == 'No Match':
                     try:
-                        answer = update_title(soft)
+                        answer = update_description(soft)
                         if answer[soft] not in answers.values():
                             answers.update(answer)
                         else:
@@ -302,7 +381,7 @@ def update_nonmatch(answers, san_redumplst):
                             sl_dict.update({soft:redumpurl})        
             else:
                 try:
-                    answer = update_title(soft)
+                    answer = update_description(soft)
                     answers.update(answer)
                 except:
                     continue
@@ -479,10 +558,9 @@ def get_missing_zips(soft_platform_dict,dat_platform_dict):
                     continue
 
 
-def update_title(soft):
+def update_description(soft):
     print('Original Title is: '+soft)
     question = [inquirer.Text(soft, message="    New Title")]
     answer = inquirer.prompt(question)
     return answer
 
- 

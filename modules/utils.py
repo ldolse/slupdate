@@ -5,6 +5,7 @@ import os
 import re
 import pickle
 import pprint
+import sys
 
 def save_data(data_to_save,name,directory):
     with open(directory+os.sep+name+'.cache', 'wb') as f:

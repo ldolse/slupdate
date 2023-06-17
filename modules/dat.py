@@ -45,6 +45,7 @@ def get_sl_descriptions(softlist,dat_type,field):
         sl.append(item[field])
     return sl
 
+
 def sl_romhashes_to_dict(comment):
     xmlheader = '<?xml version="1.0" ?><root>'
     xmlclose = '</root>'
@@ -84,6 +85,7 @@ def update_sl_rom_source_ids(concatenated_hashes,soft_title,soft_data,source_typ
         try:
             soft_data['parts'][disc_ref]['source_sha'] = (sha1,source_type)
             soft_data['parts'][disc_ref]['bin_size'] = sizes[disc_number]
+            soft_data['source_parsed'] = True
         except:
             print(f'\nkey error for {disc_ref}, in entry \''+soft_title+'\'. The softlist entry may not use the correct disc numbering convention,')
             print('or the source references don\'t use the toc file as a delimiter.  Single disc sets use \'cdrom\' for the first')
@@ -174,6 +176,7 @@ def process_sl_rom_sources(softdict):
             # update the softlist dict with source ids
             if concatenated_hashes:
                 update_sl_rom_source_ids(concatenated_hashes,soft_title,soft_data,source_type,sizes)
+                
 
 def comment_to_sl_dict(soft,raw_comment_dict,sl_dict):
     redump_url = r'http://redump\.org/disc/\d{4,6}/?'
@@ -221,7 +224,8 @@ def comment_to_sl_dict(soft,raw_comment_dict,sl_dict):
             if rom_dict and comment_location.startswith('cdrom'):
                 concatenated_hashes, source_type, sizes = rom_entries_to_source_ids(soft['@name'],rom_dict['root']['rom'])
                 update_sl_rom_source_ids(concatenated_hashes,soft['@name'],sl_dict[soft['@name']],source_type,sizes,comment_location)
-                # store the raw source info for troubleshooting purposes
+
+             # store the raw source info for troubleshooting purposes
             elif rom_dict:
                 try:
                     comment_dest.update(rom_dict['root'])
@@ -262,6 +266,7 @@ def build_sl_dict(softlist, sl_dict):
         soft_entry = {
             'description' : soft_description,
             'source_found' : False,
+            'source_parsed': False
         }
         # process info tags
         if 'info' in soft:
@@ -334,6 +339,22 @@ def get_lxml_replacements(softlist_xml_file):
         lxml_changes[new_key] = entity_str
     return lxml_changes
 
+
+def write_softlist_output(tree,softlist_xml_file,tags_with_whitespace):
+    # Write the updated XML to disk while preserving the original comments
+    output = etree.tostring(
+        tree,
+        pretty_print=True,
+        xml_declaration=True,
+        encoding="UTF-8",
+        doctype='<!DOCTYPE softwarelist SYSTEM "softwarelist.dtd">'
+    ).decode("UTF-8")
+    # put back the whitespace lxml deleted
+    for old_string, new_string in tags_with_whitespace.items():
+        output = output.replace(old_string, new_string)
+    with open(softlist_xml_file, "w",encoding='utf-8') as f:
+        f.write(output)
+
 def update_softlist_chd_sha1s(softlist_xml_file, soft_dict):
     # build a dictionary for whitespace in tags that lxml will delete
     tags_with_whitespace = get_lxml_replacements(softlist_xml_file)
@@ -364,19 +385,8 @@ def update_softlist_chd_sha1s(softlist_xml_file, soft_dict):
                     disk.set('sha1', soft_entry_parts[part.get('name')]['new_sha1'])
         else:
             continue
-    # Write the updated XML to disk while preserving the original comments
-    output = etree.tostring(
-        tree,
-        pretty_print=True,
-        xml_declaration=True,
-        encoding="UTF-8",
-        doctype='<!DOCTYPE softwarelist SYSTEM "softwarelist.dtd">'
-    ).decode("UTF-8")
-    # put back the whitespace lxml deleted
-    for old_string, new_string in tags_with_whitespace.items():
-        output = output.replace(old_string, new_string)
-    with open(softlist_xml_file, "w",encoding='utf-8') as f:
-        f.write(output)
+    write_softlist_output(tree,softlist_xml_file,tags_with_whitespace)
+
 
 
 def get_sl_entry(search_list, title, type):
@@ -392,11 +402,14 @@ def get_sl_entry(search_list, title, type):
         print('unsupported title type')
     return res
 
+
 def update_sl_descriptions(softlist_xml_file, answerdict):
     '''
     writes updated descriptions to the softlist
     no longer used but can be extended/repurposed later
     '''
+    # build a dictionary for whitespace in tags that lxml will delete
+    tags_with_whitespace = get_lxml_replacements(softlist_xml_file)
     # Parse the XML file using lxml
     parser = etree.XMLParser(remove_blank_text=False,strip_cdata=False)
     tree = etree.parse(softlist_xml_file, parser)
@@ -416,24 +429,16 @@ def update_sl_descriptions(softlist_xml_file, answerdict):
                 print('new description: '+new_desc+' failed')
                 print(e)
                 continue
+    write_softlist_output(tree,softlist_xml_file,tags_with_whitespace)
 
-    # Write the updated XML to disk while preserving the original comments
-    output = etree.tostring(
-        tree,
-        pretty_print=True,
-        xml_declaration=True,
-        encoding="UTF-8",
-        doctype='<!DOCTYPE softwarelist SYSTEM "softwarelist.dtd">'
-    ).decode("UTF-8")
-
-    with open(softlist_xml_file, "w",encoding='utf-8') as f:
-        f.write(output)
 
 def add_redump_names_to_slist(softlist_xml_file, answerdict,redump_name_list):
     '''
     writes redump name tags to slist entry just before the 'part' tag
     no longer used but can be extended/repurposed later
     '''
+    # build a dictionary for whitespace in tags that lxml will delete
+    tags_with_whitespace = get_lxml_replacements(softlist_xml_file)
     # Parse the XML file using lxml
     parser = etree.XMLParser(remove_blank_text=False,strip_cdata=False)
     tree = etree.parse(softlist_xml_file, parser)
@@ -457,31 +462,88 @@ def add_redump_names_to_slist(softlist_xml_file, answerdict,redump_name_list):
                 # Find the index of the part tag
                 part_index = software.index(software.xpath('part')[0])
                 software.insert(part_index, new_tag)
-
-    # Write the updated XML to disk while preserving the original comments
-    output = etree.tostring(
-        tree,
-        pretty_print=True,
-        xml_declaration=True,
-        encoding="UTF-8",
-        doctype='<!DOCTYPE softwarelist SYSTEM "softwarelist.dtd">'
-    ).decode("UTF-8")
-
-    with open(softlist_xml_file, "w",encoding='utf-8') as f:
-        f.write(output)
+    write_softlist_output(tree,softlist_xml_file,tags_with_whitespace)
 
 
+def update_rom_source_refs(softlist_xml_file, new_sources_map):
+    # build a dictionary for whitespace in tags that lxml will delete
+    tags_with_whitespace = get_lxml_replacements(softlist_xml_file)
+    # Parse the XML file using lxml
+    parser = etree.XMLParser(remove_blank_text=False, strip_cdata=False)
+    tree = etree.parse(softlist_xml_file, parser)
+    root = tree.getroot()
+    for disc_key, replace_data in new_sources_map.items():
+        print(f'updating {disc_key[0]}, {replace_data["soft_description"]}')
+        print(f'         TOSEC Title: {replace_data["tosec_title"]}')
+        print(f'  Redump Replacement: {replace_data["redump_title"]}')
+        modify_rom_source_refs(root,disc_key[0],replace_data['raw_romlist'],disc_key[1])
+    write_softlist_output(tree,softlist_xml_file,tags_with_whitespace)
 
+
+def modify_rom_source_refs(xml_root, software_name, rom_strings, disc):
+    software_nodes = xml_root.xpath(f'//software[@name="{software_name}"]')
+
+    for software_node in software_nodes:
+        comment_nodes = software_node.xpath('comment()')
+
+        if comment_nodes:
+            comment_node = comment_nodes[0]
+            comment_text = comment_node.text.strip()  # Extract comment content as a string
+            rewritten_comment = ''
+        else:
+            comment_node = None
+            comment_text = ''
+            rewritten_comment = '\t\t'
+
+        new_part_comment = ''
+
+        # remove rom entries from the rewritten comment
+        for line in comment_text.splitlines():
+            if line.strip().startswith('<rom'):
+                continue
+            rewritten_comment += '\t\t' + line + '\n'
+
+        # if the disc is cdrom then add the new rom entries to the rewritten comment  
+        if disc == 'cdrom':
+            for rom_string in rom_strings:
+                rewritten_comment += '\t\t' + rom_string.strip() + '\n'
+
+        elif disc != 'cdrom':
+            # write the entries to a new comment to go to the disc part
+            for rom_string in rom_strings:
+                new_part_comment += '\t\t\t' + rom_string.strip() + '\n'
+
+            # Find the part node with the matching 'name' attribute
+            part_node = software_node.xpath(f'part[@name="{disc}"]')[0]
+            # Create a new comment with the rom entries
+            new_comment = etree.Comment('\n\t\t\t' + new_part_comment.strip() + '\n\t\t\t')
+            new_comment.tail = '\n\t\t\t'  # Add newline and indentation to the tail
+            part_node.insert(0, new_comment)
+        
+        if rewritten_comment.strip():
+            rewritten_comment = etree.Comment('\n\t\t' + rewritten_comment.strip() + '\n\t\t')
+            rewritten_comment.tail = '\n\t\t'
+        else:
+            rewritten_comment = None
+
+        if comment_node is not None and rewritten_comment is not None:
+            software_node.replace(comment_node, rewritten_comment)
+        elif rewritten_comment is not None:
+            software_node.insert(0, rewritten_comment)
+        elif comment_node is not None and rewritten_comment is None:
+            software_node.remove(comment_node)
 
 '''
 dat processing functions
 '''
-def build_dat_dict(datfile,raw_dat_dict,dat_dict):
+def build_dat_dict(datfile,dat_dict):
     '''
     grabs data from dat structure puts it into a new dict
     raw_dat_dict is the raw dat source xml converted to a dict
     dat_dict is the dict object which will store all the lookup tables with dat info for this platform
     '''
+    tree = ET.parse(datfile)
+    root = tree.getroot()
     if 'dat_group' not in dat_dict:
         dat_dict.update({'dat_group':{}})
     if 'redump_unmatched' not in dat_dict:
@@ -490,13 +552,15 @@ def build_dat_dict(datfile,raw_dat_dict,dat_dict):
         dat_dict.update({'hashes':{}})
     if 'duplicates' not in dat_dict:
         dat_dict.update({'duplicates':{}})
-    try:
-        keyresult, nameresult = create_dat_hash_dict(raw_dat_dict)
+    if tree:
+        # get two dicts, one using hashes as keys, the other using names to look up keys
+        dat_group = get_dat_group(datfile)
+        keyresult, nameresult = create_dat_hash_dict_xml(root,dat_group)
         dat_dict['hashes'].update({datfile : keyresult})
         dat_dict['redump_unmatched'].update({datfile : nameresult})
-        dat_dict['dat_group'].update({datfile : get_dat_group(datfile)})
-    except:
-        print('unexpected error processing '+datfile)
+        dat_dict['dat_group'].update({datfile : dat_group})
+    #except:
+    #    print('unexpected error processing '+datfile)
 
 
 def remove_dupe_dat_entries(platform_dat_dict):
@@ -524,7 +588,10 @@ def remove_dupe_dat_entries(platform_dat_dict):
                 dupe_count += 1
     print(f'removed {dupe_count} duplicate DAT entries')
                 
-
+def get_raw_rom_entry(dat_entry):
+    rom_elements = dat_entry.findall('rom')
+    rom_strings = [ET.tostring(rom, encoding='unicode').strip() for rom in rom_elements]
+    return rom_strings
 
 
 def get_dat_group(datfile):
@@ -577,7 +644,8 @@ def create_dat_hash_dict(raw_dat_dict):
             'name': name,
             'files': files,
             'size': size,
-            'file_list': file_list
+            'file_list': file_list,
+            'raw_romlist': raw_romlist
         }
         # repeat for crc for old rom sources
         crc_sha1 = hashlib.sha1()
@@ -588,7 +656,7 @@ def create_dat_hash_dict(raw_dat_dict):
         if crc_sha1_digest in keyresult:
             print('duplicate dat entry for '+name)
             print('overwriting '+keyresult[crc_sha1_digest]['name'])
-        # will add filecount later not calculated in the softlist processing yet
+        # may add filecount to tuple later not calculated in the softlist processing
         #keyresult[(crc_sha1_digest,'crc',files)] = {
         keyresult[(crc_sha1_digest,'crc')] = {
             'name': name,
@@ -603,26 +671,51 @@ def create_dat_hash_dict(raw_dat_dict):
     return keyresult, nameresult
 
 
-def create_dat_hash_dict_xml(datroot):
+def create_dat_hash_dict_xml(datroot,dat_group):
     '''
     same as create_dat_hash_dict but uses xml the whole time
     '''
-    result = {}
+    keyresult = {}
+    nameresult = {}
     for game in datroot.findall('game'):
+        file_list = {}
+        raw_romlist = []
+        size = 0
         name = game.get('name')
+        if dat_group == 'redump':
+            raw_romlist = get_raw_rom_entry(game)
         files = len(game.findall('rom'))
-        size = sum(int(rom.get('size')) for rom in game.findall('rom'))
         sha1 = hashlib.sha1()
         for rom in game.findall('rom'):
+            file_list.update({rom.get('name'):rom.get('crc')})
             if not rom.get('name').lower().endswith(('.cue', '.gdi')):
                 sha1.update(rom.get('sha1').encode('utf-8'))
+                size = size + int(rom.get('size'))
         sha1_digest = sha1.hexdigest()
-        result[sha1_digest] = {
+        keyresult[(sha1_digest,'sha1')] = {
             'name': name,
             'files': files,
             'size': size,
+            'file_list': file_list,
+            'raw_romlist':raw_romlist
         }
-    return result
+        # repeat hash calculation for crc for old rom sources
+        crc_sha1 = hashlib.sha1()
+        for rom in game.findall('rom'):
+            if not rom.get('name').lower().endswith(('.cue', '.gdi')):
+                crc_sha1.update(rom.get('sha1').encode('utf-8'))
+        crc_sha1_digest = crc_sha1.hexdigest()
+        keyresult[(crc_sha1_digest,'crc')] = {
+            'name': name,
+            'files': files,
+            'size': size,
+            'file_list': file_list,
+            'raw_romlist':raw_romlist
+        }
+        nameresult[game.get('name')] = {
+            'sha1_digest' : sha1_digest
+        }
+    return keyresult, nameresult
     
 def shift_sibling_comments(xml_file):
     import lxml.etree, lxml.html
