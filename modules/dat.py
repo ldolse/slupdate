@@ -255,7 +255,14 @@ def process_comments(soft, sl_dict):
         return None
     else:
         comment_to_sl_dict(soft,raw_comment_dict,sl_dict)
-        
+
+def sanitize_serials(raw_serial):
+    serials = []
+    raw_serial = re.sub(r'\([^\)]+\)','',raw_serial)
+    for serial in raw_serial.replace(',',' ').split():
+        serials.append(serial.strip())
+    return serials
+
 def build_sl_dict(softlist, sl_dict):
     '''
     grabs useful sofltist data and inserts into a simpler dict object
@@ -272,7 +279,8 @@ def build_sl_dict(softlist, sl_dict):
         if 'info' in soft:
             for tag in soft['info']:
                 if tag['@name'] == 'serial':
-                    soft_entry.update({'serial':tag['@value']})
+                    soft_entry.update({'rawserial':tag['@value']})
+                    soft_entry['serial'] = sanitize_serials(soft_entry['rawserial'])
                 if tag['@name'] == 'release':
                     soft_entry.update({'release':tag['@value']})
         sl_dict.update({soft_id:soft_entry})
@@ -466,6 +474,15 @@ def add_redump_names_to_slist(softlist_xml_file, answerdict,redump_name_list):
 
 
 def update_rom_source_refs(softlist_xml_file, new_sources_map):
+    '''
+    new_sources_map is a dict with the following structure:
+    (soft_title, part) = {  'raw_romlist':dat_platform_dict['hashes'][dat][redump_lookup]['raw_romlist'],
+                            'orig_title':orig_title,
+                            'redump_title':redump_title,
+                            'redump_lookup':redump_lookup,
+                            'source_dat':dat,
+                            'soft_description':soft_description}
+    '''
     # build a dictionary for whitespace in tags that lxml will delete
     tags_with_whitespace = get_lxml_replacements(softlist_xml_file)
     # Parse the XML file using lxml
@@ -474,7 +491,7 @@ def update_rom_source_refs(softlist_xml_file, new_sources_map):
     root = tree.getroot()
     for disc_key, replace_data in new_sources_map.items():
         print(f'updating {disc_key[0]}, {replace_data["soft_description"]}')
-        print(f'         TOSEC Title: {replace_data["tosec_title"]}')
+        print(f'      Original Title: {replace_data["orig_title"]}')
         print(f'  Redump Replacement: {replace_data["redump_title"]}')
         modify_rom_source_refs(root,disc_key[0],replace_data['raw_romlist'],disc_key[1])
     write_softlist_output(tree,softlist_xml_file,tags_with_whitespace)
@@ -546,8 +563,8 @@ def build_dat_dict(datfile,dat_dict):
     root = tree.getroot()
     if 'dat_group' not in dat_dict:
         dat_dict.update({'dat_group':{}})
-    if 'redump_unmatched' not in dat_dict:
-        dat_dict.update({'redump_unmatched':{}})
+    if 'unmatched' not in dat_dict:
+        dat_dict.update({'unmatched':{}})
     if 'hashes' not in dat_dict:
         dat_dict.update({'hashes':{}})
     if 'duplicates' not in dat_dict:
@@ -557,10 +574,8 @@ def build_dat_dict(datfile,dat_dict):
         dat_group = get_dat_group(datfile)
         keyresult, nameresult = create_dat_hash_dict_xml(root,dat_group)
         dat_dict['hashes'].update({datfile : keyresult})
-        dat_dict['redump_unmatched'].update({datfile : nameresult})
         dat_dict['dat_group'].update({datfile : dat_group})
-    #except:
-    #    print('unexpected error processing '+datfile)
+        dat_dict['unmatched'].update({datfile : nameresult})
 
 
 def remove_dupe_dat_entries(platform_dat_dict):

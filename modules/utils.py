@@ -48,6 +48,8 @@ def history(search=None):
         else:
             print (readline.get_history_item(i + 1))
 
-def write_data(data):
-    with open('output.txt','w') as output:
+def write_data(data,filename='output.txt'):
+    if not filename.endswith('.txt'):
+        filename = filename+'.txt'
+    with open(filename,'w') as output:
         output.write(pprint.pformat(data,width=400))

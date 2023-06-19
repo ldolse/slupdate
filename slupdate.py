@@ -10,11 +10,12 @@ import re
 import sys
 import inquirer
 import builtins
+from importlib import reload
 
 try:
     # get the script location directory to ensure settings are saved and update environment var
     script_dir = os.path.abspath(os.path.dirname(__file__))
-except:
+except NameError:
     # set it to current working dir for this scenario, which is most likely when running from interpreter
     script_dir =  os.getcwd()
 
@@ -25,7 +26,6 @@ from modules.utils import save_data,restore_dict,convert_xml
 from modules.dat import *
 from modules.chd import *
 from modules.mapping import *
-
 
 
 
@@ -40,12 +40,12 @@ user_answers = restore_dict('user_answers')
 
 try:
     softlist_dict
-except:
+except NameError:
     softlist_dict = {}
 
 try:
     dat_dict
-except:
+except NameError:
     dat_dict = {}
 
 # disabled by default, allows the script to populate chd sha1s on subsequent runs
@@ -54,7 +54,8 @@ get_sha_from_existing_chd = False
 
 
 mapping_stage = { 'source_map' : [],
-             'name_serial_map' : [],
+        'name_serial_auto_map' : [],
+ 'name_serial_interactive_map' : [],
                  'tosec_remap' : [],
                   'manual_map' : []
                   }
@@ -97,7 +98,8 @@ menu_msgs = {'0' : 'Main Menu, select an option',
              '5b' : 'Select a console to configure ',
              '5c' : 'Select a DAT to remove',
              'dir_d' : 'Select a Directory to Remove',
-             'romvault' : 'Are you using ROMVault to manage DATs and ROMs?'
+             'romvault' : 'Are you using ROMVault to manage DATs and ROMs?',
+             'tosec_commit' : 'Proceed to rewrite the Softlist XML file'
     }
 # unless a list entry maps to a function it should always map to another menu in the tree
 # This allows completed functions to go back to their parent menu automatically
@@ -115,6 +117,7 @@ menu_lists = {'0' : [('1. Mapping Functions', 'map'),
              'map-2' : [('a. List missing DAT entries','list_missing_function'),
                         ('b. Remap TOSEC sources to Redump','tosec_map_function'),
                         ('b. List TOSEC sources','tosec_list_function'),
+                        ('b. List unknown sources','unknown_list_function'),
                         ('c. Remap bad dumps to Redump','hash_map_function'),
                         ('d. Build CHDs','chd_build_function'),
                         ('e. Map Stage 3','map-3'),
@@ -241,16 +244,15 @@ def find_dat_matches(platform,sl_platform_dict,dathash_platform_dict):
                     # add the dat group to the entry
                     disc_data['source_group'] = dat_group
                     dat_name_list.append(dathashdict[sourcehash]['name'])
+                    
+                    # add the matching entries from the softlist to the dat dict for reference
                     if 'softlist_matches' not in dathashdict[sourcehash]:
                         dathashdict[sourcehash]['softlist_matches'] = []
                     dathashdict[sourcehash]['softlist_matches'].append(sl_title)
 
-                    # set boolean flag at the softlist level to flag a match
+                    # set boolean flag at the softlist level to flag a match occurred
                     sl_platform_dict[sl_title].update({'source_found':True})
 
-                    # pop this from the redump list to enable future mapping of remaining entries to redump
-                    if dathashdict[sourcehash]['name'] in dathash_platform_dict['redump_unmatched'][datfile]:
-                        dathash_platform_dict['redump_unmatched'][datfile].pop(dathashdict[sourcehash]['name'])
             # check to see if there are valid zips for this softlist entry, creates 'source_rom' key(s) if so
             zip_name = find_rom_zips(datfile,sl_data,dathashdict,settings[platform])
             if zip_name:
@@ -260,6 +262,18 @@ def find_dat_matches(platform,sl_platform_dict,dathash_platform_dict):
                     print('       Dat: '+datname+'\n       Zip: '+zipname)
                     if chds_exist:
                         print('       CHD(s) for this title found')
+    # final iteration through the softlist to identify the matched titles and remove them from the unmatched dict
+    dat_matched_list = {}
+    for sl_title, sl_data in sl_platform_dict.items():
+        for disc_data in sl_data['parts'].values():
+            if 'source_dat' in disc_data:
+                datfile = disc_data['source_dat']
+                source_sha = disc_data['source_sha']
+                dat_entry_name = dathash_platform_dict['hashes'][datfile][source_sha]['name']
+                if dat_entry_name in dathash_platform_dict['unmatched'][datfile]:
+                    dat_matched_list.update({dat_entry_name:dathash_platform_dict['unmatched'][datfile].pop(dat_entry_name)})
+                else:
+                    print(f'{dat_entry_name} not found in to be matched titles, possible duplicate entry')
     # Count the total number of softlist entries
     total_softlist_entries = len(sl_platform_dict)
     # count the total number of entries with source references
@@ -284,6 +298,11 @@ def find_dat_matches(platform,sl_platform_dict,dathash_platform_dict):
     # get the stats on source groups 
     source_stats = get_source_stats(sl_platform_dict)
     print_source_stats(source_stats,total_source_ref)
+    print('\n\nMatched DAT Entry Titles:')
+    for softtitle in dat_matched_list.keys():
+        print(f'   {softtitle}')
+    print('\n')
+    
 
 
 def get_configured_platforms(action_type):
@@ -327,16 +346,29 @@ def tosec_map_function(platform):
                 redump_tuples.update(build_redump_tosec_tuples(dat_dict[platform]['hashes'][dat],platform))
 
         if redump_tuples:
-            tosec_matches = map_tosec_entries(softlist_dict[platform],dat_dict[platform],redump_tuples)
+            tosec_matches, redump_pop_list = map_tosec_entries(softlist_dict[platform],dat_dict[platform],redump_tuples)
             if tosec_matches:
-                # update softlist sources based on tosec/redump matches
-                update_rom_source_refs(settings['sl_dir']+os.sep+platform+'.xml', tosec_matches)
+                print('\nTOSEC to Redump matches have been found, note the entries listed above are multi-disc entries where there are')
+                print('both redump and tosec matches the next step will rewrite the softlist xml to update for redump sources.')
+                print('However for these mixed titles the tosec sources references will be deleted. please take note and manually restore these lines.\n')
+                proceed = inquirer.confirm(menu_msgs['tosec_commit'], default=False)
+                if proceed:
+                    # update softlist sources based on tosec/redump matches
+                    update_rom_source_refs(settings['sl_dir']+os.sep+platform+'.xml', tosec_matches)
+                    update_soft_dict(softlist_dict[platform],tosec_matches)
+                    for redump_title in redump_pop_list:
+                        for dat in dat_dict[platform]['unmatched'].keys():
+                            if redump_title in dat_dict[platform]['unmatched'][dat]:
+                                dat_dict[platform]['unmatched'][dat].pop(redump_title)
+                else:
+                    print('Not committing changes, return to menu\n')
     else:
         print(f'No {platform} mapping, please run the auto-mapping function first')
-    return 'map'
     # flag that this stage is completed for this platform
-    #if platform not in mapping_stage['tosec_remap']:
-    #    mapping_stage['tosec_remap'].append(platform)
+    if platform not in mapping_stage['tosec_remap']:
+        mapping_stage['tosec_remap'].append(platform)
+    return 'map'
+
 
 def entry_create_function(platform):
     print('new entry placeholder')
@@ -366,32 +398,55 @@ def setup_platform_dicts(platform):
 
 def automap_function(platform):
     setup_platform_dicts(platform)
-
+    print('\nplatform dicts completed\n')
+    debug = inquirer.confirm('Write Debug Data?', default=False)
+    if debug:
+        from modules.utils import write_data
+        write_data(softlist_dict,'soft_dict_initial')
+        write_data(dat_dict,'dat_dict_initial')
     # iterate through each fingerprint in the software list and search for matching hashes
     find_dat_matches(platform,softlist_dict[platform],dat_dict[platform])
+    if debug:
+        write_data(softlist_dict,'soft_dict_stage1')
+        write_data(dat_dict,'dat_dict_stage1')
     # flag that this stage is completed for this platform
     if platform not in mapping_stage['source_map']:
         mapping_stage['source_map'].append(platform)
-    '''
-    print('Next step will be to map entries based on name and disc serial number')
-    print('This will require connecting to redump once for each platform to get additional info')
-    print('If you want to proceed just based on the hash matches already found then this')
-    print('step can be skipped')
-    name_serial = inquirer.confirm('Begin Serial/Name Mapping?', default=False)
-    if name_serial:
-        name_serial_automap_function(platform)
-    '''
-    # map-2 menu prompts the user to build chds or list missing dat entries
-    return 'map-2'
+    print('Subsequent mapping stages will use more heuristics to identify or remap ROM sources for titles')
+    print('TOSEC to Redump looks at individual hashes which are consistent across dumping groups for some platforms')
+    print('Detecting Redump bad dumps looks for hash changes where only one or two track hashes have been updated')
+    print('Changes should be reviewed closely for these stages')
+    print('These steps can be skipped')
+    map_stage_increment = inquirer.confirm('Begin Next Mapping Stage?', default=False)
+    if map_stage_increment:
+        return 'map-2' # go to the second mapping stage menu
+    else:
+        return '0'
 
 
 
 def name_serial_automap_function(platform):
-    from modules.mapping import name_serial_map
-    name_serial_map(platform, softlist_dict[platform],dat_dict[platform])
+    from modules.mapping import name_serial_auto_map
+    name_serial_matches, redump_pop_list, redump_interactive_matches = name_serial_auto_map(platform, softlist_dict[platform],dat_dict[platform],script_dir)
+    if name_serial_matches:
+        print('\nThe above Name / Serial matches have been found, do you want to commit the new hashes the softlist?')
+        proceed = inquirer.confirm(menu_msgs['tosec_commit'], default=False)
+        if proceed:
+            # update softlist sources based on tosec/redump matches
+            update_rom_source_refs(settings['sl_dir']+os.sep+platform+'.xml', name_serial_matches)
+            update_soft_dict(softlist_dict[platform],name_serial_matches)
+            for redump_title in redump_pop_list:
+                for dat in dat_dict[platform]['unmatched'].keys():
+                    if redump_title in dat_dict[platform]['unmatched'][dat]:
+                        dat_dict[platform]['unmatched'][dat].pop(redump_title)
+        else:
+            print('Not committing changes, return to menu\n')
+    else:
+        print(f'\nNo {platform} name and serial matches found.\n')
     # flag that this stage is completed for this platform
-    if platform not in mapping_stage['name_serial_map']:
-        mapping_stage['name_serial_map'].append(platform)
+    if platform not in mapping_stage['name_serial_auto_map']:
+        mapping_stage['name_serial_auto_map'].append(platform)
+    return 'map-3'
         
 
 def chd_builder(platform):
@@ -537,17 +592,28 @@ def del_dats_function(platform):
         dat_path = settings['datroot']+answer['dat']
         print(dat_path)
         settings[platform].pop(dat_path)
-
-def tosec_list_function(platform):
-    print('\n\n  TOSEC Titles for this platform:')
+        
+def list_soft_entries(platform,group=''):
+    type = 'Unmatched/Unknown'
+    if group:
+        type = group
+    print(f'\n\n  {type} Sources for this platform:')
     for soft_entry in softlist_dict[platform].values():
-        tosec = False
+        matched_title = False
         for part in soft_entry['parts'].values():
-            if 'source_group' in part and part['source_group'] == 'TOSEC':
-                tosec = True
-        if tosec:
+            if 'source_group' in part and part['source_group'] == group:
+                matched_title = True
+            if group == '' and 'source_dat' not in part:
+                matched_title = True
+        if matched_title:
             print(f"    {soft_entry['description']}")
     print('\n\n')
+
+def unknown_list_function(platform):
+    list_soft_entries(platform)
+
+def tosec_list_function(platform):
+    list_soft_entries(platform,'TOSEC')
 
 def slist_dir_function():
     single_dir_function('sl_dir','MAME Software List')
