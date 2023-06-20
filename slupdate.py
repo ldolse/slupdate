@@ -22,7 +22,7 @@ except NameError:
 # bit of a hack to pass the script dir to the chd module
 builtins.script_dir = script_dir
 
-from modules.utils import save_data,restore_dict,convert_xml
+from modules.utils import save_data,restore_dict,convert_xml,list_menu
 from modules.dat import *
 from modules.chd import *
 from modules.mapping import *
@@ -114,17 +114,17 @@ menu_lists = {'0' : [('1. Mapping Functions', 'map'),
                       ('b. Map Stage 2','map-2'),             
                       ('c. Change Platform','change_platform'),
                       ('d. Back', '0')],
-             'map-2' : [('a. List missing DAT entries','list_missing_function'),
+             'map-2' : [('a. List missing matched ROM Files','list_missing_function'),
                         ('b. Remap TOSEC sources to Redump','tosec_map_function'),
-                        ('b. List TOSEC sources','tosec_list_function'),
-                        ('b. List unknown sources','unknown_list_function'),
-                        ('c. Remap bad dumps to Redump','hash_map_function'),
-                        ('d. Build CHDs','chd_build_function'),
-                        ('e. Map Stage 3','map-3'),
-                        ('f. Back', 'map')],
+                        ('c. Automated Redump re-map based on disc serial & name','name_serial_automap_function'),
+                        ('d. Remap bad dumps to Redump','hash_map_function'),
+                        ('e. List TOSEC sources','tosec_list_function'),
+                        ('f. List unknown sources','unknown_list_function'),
+                        ('g. Build CHDs','chd_build_function'),
+                        ('h. Map Stage 3','map-3'),
+                        ('i. Back', 'map')],
              'map-3' : [('a. Remap bad dumps to Redump','hash_map_function'),
-                        ('b. Re-Map Based on Disc Serial & Name','name_serial_automap_function'),
-                        ('c. Build CHDs','chd_build_function'),
+                        ('b. Interactive Name/Serial Mapping','name_serial_manual_map_function'),             
                         ('d. Back', 'map-2')],
              '2' : [('a. Console List','chd_build_function'),
                     ('b. Back', '0')],
@@ -201,17 +201,6 @@ def main_menu(exit):
             return exit
         else:
             menu_sel = answer[menu_sel]
-
-
-def list_menu(key, options, prompt):
-    optconfirm = [
-        inquirer.List(key,
-                      message = prompt,
-                      choices = options,
-                      carousel = True),
-                    ]
-    answer = inquirer.prompt(optconfirm)
-    return answer
 
 
 def find_dat_matches(platform,sl_platform_dict,dathash_platform_dict):
@@ -439,10 +428,11 @@ def name_serial_automap_function(platform):
                 for dat in dat_dict[platform]['unmatched'].keys():
                     if redump_title in dat_dict[platform]['unmatched'][dat]:
                         dat_dict[platform]['unmatched'][dat].pop(redump_title)
-        else:
-            print('Not committing changes, return to menu\n')
+    if redump_interactive_matches:
+        print('Some matches require user review\n')
+        name_serial_auto_map_steptwo(redump_interactive_matches,softlist_dict[platform],dat_dict[platform])
     else:
-        print(f'\nNo {platform} name and serial matches found.\n')
+        print('No matches to commit, return to menu\n')
     # flag that this stage is completed for this platform
     if platform not in mapping_stage['name_serial_auto_map']:
         mapping_stage['name_serial_auto_map'].append(platform)
@@ -739,12 +729,15 @@ def select_directory(filetype=None,start_dir=None):
     else:
         current_path = start_dir
     while not selected:
-        questions = [
-            inquirer.List(filetype,
-                          message = "Select a directory - current: ["+current_path+"]",
-                          choices = get_os_dirs(current_path))
-            ]
-        answers = inquirer.prompt(questions)
+        message = message = "Select a directory - current: ["+current_path+"]"
+        choices = get_os_dirs(current_path)
+        answers = list_menu(filetype,choices,message)
+        #questions = [
+        #    inquirer.List(filetype,
+        #                  message = "Select a directory - current: ["+current_path+"]",
+        #                  choices = get_os_dirs(current_path))
+        #    ]
+        #answers = inquirer.prompt(questions)
         if answers[filetype] == 'Select the current directory':
             selected = True
             os.chdir(origin_path)

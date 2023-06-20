@@ -5,7 +5,7 @@ from  lxml import etree, html
 
 
 '''
-Softlist processing functions
+XML processing functions for dat and softlist files
 '''
 
 def get_source_stats(sl_platform_dict):

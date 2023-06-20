@@ -3,8 +3,9 @@ import requests
 from bs4 import BeautifulSoup
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
-from modules.utils import save_data, restore_dict
+from modules.utils import save_data, restore_dict,list_menu
 import inquirer
+from difflib import get_close_matches
 
 
 redump_site_dict = restore_dict('redump_site_dict')
@@ -223,27 +224,33 @@ def select_close_redump(soft_platform_dict,platform_dat_dict,redump_tuple_list):
     for soft_key, matches in redump_tuple_list.items():
         matchlist = get_close_matches(soft_platform_dict[soft_key[0]], redump_possible.keys(),n=5)
 
-def select_from_redump(soft_description, soft_nointro_fmt, san_redumplst):
-    matchlist = get_close_matches(soft_description, san_redumplst,n=5)
+
+def select_from_redump(search_title, match_list,soft_nointro_fmt=''):
+    matchlist = get_close_matches(search_title, match_list,n=5)
+    proto_beta = proto_beta_check(search_title,matchlist)
     if len(matchlist) > 0:
-        closematch = next((s for s in matchlist if soft_nointro_fmt.lower() in s.lower()), None)
-        if not check_rd_shorthand(soft_description,matchlist):
-            if closematch:
-                # try to bring the two formats together and see if there is a match
-                softlist_fmt = redump_to_softlist_fmt(closematch)
-                if soft_nointro_fmt.lower() == softlist_fmt.lower():
-                    return {soft_description:closematch}, True
-            print('\n   Mame Title: '+soft_nointro_fmt)
-            # append other menu choices to the match list
-            matchlist.append('No Match')
-            matchlist.append('Stop')
-            # ask the user to choose from the choices
-            answer = list_menu(soft_description, matchlist, '  Matches')
-            return answer, False
-        else:
-            return {soft_description:'No Match'}, True
+        if soft_nointro_fmt and proto_beta:
+            # most of these are not in DATs, skip for now
+            return {search_title:'No Match'}, True            
+        elif soft_nointro_fmt:
+            # softlist sources titles need extra checks and can sometimes be automatically matched
+            closematch = next((s for s in matchlist if soft_nointro_fmt.lower() in s.lower()), None)
+            if not proto_beta_check(search_title,matchlist):
+                if closematch:
+                    # try to bring the two formats together and see if there is a match
+                    softlist_fmt = redump_to_softlist_fmt(closematch)
+                    if soft_nointro_fmt.lower() == softlist_fmt.lower():
+                        return {search_title:closematch}, True
+
+        # append other menu choices to the match list
+        matchlist.append('No Match')
+        matchlist.append('Stop')
+        # ask the user to choose from the choices
+        answer = list_menu(search_title, matchlist, '  Matches')
+        return answer, False
     else:
-        return {soft_description:'No Match'}, True
+        return {search_title:'No Match'}, True
+
         
 def tweak_nointro_dat(stitle, languages=[], region=''):
     '''
@@ -334,7 +341,8 @@ def compare_sl_with_redump(sllist,san_redumplst,sl_dict,answers={}):
             if rurl and online:
                 rdict = get_redump_title_info(rurl)
                 print_redump_info(rdict)
-            answer, auto = select_from_redump(soft_description, soft_nointro_fmt, san_redumplst)
+            print('\n   Mame Title: '+soft_description)
+            answer, auto = select_from_redump(soft_description, san_redumplst, soft_nointro_fmt)
             if answer[soft_description] == 'Stop':
                 break
             elif answer[soft_description] == 'No Match':
@@ -360,9 +368,9 @@ def compare_sl_with_redump(sllist,san_redumplst,sl_dict,answers={}):
     return answers
 
 
-def check_rd_shorthand(soft_description,matchlist):
+def proto_beta_check(soft_description,matchlist):
     '''
-    todo - handle taikenban / demo matching
+    possible todo - handle taikenban / demo matching
     '''
     shorthand = ['proto','beta','sample']
     for short in shorthand:
@@ -390,7 +398,7 @@ def update_nonmatch(answers, san_redumplst):
                     rdict = get_redump_title_info(rurl)
                     print_redump_info(rdict)
                 soft_nointro_fmt = tweak_nointro_dat(soft_description)
-                answer, auto = select_from_redump(soft_description, soft_nointro_fmt, san_redumplst)
+                answer, auto = select_from_redump(soft_description, san_redumplst, soft_nointro_fmt)
                 if answer[soft_description] == 'Stop':
                     break
                 elif answer[soft_description] in answers.values():
@@ -482,6 +490,51 @@ def nameserial_lookup_dict(redump_platform_dict,version='lookup_dict'):
             second_level_dict[second_level_key] = data
 
     return lookup_dict, second_level_dict
+
+def name_serial_auto_map_steptwo(redump_interactive_matches,softlst_platform_dict,dat_platform_dict):
+    '''
+    redump_interactive_matches example:
+      {('flntstns', 'cdrom'): [('The Flintstones - Viva Rock Vegas (Europe) (En,Fr,De,Es,It)', '952-0174-50', 'Sample', '1.002', '/disc/77555/')],
+       ('hydrthnd1', 'cdrom'): [('Hydro Thunder (USA)', 'T-9702N', 'Original', '1.002', '/disc/18073/'), ('Hydro Thunder (USA)', 'T-9702N', 'Original, Sega All Stars', '1.020', '/disc/5712/')],
+       ('incomingj', 'cdrom'): [('Incoming - Jinrui Saishuu Kessen (Japan)', 'T-15001M', 'Original', '2.000', '/disc/40973/')],
+       ('mkgold', 'cdrom'): [('Mortal Kombat Gold (USA)', 'T-9701N', 'Original', '1.001', '/disc/62921/'), ('Mortal Kombat Gold (USA)', 'T-9701N', 'Reprint', '1.006', '/disc/16726/')]},
+
+    '''
+    def print_preface(soft_key,soft_dict):
+        print(f'\nMAME entry: {soft_key[0]}, {soft_dict[soft_key[0]]["description"]}')
+        if 'rawserial' in softlst_platform_dict[soft_key[0]]:
+            print(f'MAME serial: {soft_dict[soft_key[0]]["rawserial"]}')
+ 
+    review_matches = inquirer.confirm(f'There are {len(redump_interactive_matches)} matches to review, continue?', default=False)
+    if not review_matches:
+        return
+    else:
+        print('Starting review ...')
+        # build the list of possible titles from unmatched titles
+        possible_matches = []
+        for match_dat in dat_platform_dict['unmatched'].keys():
+            # skip non redump dats
+            if dat_platform_dict['dat_group'][match_dat] == 'redump':
+                possible_matches = possible_matches+[*dat_platform_dict['unmatched'][match_dat]]
+            else:
+                continue
+        print(possible_matches)
+        for soft_key, match_list in redump_interactive_matches.items():
+            print(f'soft key is {soft_key}, match_list is {match_list}')
+            print(f'searching {match_list[0][0]}')
+            if len(match_list) == 1 and len(get_close_matches(match_list[0][0],possible_matches)) > 0:
+                print_preface(soft_key,softlst_platform_dict)
+                select_from_redump(match_list[0][0], possible_matches)
+            elif len(match_list) > 1:
+                possible_redump = {}
+                for redump_entry in match_list:
+                    possible_redump.update({f'{redump_entry[0]} ({redump_entry[2]}) ({redump_entry[3]}) - Serial:{redump_entry[1]}, http://redump.org{redump_entry[4]}':redump_entry})
+                print_preface(soft_key,softlst_platform_dict)
+                print('Select From Possible Redump Matches (Review of Softlist Comments and Redump URL may be needed)')
+                redump_choice = list_menu('redump',possible_redump,'Select Redump DB Entry to match against dat')
+                select_from_redump(redump_choice['redump'][0][0], possible_matches)
+        
+    
 
 
 def name_serial_auto_map(platform, softlst_platform_dict,dat_platform_dict,script_dir):

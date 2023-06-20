@@ -10,6 +10,10 @@ import builtins
 import inquirer
 from distutils.version import LooseVersion
 
+'''
+functions for working with chds and ROM/Zip files are defined in this module
+'''
+
 # get the script directory for chdman
 if hasattr(builtins, "script_dir"):
     script_dir = builtins.script_dir

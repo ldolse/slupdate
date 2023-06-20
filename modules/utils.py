@@ -6,6 +6,7 @@ import re
 import pickle
 import pprint
 import sys
+import inquirer
 
 def save_data(data_to_save,name,directory):
     with open(directory+os.sep+name+'.cache', 'wb') as f:
@@ -21,6 +22,16 @@ def restore_dict(name):
 
 def slupdate_version():
     return __version__
+    
+def list_menu(key, options, prompt):
+    optconfirm = [
+        inquirer.List(key,
+                      message = prompt,
+                      choices = options,
+                      carousel = True),
+                    ]
+    answer = inquirer.prompt(optconfirm)
+    return answer
 
 
 def get_dat_paths(platform, datpaths, sl_dat_map):
