@@ -8,14 +8,14 @@ from  lxml import etree, html
 XML processing functions for dat and softlist files
 '''
 
-def get_source_stats(sl_platform_dict):
+def get_source_stats(sl_dict):
     '''
     builds a dict with the total number of dumps which can be attributed to each source group
     '''
     from collections import defaultdict
     group_counts = defaultdict(int)
 
-    for soft_entry in sl_platform_dict.values():
+    for soft_entry in sl_dict.values():
         for part in soft_entry['parts'].values():
             if 'source_group' in part:
                 group_counts[part['source_group']] += 1
@@ -162,7 +162,7 @@ def rom_entries_to_source_ids(soft_title,raw_rom_source_data):
     return concatenated_hashes, source_type, sizes
 
 
-def process_sl_rom_sources(softdict):
+def process_sl_rom_sources(sl_dict):
     '''
     iterates through the rom entires in a Software List dict to build fingerprint hashes.
     cue and gdi files are ignored for hashes and size calculations as they can change over
@@ -170,7 +170,7 @@ def process_sl_rom_sources(softdict):
     separators
     '''
     print('Building Source fingerprints from software list')
-    for soft_title, soft_data in softdict.items():
+    for soft_title, soft_data in sl_dict.items():
         if 'rom' in soft_data:
             concatenated_hashes, source_type, sizes = rom_entries_to_source_ids(soft_title,soft_data['rom'])
             # update the softlist dict with source ids
@@ -182,8 +182,8 @@ def comment_to_sl_dict(soft,raw_comment_dict,sl_dict):
     redump_url = r'http://redump\.org/disc/\d{4,6}/?'
     romhash = r'^(\s+)?<rom name'
     trurip = '(Trurip|trurip)'
+    redump_sources = []
     notenum = 1
-    discnum = 1
     for comment_location, comments in raw_comment_dict.items():
         note_entry = ''
         rom_entry = ''
@@ -192,11 +192,9 @@ def comment_to_sl_dict(soft,raw_comment_dict,sl_dict):
         for comment in comments:
             commentlines = comment.split('\n')
             for line in commentlines:
-                redump_sources = re.findall(redump_url,line)
-                if redump_sources:
-                    for url in redump_sources:
-                        sourcedict['disc'+str(discnum)+'source'] = url.strip()
-                        discnum += 1
+                redump_finds = re.findall(redump_url,line)
+                if redump_finds:
+                    redump_sources += redump_finds
                 elif re.match(romhash,line):
                     rom_entry = rom_entry+line.strip()+'\n'
                 else:
@@ -231,7 +229,7 @@ def comment_to_sl_dict(soft,raw_comment_dict,sl_dict):
                     comment_dest.update(rom_dict['root'])
                 except:
                     except_dest_outer.update({comment_location:rom_dict['root']})
-
+        # handle notes
         if note_entry:
             notedict['note'+str(notenum)] = note_entry
             notenum += 1
@@ -239,6 +237,23 @@ def comment_to_sl_dict(soft,raw_comment_dict,sl_dict):
                 comment_dest.update(notedict)
             except:
                 except_dest_outer.update({except_dest_inner:notedict})
+
+        if redump_sources:
+            if len(redump_sources) == 1:
+                if 'cdrom' in sl_dict[soft['@name']]['parts']:
+                    sl_dict[soft['@name']]['parts']['cdrom'].update({'redump_url':redump_sources[0].strip()})
+                else:
+                    print(f'could not find the cdrom disc to insert redump url for {soft["@name"]}')
+            else:
+                discnum = 1
+                for url in redump_sources:
+                    disc = 'cdrom'+str(discnum)
+                    if disc in sl_dict[soft['@name']]['parts']:
+                        sl_dict[soft['@name']]['parts'][disc].update({'redump_url':url.strip()})
+                    else:
+                        print(f'could not find the {disc} to insert redump url for {soft["@name"]}')
+                    discnum += 1
+
 
 def process_comments(soft, sl_dict):
     raw_comment_dict = {}
@@ -490,9 +505,9 @@ def update_rom_source_refs(softlist_xml_file, new_sources_map):
     tree = etree.parse(softlist_xml_file, parser)
     root = tree.getroot()
     for disc_key, replace_data in new_sources_map.items():
-        print(f'updating {disc_key[0]}, {replace_data["soft_description"]}')
-        print(f'      Original Title: {replace_data["orig_title"]}')
-        print(f'  Redump Replacement: {replace_data["redump_title"]}')
+        print(f'\nupdating {disc_key[0]}, {replace_data["soft_description"]}')
+        print(f'  Original Source Title: {replace_data["orig_title"]}')
+        print(f'     Redump Replacement: {replace_data["redump_title"]}')
         modify_rom_source_refs(root,disc_key[0],replace_data['raw_romlist'],disc_key[1])
     write_softlist_output(tree,softlist_xml_file,tags_with_whitespace)
 
