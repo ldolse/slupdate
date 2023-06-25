@@ -212,14 +212,14 @@ def check_valid_zips(dat_entry,rom_folder):
     if os.path.isfile(zip_path):
         with zipfile.ZipFile(zip_path, 'r') as zip_file:
             matches = True
-            for filename, crc in dat_entry['file_list'].items():
+            for filename, file_data in dat_entry['file_list'].items():
                 if not matches:
                     break
                 if filename not in zip_file.namelist():
                     matches = False
                     break
                 zip_info = zip_file.getinfo(filename)
-                if zip_info.CRC != int(crc, 16):
+                if zip_info.CRC != int(file_data['@crc'], 16):
                     matches = False
                     break
             if matches:

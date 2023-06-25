@@ -45,6 +45,32 @@ def get_sl_descriptions(softlist,dat_type,field):
         sl.append(item[field])
     return sl
 
+def xml_to_dict(xml_string):
+    root = etree.fromstring(xml_string)
+
+    file_list = {}
+    for rom in root.findall('rom'):
+        name = rom.get('name')
+        size = rom.get('size')
+        md5 = rom.get('md5')
+        sha1 = rom.get('sha1')
+        crc = rom.get('crc')
+
+        file_dict = {}
+        if size:
+            file_dict['@size'] = size
+        if crc:
+            file_dict['@crc'] = crc
+        if md5:
+            file_dict['@md5'] = md5
+        if sha1:
+            file_dict['@sha1'] = sha1
+
+        file_list[name] = file_dict
+
+    return {'file_list': file_list}
+
+
 
 def sl_romhashes_to_dict(comment):
     xmlheader = '<?xml version="1.0" ?><root>'
@@ -52,10 +78,11 @@ def sl_romhashes_to_dict(comment):
     comment = re.sub(r'&','&amp;',comment)
     fixed_comment = xmlheader+comment+xmlclose
     try:
-        commentdict = xmltodict.parse(fixed_comment)
+        commentdict = xml_to_dict(fixed_comment)
+        #commentdict = xmltodict.parse(fixed_comment)
         return commentdict
-    except:
-        print('\033[0;31mfailed to parse romhash comment\033[00m')
+    except Exception as error:
+        print(f'\033[0;31mfailed to parse romhash comment {error} \033[00m')
         print(comment)
         return None
 
@@ -96,6 +123,8 @@ def update_sl_rom_source_ids(concatenated_hashes,soft_title,soft_data,source_typ
 
 
 def rom_entries_to_source_ids(soft_title,raw_rom_source_data):
+    #print('raw rom source data')
+    #print(raw_rom_source_data)
     hashtype = '@sha1'
     source_type = 'sha1'
     total_size = 0
@@ -104,21 +133,19 @@ def rom_entries_to_source_ids(soft_title,raw_rom_source_data):
     source_fingerprints = {}
     current_disc_number = 0
     current_concatenated_hash = ''
-    if not isinstance(raw_rom_source_data, list):
-        raw_rom_source_data = [raw_rom_source_data]
     # some older soft lists put the cue at the end of the list of roms, handle automatically for single discs
-    cue_count = sum(1 for rom in raw_rom_source_data if rom['@name'].lower().endswith('.cue') or rom['@name'].endswith('.gdi'))
-    iso_count = sum(1 for rom in raw_rom_source_data if rom['@name'].lower().endswith('.iso'))
-    ccd_count = sum(1 for rom in raw_rom_source_data if rom['@name'].lower().endswith('.ccd'))
+    cue_count = sum(1 for rom in raw_rom_source_data.keys() if rom.lower().endswith('.cue') or rom.endswith('.gdi'))
+    iso_count = sum(1 for rom in raw_rom_source_data.keys() if rom.lower().endswith('.iso'))
+    ccd_count = sum(1 for rom in raw_rom_source_data.keys() if rom.lower().endswith('.ccd'))
     if ccd_count >= 2:
         print(f'{soft_title} contains multiple clonecd discs, this is not yet supported')
         return concatenated_hashes, source_type, sizes
     if cue_count == 0 and iso_count == 0:
         print(soft_title+' non-iso source has no cue or gdi toc file in source reference, may not be supported')
     first = True
-    for rom in raw_rom_source_data:
+    for rom,rom_data in raw_rom_source_data.items():
         toc = False
-        if rom['@name'].lower().endswith(('.cue', '.gdi')) and first:
+        if rom.lower().endswith(('.cue', '.gdi')) and first:
             # expected case, continue
             pass
         # if the first file wasn't a TOC but this is a multi-disc set, increment disc number
@@ -128,11 +155,11 @@ def rom_entries_to_source_ids(soft_title,raw_rom_source_data):
         elif first and iso_count > 1 and cue_count != 1:
             current_disc_number += 1
 
-        if rom['@name'].lower().endswith(('.cue', '.gdi')):
+        if rom.lower().endswith(('.cue', '.gdi')):
             toc = True
 
         try:
-            rom_size = int(rom['@size'])
+            rom_size = int(rom_data['@size'])
         except:
             print('size error for Softlist Entry source ROM: '+soft_title)
             rom_size = 0
@@ -145,11 +172,11 @@ def rom_entries_to_source_ids(soft_title,raw_rom_source_data):
             current_concatenated_hash = ''
             total_size = 0
         elif not toc:
-            if hashtype not in rom:
+            if hashtype not in rom_data:
                 hashtype = '@crc'
                 source_type = 'crc'
             try:
-                current_concatenated_hash += rom[hashtype]
+                current_concatenated_hash += rom_data[hashtype]
             except:
                 print(soft_title+' has an error in the commented rom listing') 
                 continue
@@ -176,80 +203,161 @@ def process_sl_rom_sources(sl_dict):
             # update the softlist dict with source ids
             if concatenated_hashes:
                 update_sl_rom_source_ids(concatenated_hashes,soft_title,soft_data,source_type,sizes)
-                
+
+def split_data_by_discs(commmentlines):
+    discs = []
+    current_disc = ''
+    lines = commmentlines.split('\n')
+    toc_first = False
+    for i, line in enumerate(lines):
+        toc = False
+        if re.search(r'rom name="[^"]+\.(cue|gdi)"', line):
+            toc = True
+        if toc and i == 0:
+            toc_first = True
+            current_disc += line.strip()
+            # skip any further logic for this case
+            continue
+        # if it's a another TOC file append the current to the discs and reset
+        if toc_first and toc:
+            discs.append(current_disc)
+            current_disc = line.strip()
+        # in this case add the toc to the current disc and start a new one
+        elif not toc_first and toc:
+            current_disc += line.strip()
+            discs.append(current_disc)
+            current_disc = ''
+        # keep adding tracks to the current disc otherwise
+        else:
+            current_disc += line.strip()
+    # add the last disc to the disc list
+    if current_disc not in discs:
+        discs.append(current_disc)
+    return discs
+
+
+def process_commentlines(raw_comment_lines):
+    romhash = r'^(\s+)?<rom name'
+    redump_url = r'http://redump\.org/disc/\d{4,6}/?'
+    note_entry = ''
+    rom_entry = ''
+    redump_sources = []
+
+    commentlines = raw_comment_lines.split('\n')
+    for line in commentlines:
+        redump_urls = re.findall(redump_url,line)
+        if redump_urls:
+            redump_sources += redump_urls
+        elif re.match(romhash,line):
+            rom_entry = rom_entry+line.strip()+'\n'
+        else:
+            note_entry = note_entry+line.strip()+'\n'
+    return note_entry,rom_entry,redump_sources
 
 def comment_to_sl_dict(soft,raw_comment_dict,sl_dict):
-    redump_url = r'http://redump\.org/disc/\d{4,6}/?'
-    romhash = r'^(\s+)?<rom name'
+    s_name = soft['@name']
+    split_sources = False
+    toc = r'(\.(cue|gdi))'
     trurip = '(Trurip|trurip)'
     redump_sources = []
+    rom_sources = {}
     notenum = 1
+    disc_count = len(sl_dict[s_name]['parts'])
+    # get number of TOC files in the comment
+    total_toc = sum(len(re.findall(toc, comment)) for comments in raw_comment_dict.values() for comment in comments)
+    if disc_count != total_toc:
+        print(f'mismatched toc/disc count for {s_name} {total_toc} toc / {disc_count} disc(s)')
+    elif disc_count > 1:
+        split_sources = True
     for comment_location, comments in raw_comment_dict.items():
-        note_entry = ''
-        rom_entry = ''
-        sourcedict = {}
         notedict = {}
+        rom_entry = ''
+        notes = ''
         for comment in comments:
-            commentlines = comment.split('\n')
-            for line in commentlines:
-                redump_finds = re.findall(redump_url,line)
-                if redump_finds:
-                    redump_sources += redump_finds
-                elif re.match(romhash,line):
-                    rom_entry = rom_entry+line.strip()+'\n'
-                else:
-                    note_entry = note_entry+line.strip()+'\n'
+            if split_sources and len(re.findall(toc, comment)) > 1:
+                # add lines which aren't rom entries to a new comment until we hit a rom line
+                commentlines = comment.split('\n')
+                romhash = r'^(\s+)?<rom name'
+                info_comments = ''
+                rom_comments = ''
+                for line in commentlines:
+                    if re.match(romhash,line.strip()):
+                        rom_comments += line.strip()+'\n'
+                    else:
+                        line = line.strip()
+                        if line:
+                            info_comments += line.strip()+'\n'
+                #print(f'rom_comments are\n{rom_comments}')
+                comments_by_disc = split_data_by_discs(rom_comments)
+                #print(f'have {len(comments_by_disc)} rom comments in {s_name}')
+                note_entry,rom_entry,redump_source_info = process_commentlines(info_comments)
+                notes += note_entry.strip()
+                redump_sources += redump_source_info
+                disc = 1
+                for disc_comm in comments_by_disc:
+                    note_entry,rom_entry,redump_source_info = process_commentlines(disc_comm)
+                    notes += note_entry.strip()
+                    redump_sources += redump_source_info
+                    if rom_entry:
+                        # convert commented DAT entries to a dict list
+                        rom_sources['cdrom'+str(disc)] = sl_romhashes_to_dict(rom_entry)
+                        disc +=1
+            else:
+                note_entry,rom_entry,redump_source_info = process_commentlines(comment)
+                notes += note_entry
+                redump_sources += redump_source_info
+                if rom_entry:
+                    # convert commented DAT entries to a dict
+                    rom_sources[s_name] = sl_romhashes_to_dict(rom_entry)
+
         # set the proper destinations based on whether the comment came from the root of 
         # the softlist or if it came from a disc part
         if comment_location == 'main_entry':
-            comment_dest = sl_dict[soft['@name']]
+            comment_dest = sl_dict[s_name]
             except_dest_outer = sl_dict
-            except_dest_inner = soft['@name']
+            except_dest_inner = s_name
         elif comment_location.startswith('cdrom'):
-            comment_dest = sl_dict[soft['@name']]['parts'][comment_location]
-            except_dest_outer = sl_dict[soft['@name']]['parts'][comment_location]
+            comment_dest = sl_dict[s_name]['parts'][comment_location]
+            except_dest_outer = sl_dict[s_name]['parts'][comment_location]
             except_dest_inner = comment_location
-        # if sources were found add them to the softlist entry
-        if sourcedict:
-            try:
-                comment_dest.update(sourcedict)
-            except:
-                except_dest_outer.update({except_dest_inner:sourcedict})
-        if rom_entry:
-            # convert commented DAT entries to a dict list
-            rom_dict = sl_romhashes_to_dict(rom_entry)
+        if rom_sources:
             # concatenate the hashes from the rom dict if it was directly associated with a disc
-            if rom_dict and comment_location.startswith('cdrom'):
-                concatenated_hashes, source_type, sizes = rom_entries_to_source_ids(soft['@name'],rom_dict['root']['rom'])
-                update_sl_rom_source_ids(concatenated_hashes,soft['@name'],sl_dict[soft['@name']],source_type,sizes,comment_location)
-
-             # store the raw source info for troubleshooting purposes
-            elif rom_dict:
+            #if rom_dict and comment_location.startswith('cdrom'):
+            for location, rom_data in rom_sources.items():
+                if location.startswith('cdrom'):
+                    comment_dest = sl_dict[s_name]['parts'][location]
+                else:
+                    location = 'cdrom'
+                concatenated_hashes, source_type, sizes = rom_entries_to_source_ids(s_name,rom_data['file_list'])
+                update_sl_rom_source_ids(concatenated_hashes,s_name,sl_dict[s_name],source_type,sizes,location)
+                # store the raw source info for troubleshooting or dat creation
                 try:
-                    comment_dest.update(rom_dict['root'])
-                except:
-                    except_dest_outer.update({comment_location:rom_dict['root']})
+                    comment_dest.update(rom_data)
+                except Exception as error:
+                    print(f'got an error trying to update this note {error}, {rom_dict}')
+                    except_dest_outer.update({comment_location:rom_dict})
         # handle notes
-        if note_entry:
-            notedict['note'+str(notenum)] = note_entry
+        if notes:
+            notedict['note'+str(notenum)] = notes
             notenum += 1
             try:
                 comment_dest.update(notedict)
-            except:
+            except Exception as error:
+                print(f'got an error trying to update this note {error}, {notedict}')
                 except_dest_outer.update({except_dest_inner:notedict})
 
         if redump_sources:
             if len(redump_sources) == 1:
-                if 'cdrom' in sl_dict[soft['@name']]['parts']:
-                    sl_dict[soft['@name']]['parts']['cdrom'].update({'redump_url':redump_sources[0].strip()})
+                if 'cdrom' in sl_dict[s_name]['parts']:
+                    sl_dict[s_name]['parts']['cdrom'].update({'redump_url':redump_sources[0].strip()})
                 else:
                     print(f'could not find the cdrom disc to insert redump url for {soft["@name"]}')
             else:
                 discnum = 1
                 for url in redump_sources:
                     disc = 'cdrom'+str(discnum)
-                    if disc in sl_dict[soft['@name']]['parts']:
-                        sl_dict[soft['@name']]['parts'][disc].update({'redump_url':url.strip()})
+                    if disc in sl_dict[s_name]['parts']:
+                        sl_dict[s_name]['parts'][disc].update({'redump_url':url.strip()})
                     else:
                         print(f'could not find the {disc} to insert redump url for {soft["@name"]}')
                     discnum += 1
@@ -661,7 +769,12 @@ def create_dat_hash_dict(raw_dat_dict):
         size = 0
         sha1 = hashlib.sha1()
         for rom in game['rom']:
-            file_list.update({rom['@name']:rom['@crc']})
+            rom_info = {'@size':rom['@size'],
+                        '@crc':rom['@crc'],
+                        '@md5':rom['@md5'],
+                        '@sha1':rom['@sha1']
+                       }
+            file_list.update({rom['@name']:rom_info})
             if not rom['@name'].lower().endswith(('.cue', '.gdi')):
                 sha1.update(rom['@sha1'].encode('utf-8'))
                 size = size + int(rom['@size'])
@@ -717,7 +830,12 @@ def create_dat_hash_dict_xml(datroot,dat_group):
         files = len(game.findall('rom'))
         sha1 = hashlib.sha1()
         for rom in game.findall('rom'):
-            file_list.update({rom.get('name'):rom.get('crc')})
+            rom_info = {'@size':rom.get('size'),
+                        '@crc':rom.get('crc'),
+                        '@md5':rom.get('md5'),
+                        '@sha1':rom.get('sha1')
+                       }
+            file_list.update({rom.get('name'):rom_info})
             if not rom.get('name').lower().endswith(('.cue', '.gdi')):
                 sha1.update(rom.get('sha1').encode('utf-8'))
                 size = size + int(rom.get('size'))

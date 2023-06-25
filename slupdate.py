@@ -437,7 +437,12 @@ def name_serial_automap_function(platform):
                         all_dat_dict[platform]['unmatched'][dat].pop(redump_title)
     if redump_interactive_matches:
         print('Some matches require user review\n')
-        name_serial_auto_map_steptwo(redump_interactive_matches,softlist_dict[platform],all_dat_dict[platform])
+        confirmed_interactive = name_serial_auto_map_steptwo(redump_interactive_matches,softlist_dict[platform],all_dat_dict[platform])
+        if confirmed_interactive:
+            proceed = inquirer.confirm(menu_msgs['tosec_commit'], default=False)
+            if proceed:
+                update_rom_source_refs(settings['sl_dir']+os.sep+platform+'.xml', confirmed_interactive)
+                update_soft_dict(softlist_dict[platform],confirmed_interactive)
     else:
         print('No matches to commit, return to menu\n')
     # flag that this stage is completed for this platform
