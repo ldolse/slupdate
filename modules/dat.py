@@ -1,7 +1,7 @@
 import re, xmltodict, hashlib
 import xml.etree.ElementTree as ET
 import html
-from  lxml import etree, html
+from  lxml import etree
 
 
 '''
