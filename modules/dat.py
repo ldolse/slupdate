@@ -45,7 +45,7 @@ def get_sl_descriptions(softlist,dat_type,field):
         sl.append(item[field])
     return sl
 
-def xml_to_dict(xml_string):
+def file_xml_to_dict(xml_string):
     root = etree.fromstring(xml_string)
 
     file_list = {}
@@ -78,7 +78,7 @@ def sl_romhashes_to_dict(comment):
     comment = re.sub(r'&','&amp;',comment)
     fixed_comment = xmlheader+comment+xmlclose
     try:
-        commentdict = xml_to_dict(fixed_comment)
+        commentdict = file_xml_to_dict(fixed_comment)
         #commentdict = xmltodict.parse(fixed_comment)
         return commentdict
     except Exception as error:
@@ -308,7 +308,10 @@ def comment_to_sl_dict(soft,raw_comment_dict,sl_dict):
                 redump_sources += redump_source_info
                 if rom_entry:
                     # convert commented DAT entries to a dict
-                    rom_sources[s_name] = sl_romhashes_to_dict(rom_entry)
+                    if comment_location.startswith('cdrom'):
+                        rom_sources[comment_location] = sl_romhashes_to_dict(rom_entry)
+                    else:
+                        rom_sources[s_name] = sl_romhashes_to_dict(rom_entry)
 
         # set the proper destinations based on whether the comment came from the root of 
         # the softlist or if it came from a disc part
@@ -775,8 +778,7 @@ def create_dat_hash_dict(raw_dat_dict):
                         '@sha1':rom['@sha1']
                        }
             file_list.update({rom['@name']:rom_info})
-            if not rom['@name'].lower().endswith(('.cue', '.gdi')):
-                sha1.update(rom['@sha1'].encode('utf-8'))
+            if not rom['@name'].lower().endswith(('.cue', '.gdi')) and not rom['@name'].lower() == 'ip.bin':
                 size = size + int(rom['@size'])
         sha1_digest = sha1.hexdigest()
         if sha1_digest in keyresult:
@@ -793,7 +795,7 @@ def create_dat_hash_dict(raw_dat_dict):
         # repeat for crc for old rom sources
         crc_sha1 = hashlib.sha1()
         for rom in game['rom']:
-            if not rom['@name'].lower().endswith(('.cue', '.gdi')):
+            if not rom['@name'].lower().endswith(('.cue', '.gdi')) and not rom['@name'].lower() == 'ip.bin':
                 crc_sha1.update(rom['@crc'].encode('utf-8'))
         crc_sha1_digest = crc_sha1.hexdigest()
         if crc_sha1_digest in keyresult:
@@ -836,7 +838,7 @@ def create_dat_hash_dict_xml(datroot,dat_group):
                         '@sha1':rom.get('sha1')
                        }
             file_list.update({rom.get('name'):rom_info})
-            if not rom.get('name').lower().endswith(('.cue', '.gdi')):
+            if not rom.get('name').lower().endswith(('.cue', '.gdi')) and not rom.get('name').lower() == 'ip.bin':
                 sha1.update(rom.get('sha1').encode('utf-8'))
                 size = size + int(rom.get('size'))
         sha1_digest = sha1.hexdigest()
@@ -850,7 +852,7 @@ def create_dat_hash_dict_xml(datroot,dat_group):
         # repeat hash calculation for crc for old rom sources
         crc_sha1 = hashlib.sha1()
         for rom in game.findall('rom'):
-            if not rom.get('name').lower().endswith(('.cue', '.gdi')):
+            if not rom.get('name').lower().endswith(('.cue', '.gdi')) and not rom.get('name').lower() == 'ip.bin':
                 crc_sha1.update(rom.get('sha1').encode('utf-8'))
         crc_sha1_digest = crc_sha1.hexdigest()
         keyresult[(crc_sha1_digest,'crc')] = {

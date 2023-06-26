@@ -595,20 +595,20 @@ def del_dats_function(platform):
         print(dat_path)
         settings[platform].pop(dat_path)
         
-def list_soft_entries(platform,group=''):
-    type = 'Unmatched/Unknown'
-    if group:
-        type = group
-    print(f'\n\n  {type} Sources for this platform:')
-    for soft_entry in softlist_dict[platform].values():
+def list_soft_entries(platform,group=None):
+    match_type = 'Unmatched'
+    if group is not None:
+        match_type = group
+    print(f'\n\n  {match_type} Sources for this platform:')
+    for soft, soft_entry in softlist_dict[platform].items():
         matched_title = False
         for part in soft_entry['parts'].values():
-            if 'source_group' in part and part['source_group'] == group:
+            if 'source_group' in part and part['source_group'] == match_type:
                 matched_title = True
-            if group == '' and 'source_dat' not in part:
+            elif 'source_dat' not in part and match_type == 'Unmatched':
                 matched_title = True
         if matched_title:
-            print(f"    {soft_entry['description']}")
+            print(f"    {soft}: {soft_entry['description']}")
     print('\n\n')
 
 def unknown_list_function(platform):

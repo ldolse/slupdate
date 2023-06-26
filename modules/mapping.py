@@ -698,7 +698,7 @@ def name_serial_auto_map_steptwo(redump_interactive_matches,sl_dict,dat_dict):
                     possible_redump.append((f'{redump_entry[0]} ({redump_entry[2]}) ({redump_entry[3]}) - Serial:{redump_entry[1]}, http://redump.org{redump_entry[4]}',(redump_entry[0],redump_entry[4])))
                 print(f'possible_redump is\n{possible_redump}')
                 print('Step 1: Select From Possible Redump Matches (Review of Softlist Comments and Redump URL may be needed)')
-                print_preface(soft_key,sl_dict)
+                print_preface(soft_key,sl_dict[soft_key[0]])
                 redump_choice = list_menu('redump',possible_redump,'Select Redump DB Entry to find in DAT')
                 print(f'redump_choice is\n{redump_choice}')
                 redump_sha_href = 'http://redump.org'+redump_choice['redump'][1]+'sha1'
