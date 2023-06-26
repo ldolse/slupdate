@@ -53,11 +53,11 @@ def get_tosec_tuples(rom_entry):
     dreamcast - track 1 and track 3 share the same hashes for both groups
     '''
     track_hashes = []
-    for filename, crc_hash in rom_entry.items():
+    for filename, data in rom_entry.items():
         if filename.endswith('(Track 1).bin') or filename.endswith('track01.bin'):
-            track_hashes.append(crc_hash)
+            track_hashes.append(data['@crc'])
         elif filename.endswith('(Track 3).bin') or filename.endswith('track03.bin'):
-            track_hashes.append(crc_hash)
+            track_hashes.append(data['@crc'])
     if len(track_hashes) == 2:
         return tuple(track_hashes)
     else:
@@ -548,6 +548,63 @@ def calculate_hash(rom_list):
             concatenated_hash += rom['@sha1']
     sha1 = hashlib.sha1(concatenated_hash.encode('utf-8')).hexdigest()
     return (sha1,'sha1')
+
+
+def compare_dictionaries(dict1, dict2):
+    # Ignore .cue or .gdi files
+    ignored_extensions = ['.cue', '.gdi']
+
+    # Filter out ignored files
+    filtered_dict1 = {k: v for k, v in dict1.items() if not any(ext in k.lower() for ext in ignored_extensions)}
+    filtered_dict2 = {k: v for k, v in dict2.items() if not any(ext in k.lower() for ext in ignored_extensions)}
+
+    # Compare the total number of files
+    if len(filtered_dict1) != len(filtered_dict2):
+        return (0,0)
+
+    # Get the keys in the same order
+    keys1 = list(filtered_dict1.keys())
+    keys2 = list(filtered_dict2.keys())
+
+    # Compare individual '@sha1' hashes at the same index
+    matching_hashes = sum(1 for i, k in enumerate(keys1) if filtered_dict1[k]['@sha1'] == filtered_dict2[keys2[i]]['@sha1'])
+    #print(f"Match: {matching_hashes} out of {len(filtered_dict1)}")
+    return (matching_hashes,len(filtered_dict1))
+    #return f"Match: {matching_hashes} out of {len(filtered_dict1)}"
+
+def find_similar_dat(source_dict,dat_dict):
+    results = []
+    for dat,hashdict in dat_dict['hashes'].items():
+        for key, data in hashdict.items():
+            if 'softlist_matches' in data:
+                continue
+            elif key[1] == 'crc':
+                continue
+            else:
+                compare_dict = data['file_list']
+                result = compare_dictionaries(source_dict,compare_dict)
+                # append to list if at least one hash matches
+                if result[0] > 0:
+                    results.append((result[0],result[1],dat,key,data['name']))
+    return results
+
+def fuzzy_hash_compare(sl_dict,dat_dict):
+    replacements = {}
+    for soft, data in sl_dict.items():
+        for cd, part in data['parts'].items():
+            if 'source_dat' in part:
+                continue
+            elif 'file_list' in part:
+                source_dict = part['file_list']
+            elif len(data['parts']) == 1 and 'file_list' in data:
+                source_dict = data['file_list']
+            else:
+                continue
+            results = find_similar_dat(source_dict,dat_dict)
+            if len(results) < 10:
+                for result in results:
+                    if result[0] > 1:
+                        print(f"Match for {soft}: {result[0]} out of {result[1]}, dat name: {result[4]}")
 
 
 def name_serial_auto_map_steptwo(redump_interactive_matches,sl_dict,dat_dict):
