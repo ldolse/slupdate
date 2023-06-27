@@ -575,6 +575,7 @@ def compare_dictionaries(dict1, dict2):
 def find_similar_dat(source_dict,dat_dict,hash_min=1,list_limit=10):
     results = []
     for dat,hashdict in dat_dict['hashes'].items():
+        dat_group = dat_dict['dat_group'][dat]
         for key, data in hashdict.items():
             if 'softlist_matches' in data:
                 continue
@@ -585,7 +586,7 @@ def find_similar_dat(source_dict,dat_dict,hash_min=1,list_limit=10):
                 result = compare_dictionaries(source_dict,compare_dict)
                 # append to list if at least one hash matches
                 if result[0] > hash_min:
-                    results.append((data['name'],result[0],result[1],dat,key))
+                    results.append((data['name'],result[0],result[1],dat_group,dat,key))
     # discard long lists of results
     if len(results) > list_limit:
         results = []
@@ -610,33 +611,41 @@ def fuzzy_hash_compare(sl_dict,dat_dict,skip_prototype=True):
                 kv_result = {(soft,cd):results}
                 replacements.update(kv_result)
             for result in results:
-                print(f"Match for {soft}: {result[0]} out of {result[1]}, dat name: {result[4]}")
+                print(f"Match for {soft}: {result[1]} out of {result[2]}, dat name: {result[0]}")
     return replacements
 
 
-def interactive_title_mapping(interactive_matches,sl_dict,dat_dict,match_type='redump_site'):
+def interactive_title_mapping(interactive_matches,sl_dict,dat_dict,match_type='redump_serial'):
     '''
     interactive_matches examples:
     From redump site dict:
       {('flntstns', 'cdrom'): [('The Flintstones - Viva Rock Vegas (Europe) (En,Fr,De,Es,It)', '952-0174-50', 'Sample', '1.002', '/disc/77555/')],
        ('incomingj', 'cdrom'): [('Incoming - Jinrui Saishuu Kessen (Japan)', 'T-15001M', 'Original', '2.000', '/disc/40973/')]}
     From fuzzy matches:
-      {('flntstns', 'cdrom'): [(2, 13, '<full_dat_path>', ('a46ccec1b32bc4d6513d62c336da3641977b297b', 'sha1'), 'Flintstones, The - Viva Rock Vegas (Europe) (En,Fr,De,Es,It) (Proto)')], 
-      ('kaod', 'cdrom'): [(2, 7, '<full_dat_path>', ('0851401e42ff4899b7008fa8f4c015040ec7c984', 'sha1'), 'Kao the Kangaroo (Europe) (Demo)')]}
+      {('kaod', 'cdrom'): [('Kao the Kangaroo (Europe) (Demo)', 2, 7, 'redump', '<datpath>', ('0851401e42ff4899b7008fa8f4c015040ec7c984', 'sha1'))]}
     '''
-    def print_preface(soft_key,soft_entry):
+    def print_preface(soft_key,soft_entry,match_type):
+        file_list = None
+        if 'redump' in match_type:
+            print('Step 1: Select from possible Redump Matches (Review of Softlist comments and Redump URL may be needed)')
+        elif 'fuzzy' in match_type:
+            print('Select from possible DAT matches based individual track hashes (Review of Softlist Comments and Redump URL may be needed)')
         print(f'\nMAME Software List Details:\n       ROM Name: {soft_key[0]}')
         print(f'   Description: {soft_entry["description"]}')
+        print(f'          Disc: {soft_key[1]}')
         if 'rawserial' in sl_dict[soft_key[0]]:
             print(f'        Serial: {soft_entry["rawserial"]}')
         if 'source_group' in soft_entry['parts'][soft_key[1]]:
             print(f'\nSource Matched\n   Source Group: {soft_entry["parts"][soft_key[1]]["source_group"]}')
             print(f'    Source Name: {soft_entry["parts"][soft_key[1]]["source_name"]}')
-        elif 'rom' in soft_entry:
-            print(f'Source Info:\n   No Source match but source is documented.\n   Source Filename (first entry): {soft_entry["rom"][0]["@name"]}')
-        elif 'rom' in soft_entry["parts"][soft_key[1]]:
-            source_filename = soft_entry["parts"][soft_key[1]]["rom"][0]["@name"]
-            print(f'Source Info:\n   No Source match but source is documented.\n   Source Filename (first entry): {source_filename}')
+        elif 'file_list' in soft_entry:
+            source_files = soft_entry['file_list']
+            fname = next(iter(source_files))
+            print(f'Source Info:\n   No Source match but source is documented.\n   Source Filename (first entry): {fname}')
+        elif 'file_list' in soft_entry["parts"][soft_key[1]]:
+            source_files = soft_entry["parts"][soft_key[1]]['file_list']
+            fname = next(iter(source_files))
+            print(f'Source Info:\n   No Source match but source is documented.\n   Source Filename (first entry): {fname}')
         print('\n\n')
 
     def match_redump_db_to_dat(redump_sha_href,dat_title_name):
@@ -674,7 +683,21 @@ def interactive_title_mapping(interactive_matches,sl_dict,dat_dict,match_type='r
 
         return source_info, source_dat, source_name
 
- 
+    def build_select_list(match_list,match_type):
+        select_list = []
+        if 'redump' in match_type:
+            for redump_entry in match_list:
+                # build a set of strings to add to the select list
+                select_list.append((f'{redump_entry[0]} ({redump_entry[2]}) ({redump_entry[3]}) - Serial:{redump_entry[1]}, http://redump.org{redump_entry[4]}',(redump_entry[0],redump_entry[4])))
+        elif match_type == 'fuzzy':
+            for fz_mtch in match_list:
+                select_list.append((f'{fz_mtch[0]} - {fz_mtch[1]}/{fz_mtch[2]} hash matches in {fz_mtch[3]}',fz_mtch))
+
+        select_list.append(('No Match',None))
+        select_list.append(('Stop','exit'))
+        print(f'select_list is\n{select_list}')
+        return select_list
+
     review_matches = inquirer.confirm(f'There are {len(interactive_matches)} matches to review, continue?', default=False)
     if not review_matches:
         return
@@ -692,8 +715,8 @@ def interactive_title_mapping(interactive_matches,sl_dict,dat_dict,match_type='r
             print(f'soft key is {soft_key}, match_list is {match_list}')
             print(f'searching {match_list[0][0]}\n')
             # if there is only a single match see if it can be automatically matched against the hash on the redump website
-            if len(match_list) == 1 and len(get_close_matches(match_list[0][0],possible_matches)) > 0 and 'redump' in match_type:
-                print_preface(soft_key,sl_dict[soft_key[0]])
+            if len(match_list) == 1 and len(get_close_matches(match_list[0][0],possible_matches)) > 0 and match_type == 'redump_serial':
+                print_preface(soft_key,sl_dict[soft_key[0]],match_type)
                 redump_sha_href = 'http://redump.org'+match_list[0][4]+'sha1'
                 dat_title_name = match_list[0][0]
                 source_sha, source_dat, source_title = match_redump_db_to_dat(redump_sha_href,dat_title_name)
@@ -701,23 +724,27 @@ def interactive_title_mapping(interactive_matches,sl_dict,dat_dict,match_type='r
                     print(f'{soft_key[0]}, {soft_key[1]} was able to be automatically matched to {match_list[0][0]}')
                     confirmed_matches.update(create_update_entry(soft_key,sl_dict,dat_dict,source_dat,dat_title_name,source_sha))
 
-            elif len(match_list) > 1:
-                possible_redump = []
-                for redump_entry in match_list:
-                    # build a set of strings to add to the select list
-                    possible_redump.append((f'{redump_entry[0]} ({redump_entry[2]}) ({redump_entry[3]}) - Serial:{redump_entry[1]}, http://redump.org{redump_entry[4]}',(redump_entry[0],redump_entry[4])))
-                print(f'possible_redump is\n{possible_redump}')
-                print('Step 1: Select From Possible Redump Matches (Review of Softlist Comments and Redump URL may be needed)')
-                print_preface(soft_key,sl_dict[soft_key[0]])
-                redump_choice = list_menu('redump',possible_redump,'Select Redump DB Entry to find in DAT')
-                print(f'redump_choice is\n{redump_choice}')
-                redump_sha_href = 'http://redump.org'+redump_choice['redump'][1]+'sha1'
-                dat_title_name = redump_choice['redump'][0]
-                source_sha, source_dat, source_title = match_redump_db_to_dat(redump_sha_href,dat_title_name)
-                if source_sha is not None:
+            else:
+                possible_interactive = build_select_list(match_list,match_type)
+                print_preface(soft_key,sl_dict[soft_key[0]],match_type)
+                user_choice = list_menu('u_match',possible_interactive,'Select Matching Entry')
+                print(f'user_choice is\n{user_choice}')
+                if user_choice['u_match'] == 'exit':
+                    return confirmed_matches
+                if 'redump' in match_type and user_choice['u_match'] is not None:
+                    redump_sha_href = 'http://redump.org'+user_choice['u_match'][1]+'sha1'
+                    dat_title_name = user_choice['u_match'][0]
+                    source_sha, source_dat, source_title = match_redump_db_to_dat(redump_sha_href,dat_title_name)
+                    if source_sha is not None:
+                        confirmed_matches.update(create_update_entry(soft_key,sl_dict,dat_dict,source_dat,dat_title_name,source_sha))
+                elif match_type == 'fuzzy' and user_choice['u_match'] is not None:
+                    source_dat = user_choice['u_match'][4]
+                    dat_title_name = user_choice['u_match'][0]
+                    source_sha = user_choice['u_match'][5]
                     confirmed_matches.update(create_update_entry(soft_key,sl_dict,dat_dict,source_dat,dat_title_name,source_sha))
         return confirmed_matches
-        
+
+  
 def create_update_entry(soft_key,sl_dict,dat_dict,dat,redump_title,new_source_sha):
     if 'source_dat' in sl_dict[soft_key[0]]['parts'][soft_key[1]]:
         # need to check if there are orig before populating these
@@ -738,8 +765,7 @@ def create_update_entry(soft_key,sl_dict,dat_dict,dat,redump_title,new_source_sh
                         }}
 
 
-
-def name_serial_auto_map(platform, sl_dict,dat_dict,script_dir,name_serial_key=True):
+def name_serial_auto_map(platform, sl_dict,dat_dict,script_dir,name_serial_key=True,skip_proto=True):
     '''
     two-stage function - first stage compares redump site titles to sanitized soflist descriptions
     second stage uses the redump title to match against unmatched dat entries
@@ -759,11 +785,14 @@ def name_serial_auto_map(platform, sl_dict,dat_dict,script_dir,name_serial_key=T
     redump_single_matches = {}
     redump_interactive_matches = {}
     lookup_dict, second_level_dict = nameserial_lookup_dict(redump_dict,name_serial_key)
+    ignore_groups = ['no-intro','redump']
 
     for soft_title, soft in sl_dict.items():
+        if 'prototype' in soft['description'].lower() and skip_proto:
+            continue # skip unmatched prototypes by default
         for part,part_data in soft['parts'].items():
             # skip titles where a redump source is identified
-            if 'source_group' in part_data and part_data['source_group'] == 'redump':
+            if 'source_group' in part_data and any(group in part_data['source_group'].lower() for group in ignore_groups):
                 continue
             # set a string for the disc number to use later
             disc = ''
@@ -775,7 +804,7 @@ def name_serial_auto_map(platform, sl_dict,dat_dict,script_dir,name_serial_key=T
             nointrofix = tweak_nointro_dat(soft['description'].strip())
             if disc:
                 nointrofix = nointrofix + disc
-
+            import pprint
             if 'serial' in soft and name_serial_key:
                 for ser in soft['serial']:
                     redump_tuple = (nointrofix,ser)
@@ -783,6 +812,7 @@ def name_serial_auto_map(platform, sl_dict,dat_dict,script_dir,name_serial_key=T
                     # Perform a case-insensitive lookup
                     matching_keys = [key for key in lookup_dict if key[0].lower() == redump_tuple[0].lower() and key[1] == redump_tuple[1]]
                     if matching_keys:
+                        pprint.pprint(matching_keys)
                         # Retrieve the corresponding values from second_level_dict
                         matches = [lookup_dict[key] for key in matching_keys]
                         #print(f'found a match: {matching_keys[0]}')
@@ -798,6 +828,15 @@ def name_serial_auto_map(platform, sl_dict,dat_dict,script_dir,name_serial_key=T
                                 redump_single_matches.update({(soft_title,part):matches[0]})
                         else:
                             redump_interactive_matches.update({(soft_title,part):matches[0]})
+
+
+            else: # generate a lookup list based on close matches
+                matching_keys = get_close_matches(nointrofix, lookup_dict.keys(),n=5)
+                if matching_keys:
+                    print('key match')
+                    # Retrieve the corresponding values from second_level_dict
+                    matches = [lookup_dict[key] for key in matching_keys]
+                    redump_interactive_matches.update({(soft_title,part):matches[0]})
 
     if len(redump_single_matches) >= 1:
         # iterate through the matches to see if there are unmatched redump dat entries which match these names

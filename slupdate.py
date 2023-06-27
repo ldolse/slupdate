@@ -99,7 +99,8 @@ menu_msgs = {'0' : 'Main Menu, select an option',
              '5c' : 'Select a DAT to remove',
              'dir_d' : 'Select a Directory to Remove',
              'romvault' : 'Are you using ROMVault to manage DATs and ROMs?',
-             'tosec_commit' : 'Proceed to rewrite the Softlist XML file'
+             'tosec_commit' : 'Proceed to update the Softlist XML file?',
+             'fuzzy_commit' : 'Proceed to update the Softlist XML file?'
     }
 # unless a list entry maps to a function it should always map to another menu in the tree
 # This allows completed functions to go back to their parent menu automatically
@@ -117,13 +118,12 @@ menu_lists = {'0' : [('1. Mapping Functions', 'map'),
              'map-2' : [('a. List missing matched ROM Files','list_missing_function'),
                         ('b. Remap TOSEC sources to Redump','tosec_map_function'),
                         ('c. Automated Redump re-map based on disc serial & name','name_serial_automap_function'),
-                        ('d. Remap bad dumps to Redump','hash_map_function'),
-                        ('e. List TOSEC sources','tosec_list_function'),
-                        ('f. List unknown sources','unknown_list_function'),
-                        ('g. Build CHDs','chd_build_function'),
-                        ('h. Map Stage 3','map-3'),
-                        ('i. Back', 'map')],
-             'map-3' : [('a. Remap bad dumps to Redump','hash_map_function'),
+                        ('d. List TOSEC sources','tosec_list_function'),
+                        ('e. List unknown sources','unknown_list_function'),
+                        ('f. Build CHDs','chd_build_function'),
+                        ('g. Map Stage 3','map-3'),
+                        ('h. Back', 'map')],
+             'map-3' : [('a. Fuzzy Matches - Remap bad/alternate Dumps','hash_map_function'),
                         ('b. Interactive Name/Serial Mapping','name_serial_manual_map_function'),             
                         ('d. Back', 'map-2')],
              '2' : [('a. Console List','chd_build_function'),
@@ -327,7 +327,15 @@ def no_src_map_function(platform):
     map_no_source_entries(softlist_dict[platform],all_dat_dict[platform])
     return 'map'
 
-
+def  hash_map_function(platform):
+    fuzzy_matches = fuzzy_hash_compare(softlist_dict[platform], all_dat_dict[platform])
+    confirmed = interactive_title_mapping(fuzzy_matches, softlist_dict[platform], all_dat_dict[platform], 'fuzzy')
+    if confirmed:
+        proceed = inquirer.confirm(menu_msgs['fuzzy_commit'], default=False)
+        if proceed:
+            update_rom_source_refs(settings['sl_dir']+os.sep+platform+'.xml', confirmed)
+            update_soft_dict(softlist_dict[platform],confirmed)
+        
 def tosec_map_function(platform):
     redump_tuples = {}
     if platform in softlist_dict:
