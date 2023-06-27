@@ -572,7 +572,7 @@ def compare_dictionaries(dict1, dict2):
     return (matching_hashes,len(filtered_dict1))
     #return f"Match: {matching_hashes} out of {len(filtered_dict1)}"
 
-def find_similar_dat(source_dict,dat_dict):
+def find_similar_dat(source_dict,dat_dict,hash_min=1,list_limit=10):
     results = []
     for dat,hashdict in dat_dict['hashes'].items():
         for key, data in hashdict.items():
@@ -584,13 +584,18 @@ def find_similar_dat(source_dict,dat_dict):
                 compare_dict = data['file_list']
                 result = compare_dictionaries(source_dict,compare_dict)
                 # append to list if at least one hash matches
-                if result[0] > 0:
-                    results.append((result[0],result[1],dat,key,data['name']))
+                if result[0] > hash_min:
+                    results.append((data['name'],result[0],result[1],dat,key))
+    # discard long lists of results
+    if len(results) > list_limit:
+        results = []
     return results
 
-def fuzzy_hash_compare(sl_dict,dat_dict):
+def fuzzy_hash_compare(sl_dict,dat_dict,skip_prototype=True):
     replacements = {}
     for soft, data in sl_dict.items():
+        if 'prototype' in data['description'].lower() and skip_prototype:
+            continue
         for cd, part in data['parts'].items():
             if 'source_dat' in part:
                 continue
@@ -601,20 +606,23 @@ def fuzzy_hash_compare(sl_dict,dat_dict):
             else:
                 continue
             results = find_similar_dat(source_dict,dat_dict)
-            if len(results) < 10:
-                for result in results:
-                    if result[0] > 1:
-                        print(f"Match for {soft}: {result[0]} out of {result[1]}, dat name: {result[4]}")
+            if results:
+                kv_result = {(soft,cd):results}
+                replacements.update(kv_result)
+            for result in results:
+                print(f"Match for {soft}: {result[0]} out of {result[1]}, dat name: {result[4]}")
+    return replacements
 
 
-def name_serial_auto_map_steptwo(redump_interactive_matches,sl_dict,dat_dict):
+def interactive_title_mapping(interactive_matches,sl_dict,dat_dict,match_type='redump_site'):
     '''
-    redump_interactive_matches example:
+    interactive_matches examples:
+    From redump site dict:
       {('flntstns', 'cdrom'): [('The Flintstones - Viva Rock Vegas (Europe) (En,Fr,De,Es,It)', '952-0174-50', 'Sample', '1.002', '/disc/77555/')],
-       ('hydrthnd1', 'cdrom'): [('Hydro Thunder (USA)', 'T-9702N', 'Original', '1.002', '/disc/18073/'), ('Hydro Thunder (USA)', 'T-9702N', 'Original, Sega All Stars', '1.020', '/disc/5712/')],
-       ('incomingj', 'cdrom'): [('Incoming - Jinrui Saishuu Kessen (Japan)', 'T-15001M', 'Original', '2.000', '/disc/40973/')],
-       ('mkgold', 'cdrom'): [('Mortal Kombat Gold (USA)', 'T-9701N', 'Original', '1.001', '/disc/62921/'), ('Mortal Kombat Gold (USA)', 'T-9701N', 'Reprint', '1.006', '/disc/16726/')]},
-
+       ('incomingj', 'cdrom'): [('Incoming - Jinrui Saishuu Kessen (Japan)', 'T-15001M', 'Original', '2.000', '/disc/40973/')]}
+    From fuzzy matches:
+      {('flntstns', 'cdrom'): [(2, 13, '<full_dat_path>', ('a46ccec1b32bc4d6513d62c336da3641977b297b', 'sha1'), 'Flintstones, The - Viva Rock Vegas (Europe) (En,Fr,De,Es,It) (Proto)')], 
+      ('kaod', 'cdrom'): [(2, 7, '<full_dat_path>', ('0851401e42ff4899b7008fa8f4c015040ec7c984', 'sha1'), 'Kao the Kangaroo (Europe) (Demo)')]}
     '''
     def print_preface(soft_key,soft_entry):
         print(f'\nMAME Software List Details:\n       ROM Name: {soft_key[0]}')
@@ -667,7 +675,7 @@ def name_serial_auto_map_steptwo(redump_interactive_matches,sl_dict,dat_dict):
         return source_info, source_dat, source_name
 
  
-    review_matches = inquirer.confirm(f'There are {len(redump_interactive_matches)} matches to review, continue?', default=False)
+    review_matches = inquirer.confirm(f'There are {len(interactive_matches)} matches to review, continue?', default=False)
     if not review_matches:
         return
     else:
@@ -676,19 +684,21 @@ def name_serial_auto_map_steptwo(redump_interactive_matches,sl_dict,dat_dict):
         confirmed_matches = {}
         for match_dat in dat_dict['unmatched'].keys():
             # skip non redump dats
-            if dat_dict['dat_group'][match_dat] == 'redump':
+            if dat_dict['dat_group'][match_dat] == 'redump' or match_type == 'fuzzy':
                 possible_matches = possible_matches+[*dat_dict['unmatched'][match_dat]]
             else:
                 continue
-        for soft_key, match_list in redump_interactive_matches.items():
+        for soft_key, match_list in interactive_matches.items():
             print(f'soft key is {soft_key}, match_list is {match_list}')
             print(f'searching {match_list[0][0]}\n')
-            if len(match_list) == 1 and len(get_close_matches(match_list[0][0],possible_matches)) > 0:
+            # if there is only a single match see if it can be automatically matched against the hash on the redump website
+            if len(match_list) == 1 and len(get_close_matches(match_list[0][0],possible_matches)) > 0 and 'redump' in match_type:
                 print_preface(soft_key,sl_dict[soft_key[0]])
                 redump_sha_href = 'http://redump.org'+match_list[0][4]+'sha1'
                 dat_title_name = match_list[0][0]
                 source_sha, source_dat, source_title = match_redump_db_to_dat(redump_sha_href,dat_title_name)
                 if source_sha is not None:
+                    print(f'{soft_key[0]}, {soft_key[1]} was able to be automatically matched to {match_list[0][0]}')
                     confirmed_matches.update(create_update_entry(soft_key,sl_dict,dat_dict,source_dat,dat_title_name,source_sha))
 
             elif len(match_list) > 1:
