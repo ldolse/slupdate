@@ -197,7 +197,7 @@ def map_tosec_entries(sl_dict,dat_dict,redump_tuples):
             partial_matches.append(soft_data['description'])
     if partial_matches:
         print('\n\n The number of discs with new hashes does not equal the number of discs in these software list')
-        print(' items. Source hashes will be deleted from the original comment, the missing hash will need to')
+        print(' items. Source hashes may be deleted from the original comment, if so the missing hashes will need to')
         print(' be manually added back')
         print('\n Titles:')
         for description in partial_matches:
@@ -874,7 +874,7 @@ def name_serial_auto_map(platform, sl_dict,dat_dict,script_dir,name_serial_key=T
     redump_interactive_matches = {}
     lookup_dict, second_level_dict = nameserial_lookup_dict(redump_dict,name_serial_key)
     ignore_groups = ['no-intro','redump']
-
+    import pprint
     for soft_title, soft in sl_dict.items():
         if 'prototype' in soft['description'].lower() and skip_proto:
             continue # skip unmatched prototypes by default
@@ -896,11 +896,12 @@ def name_serial_auto_map(platform, sl_dict,dat_dict,script_dir,name_serial_key=T
                     # Perform a case-insensitive lookup
                     matching_keys = [key for key in lookup_dict if key[0].lower() == redump_tuple[0].lower() and key[1] == redump_tuple[1]]
                     if matching_keys:
+                        print(f'\nmatching_keys for {soft_title}:')
                         pprint.pprint(matching_keys)
                         # Retrieve the corresponding values from second level key
                         matches = [lookup_dict[key] for key in matching_keys]
-                        #print(f'found a match: {matching_keys[0]}')
-                        #print('Matching values:', matches)
+                        print(f'found a match: {matching_keys[0]}')
+                        print('Matching values:', matches)
                         redump_tuples_list.append(matches)
 
                         if len(matches[0]) == 1:
@@ -1004,6 +1005,7 @@ def build_redump_site_dict(platform,script_dir):
 
 def parse_games_table(games_dict, soup):
     table = soup.find('table', class_='games')
+    print(f'table is \n{table.text}')
     rows = table.find_all('tr')[1:]
     rev_list = {}
     for row in rows:

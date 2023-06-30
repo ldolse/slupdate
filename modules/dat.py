@@ -244,12 +244,14 @@ def comment_to_sl_dict(soft,raw_comment_dict,sl_dict):
     redump_sources = []
     rom_sources = {}
     notenum = 1
+    mismatch = False
     disc_count = len(sl_dict[s_name]['parts'])
     # get number of TOC files in the comment
     total_toc = sum(len(re.findall(toc, comment)) for comments in raw_comment_dict.values() for comment in comments)
-    if disc_count != total_toc:
-        print(f'mismatched toc/disc count for {s_name} {total_toc} toc / {disc_count} disc(s)')
-    elif disc_count > 1:
+    if disc_count != total_toc and total_toc > 0:
+        print(f' * mismatched toc/disc count for {s_name} {total_toc} toc / {disc_count} disc(s)\n   - Please ensure the source references are attached to the correct disc')
+        mismatch = True
+    if disc_count > 1:
         split_sources = True
     for comment_location, comments in raw_comment_dict.items():
         notedict = {}
@@ -272,6 +274,7 @@ def comment_to_sl_dict(soft,raw_comment_dict,sl_dict):
                 #print(f'rom_comments are\n{rom_comments}')
                 comments_by_disc = split_data_by_discs(rom_comments)
                 #print(f'have {len(comments_by_disc)} rom comments in {s_name}')
+                # separate out the individual comment lines to the different types of comments
                 note_entry,rom_entry,redump_source_info = process_commentlines(info_comments)
                 notes += note_entry.strip()
                 redump_sources += redump_source_info
@@ -288,10 +291,14 @@ def comment_to_sl_dict(soft,raw_comment_dict,sl_dict):
                 note_entry,rom_entry,redump_source_info = process_commentlines(comment)
                 notes += note_entry
                 redump_sources += redump_source_info
+                # convert commented DAT entries to a dict
                 if rom_entry:
-                    # convert commented DAT entries to a dict
+                    # keep the comment associated with the assigned disc
                     if comment_location.startswith('cdrom'):
                         rom_sources[comment_location] = sl_romhashes_to_dict(rom_entry)
+                    # if discs/sources mismatch for a single disc, assign to the first disc
+                    elif mismatch:
+                        rom_sources['cdrom1'] = sl_romhashes_to_dict(rom_entry)
                     else:
                         rom_sources['cdrom'] = sl_romhashes_to_dict(rom_entry)
 
@@ -310,7 +317,10 @@ def comment_to_sl_dict(soft,raw_comment_dict,sl_dict):
             #if rom_dict and comment_location.startswith('cdrom'):
             for location, rom_data in rom_sources.items():
                 if location.startswith('cdrom'):
-                    comment_dest = sl_dict[s_name]['parts'][location]
+                    try:
+                        comment_dest = sl_dict[s_name]['parts'][location]
+                    except:
+                        print(f'Error writing hashes for {s_name}, {location}, check the softlist entry')
                 else:
                     location = 'cdrom'
                 concatenated_hashes, source_type, sizes = rom_entries_to_source_ids(s_name,rom_data['file_list'])
@@ -580,51 +590,68 @@ def add_redump_names_to_slist(softlist_xml_file, answerdict,redump_name_list):
                 software.insert(part_index, new_tag)
     write_softlist_output(tree,softlist_xml_file,tags_with_whitespace)
 
-
-def update_rom_source_refs(softlist_xml_file,sl_dict,dat_dict):
-    '''
-    new_sources_map is a dict with the following structure:
-    (soft_title, part) = {  'raw_romlist':dat_platform_dict['hashes'][dat][dat_key]['raw_romlist'],
-                            'orig_title':orig_title,
-                            'redump_title':redump_title,
-                            'redump_lookup':redump_lookup,
-                            'source_dat':dat,
-                            'soft_description':soft_description}
-    '''
-    # build a dictionary for whitespace in tags that lxml will delete
-    tags_with_whitespace = get_lxml_replacements(softlist_xml_file)
-    # Parse the XML file using lxml
-    parser = etree.XMLParser(remove_blank_text=False, strip_cdata=False)
-    tree = etree.parse(softlist_xml_file, parser)
-    root = tree.getroot()
-    for soft,soft_data in sl_dict.items():
-        if 'update_required' not in soft_data:
-            continue
-        elif soft_data['update_required']:
-            for disc, part_data in soft_data['parts'].items():
-                orig_title = 'Unknown/Unmatched'
-                if 'raw_rom_entry' in part_data:
-                    if 'original_matches' in part_data:
-                        if 'source_name' in part_data['original_matches']:
-                            orig_title = part_data['original_matches']['source_name']
-                        elif 'file_list' in part_data['original_matches']:
-                            source_files = part_data['original_matches']['file_list']
-                            orig_title = next(iter(source_files))
-                    source_group = part_data['source_group']
-                    print(f'\nupdating {soft}, {soft_data["soft_description"]}')
-                    print(f'  Original Source Title: {orig_title}')
-                    print(f'     {source_group} Replacement: {part_data["source_name"]}')
-                    modify_rom_source_refs(root,soft,part_data['raw_romlist'],disc)
-    write_softlist_output(tree,softlist_xml_file,tags_with_whitespace)
-
-
 def modify_rom_source_refs(xml_root, software_name, rom_strings, disc):
+    software_nodes = xml_root.xpath(f'//software[@name="{software_name}"]')
+
+    for software_node in software_nodes:
+        if disc == 'cdrom':
+            handle_comment_nodes(software_node, rom_strings, disc)
+        else:
+        
+            part_nodes = software_node.xpath(f'part[@name="{disc}"]')
+            for part_node in part_nodes:
+                handle_comment_nodes(part_node, rom_strings, disc)
+
+    return xml_root
+
+
+def handle_comment_nodes(node, rom_strings, disc):
+    comment_nodes = node.xpath('comment()')
+    if disc == 'cdrom':
+        w_s = '\t\t'
+        trail = '\n\t\t'
+    else:
+        w_s = '\t\t\t'
+        trail = '\n\t\t\t'
+    if comment_nodes:
+        for comment_node in comment_nodes:
+            comment_text = comment_node.text.strip()  # Extract comment content as a string
+            if any(line.strip().startswith('<rom') for line in comment_text.splitlines()):
+                # Remove rom entries from the rewritten comment
+                rewritten_comment = ''
+                for line in comment_text.splitlines():
+                    if line.strip().startswith('<rom'):
+                        continue
+                    rewritten_comment += w_s + line + '\n'
+
+                # Add the new rom entries to the rewritten comment
+                for rom_string in rom_strings:
+                    rewritten_comment += w_s + rom_string + '\n'
+
+                rewritten_comment = etree.Comment(trail + rewritten_comment.strip() + trail)
+                rewritten_comment.tail = trail
+                node.replace(comment_node, rewritten_comment)
+
+    else:
+        new_comment = etree.Comment('\n')
+        for rom_string in rom_strings:
+            new_comment.text += w_s + rom_string + '\n'
+        new_comment.text += w_s
+        new_comment.tail = trail
+        node.insert(0, new_comment)
+
+
+
+def modify_rom_source_refs_old(xml_root, software_name, rom_strings, disc):
     software_nodes = xml_root.xpath(f'//software[@name="{software_name}"]')
 
     for software_node in software_nodes:
         comment_nodes = software_node.xpath('comment()')
 
         if comment_nodes:
+            if len(comment_nodes) > 1:
+                import pprint
+                pprint.pprint(comment_nodes)
             comment_node = comment_nodes[0]
             comment_text = comment_node.text.strip()  # Extract comment content as a string
             rewritten_comment = ''

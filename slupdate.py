@@ -15,6 +15,7 @@ from modules.utils import save_data,restore_dict,list_menu
 import modules.chd
 import modules.mapping
 import modules.dat
+from modules.mapping import update_soft_dict
 
 try:
     # get the script location directory to ensure settings are saved and update environment var
@@ -94,6 +95,7 @@ menu_msgs = {'0' : 'Main Menu, select an option',
              'chd' : 'CHD Builder Destination Directory',
              'dat' : 'DAT Source Directories',
              'rom' : 'ROM Source Directories',
+             '4' : 'Settings',
              '5b' : 'Select a console to configure ',
              '5c' : 'Select a DAT to remove',
              'dir_d' : 'Select a Directory to Remove',
@@ -140,17 +142,13 @@ menu_lists = {'0' : [('1. Mapping Functions', 'map'),
                     ('e. Back', '0')],
              'dat' : [('Add Directories','platform_dat_rom_function'),
                       ('Remove DATs','del_dats_function'),
-                      ('Back', '5')],
+                      ('Back', '4')],
     }
     
 def sl_update_function(platform):
     from modules.dat import update_rom_source_refs
     update_rom_source_refs(settings['sl_dir']+os.sep+platform+'.xml',softlist_dict[platform],all_dat_dict[platform])
     return 'map-2'
-
-def sl_update_function(platform):
-    print('placeholder')
-    return 'map-3'
 
 def list_missing_function(platform):
     from modules.mapping import get_missing_zips
@@ -204,7 +202,7 @@ def main_menu(exit):
                 # return to the previous menu after completing the function
                 menu_sel = list(answer)[0]
 
-        elif menu_sel == '5' and answer[menu_sel] == '0':
+        elif menu_sel == '4' and answer[menu_sel] == '0':
             # save settings when exiting settings and returning to main menu
             save_data(settings,'settings',script_dir)
             menu_sel = answer[menu_sel]
@@ -338,7 +336,7 @@ def platform_select(list_type='rom'):
 
 
 def  hash_map_function(platform):
-    from modules.mapping import fuzzy_hash_compare,interactive_title_mapping,update_soft_dict
+    from modules.mapping import fuzzy_hash_compare,interactive_title_mapping
     fuzzy_matches = fuzzy_hash_compare(softlist_dict[platform], all_dat_dict[platform])
     confirmed = interactive_title_mapping(fuzzy_matches, softlist_dict[platform], all_dat_dict[platform], 'fuzzy')
     if confirmed:
@@ -348,7 +346,7 @@ def  hash_map_function(platform):
 
         
 def tosec_map_function(platform):
-    from modules.mapping import build_redump_tosec_tuples,map_tosec_entries,update_soft_dict
+    from modules.mapping import build_redump_tosec_tuples,map_tosec_entries
     redump_tuples = {}
     if platform in softlist_dict:
         '''
@@ -608,6 +606,9 @@ def root_dirs_function():
     settings.update({'romvault' : romvault})
 
 def del_dats_function(platform):
+    if platform not in settings:
+        print(f'{platform} not configured')
+        return '4'
     datlist = []
     for dat in settings[platform].keys():
         print('deleting '+settings['datroot']+'\nfrom '+dat)
