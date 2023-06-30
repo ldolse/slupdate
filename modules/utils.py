@@ -1,5 +1,3 @@
-
-import xmltodict
 import glob
 import os
 import re
@@ -40,15 +38,6 @@ def get_dat_paths(platform, datpaths, sl_dat_map):
     files = glob.glob(redump_pattern)
     redump_path = files[0]
     return [slpath, redump_path]
-    
-def convert_xml(file, comments=False):
-    #read xml content from the file
-    fileptr = open(file,"r",encoding='utf-8')
-    xml_content= fileptr.read()
-    #print("XML content is:")
-    #print(xml_content)
-    my_ordered_dict=xmltodict.parse(xml_content, process_comments=comments, force_list=('info','rom',))
-    return my_ordered_dict
     
 def history(search=None):
     import readline

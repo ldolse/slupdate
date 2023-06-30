@@ -30,10 +30,32 @@ redump__platform_paths = { 'jaguar':'ajcd',
                      '3do_m2':'3do'
                     }
 
-def map_no_source_entries(sl_dict):
-    for soft, soft_data in sl_dict.items():
-        if not soft_data['source_parsed']:
-            print(soft_data['description'])
+def get_source_stats(sl_dict):
+    '''
+    builds a dict with the total number of dumps which can be attributed to each source group
+    '''
+    from collections import defaultdict
+    group_counts = defaultdict(int)
+
+    for soft_entry in sl_dict.values():
+        for part in soft_entry['parts'].values():
+            if 'source_group' in part:
+                group_counts[part['source_group']] += 1
+
+    return dict(group_counts)
+
+def print_source_stats(source_stats,total_source_ref):
+    '''
+    prints the dict returned by get_source_stats as percentages
+    '''
+    known_sum = 0
+    for group, group_count in source_stats.items():
+        known_sum += group_count
+        percentage = (group_count / total_source_ref) * 100
+        print(f"  {group}: {percentage:.1f}%")
+    if total_source_ref >= 1:
+        other_percent = ((total_source_ref - known_sum) / total_source_ref) * 100
+        print(f"  Unknown: {other_percent:.1f}%")
 
 def build_redump_tosec_tuples(dat_hash_dict,platform):
     supported_platforms = ['dc']
@@ -42,46 +64,93 @@ def build_redump_tosec_tuples(dat_hash_dict,platform):
         return redump_tosec_tuples
     else:
         for source_id, source_info in dat_hash_dict.items():
-            entry_tuple = get_tosec_tuples(source_info['file_list'])
+            debug = False
+            if source_id[1] == 'crc':
+                if debug:
+                    print(f'skipping debug {source_info["name"]}')
+                continue
+            entry_tuple = get_tosec_tuples(source_info['file_list'],debug)
             if entry_tuple:
                 redump_tosec_tuples[entry_tuple] = source_id
         return redump_tosec_tuples
 
 
-def get_tosec_tuples(rom_entry):
+def get_tosec_tuples(rom_entry,debug=False):
     '''
     dreamcast - track 1 and track 3 share the same hashes for both groups
     '''
     track_hashes = []
     for filename, data in rom_entry.items():
-        if filename.endswith('(Track 1).bin') or filename.endswith('track01.bin'):
+        match_info = filename.lower()
+        if debug:
+            print(match_info)
+        if match_info.endswith('(track 1).bin') or match_info.endswith('track01.bin') or match_info.endswith('track 01).bin'):
             track_hashes.append(data['@crc'])
-        elif filename.endswith('(Track 3).bin') or filename.endswith('track03.bin'):
+        elif match_info.endswith('(track 3).bin') or match_info.endswith('track03.bin') or match_info.endswith('track 03).bin'):
             track_hashes.append(data['@crc'])
+    if debug:
+        print(f'Track hashes: {track_hashes}')
     if len(track_hashes) == 2:
         return tuple(track_hashes)
     else:
         return None
 
-def update_soft_dict(sl_dict,new_sources_map):
+def update_soft_dict(sl_dict,dat_dict,new_sources_map):
     '''
     new_sources_map is a dict with the following structure:
     (soft_title, part) = {  'raw_romlist':dat_dict['hashes'][dat][source_sha]['raw_romlist'],
                             'orig_title':'orig_title',
-                            'redump_title':'redump_title',
+                            'source_name':'source_name',
                             'source_sha':'source_sha',
                             'source_dat':'dat',
                             'source_group':'redump',
                             'soft_description':'soft_description'}
     '''
     for disc_key, replace_data in new_sources_map.items():
-        new_data = { 'source_dat':replace_data['source_dat'],
-                     'source_sha':replace_data['source_sha'],
-                     'source_group':replace_data['source_group']
-        }
-        sl_dict[disc_key[0]]['parts'][disc_key[1]].update(new_data)
-        if 'source_rom' in sl_dict[disc_key[0]]['parts'][disc_key[1]]:
-            sl_dict[disc_key[0]]['parts'][disc_key[1]].pop('source_rom')
+        soft_name = disc_key[0]
+        soft_part = sl_dict[soft_name]['parts'][disc_key[1]]
+        new_dat = replace_data['source_dat']
+        new_sha = replace_data['source_sha']
+        orig_data = {}
+        new_data = { 'source_dat':new_dat,
+                     'source_sha':new_sha,
+                     'source_name':replace_data['source_name'],
+                     'source_group':replace_data['source_group'],
+                     'raw_rom_entry':replace_data['raw_romlist']
+                   }
+        # get original source info if it exists and update the orig dat entry
+        if 'source_sha' in soft_part:
+            print(f'getting original data for {soft_name}')
+            orig_sha = soft_part.pop('source_sha')
+            orig_data = { 'source_sha':orig_sha,
+                          'file_list':soft_part.pop('file_list')
+                        }
+            if 'source_dat' in soft_part:
+                orig_dat = soft_part.pop('source_dat')
+                orig_data.update({ 'source_dat':orig_dat,
+                                   'source_group':soft_part.pop('source_group'),
+                                   'source_name':soft_part.pop('source_name')
+                                })
+                # get the indices of this softlist entry in the dat match list and remove them
+                dat_matches = dat_dict['hashes'][orig_dat][orig_sha]['softlist_matches']
+                match_index = [i for i, soft in enumerate(dat_matches) if soft == soft_name]
+                for i in match_index:
+                    dat_matches.pop(i)
+        soft_part.update(new_data)
+        # store the old match data in a new dict
+        if orig_data:
+            soft_part.update({'original_matches':orig_data})
+        # add the soflist entry to the new dat entry
+        new_dat_entry = dat_dict['hashes'][new_dat][new_sha]
+        if 'softlist_matches' not in new_dat_entry:
+            new_dat_entry['softlist_matches'] = [soft_name]
+        elif soft_name not in new_dat_entry['softlist_matches']:
+            new_dat_entry['softlist_matches'].append(soft_name)
+        # get rid of any previously matched source rom reference
+        if 'source_rom' in soft_part:
+            soft_part.pop('source_rom')
+        # flag update for later functions to leverage
+        sl_dict[soft_name]['update_required'] = True
 
 
 def map_tosec_entries(sl_dict,dat_dict,redump_tuples):
@@ -90,7 +159,6 @@ def map_tosec_entries(sl_dict,dat_dict,redump_tuples):
     cdi - all tracks are identical in most cases
     '''
     tosec_matches = {}
-    redump_pop_list = []
     partial_matches = []
     for soft, soft_data in sl_dict.items():
         match_tuples = []
@@ -101,15 +169,16 @@ def map_tosec_entries(sl_dict,dat_dict,redump_tuples):
                     tosec = True
                     # build the tuple
                     tosec_tuple = get_tosec_tuples(dat_dict['hashes'][part_data['source_dat']][part_data['source_sha']]['file_list'])
-                    #print(f'{soft} {part} TOSEC Tuple: {tosec_tuple}')
+                    print(f'{soft} {part} TOSEC Tuple: {tosec_tuple}')
                     orig_title = dat_dict['hashes'][part_data['source_dat']][part_data['source_sha']]['name']
                     # if there is a match then get the redump hashes
                     if tosec_tuple in redump_tuples:
+                        print('found tosec tuple in redump tuples')
                         source_sha = redump_tuples[tosec_tuple]
                         for dat, group in dat_dict['dat_group'].items():
                             if group == 'redump':
                                 if source_sha in dat_dict['hashes'][dat]:
-                                    #print(f'{soft} redump lookup: {source_sha}')
+                                    print(f'{soft} redump lookup: {source_sha}')
                                     # match key is a tuple using the soft name and part number
                                     match_key = (soft,part)
                                     match_tuples.append(match_key)
@@ -117,8 +186,6 @@ def map_tosec_entries(sl_dict,dat_dict,redump_tuples):
                                     title_matched = False
                                     for unmatch_dat in dat_dict['unmatched'].keys():
                                         if redump_title in dat_dict['unmatched'][unmatch_dat]:
-                                            #print('Got a DAT match for '+soft_data['description']+' and '+redump_title)
-                                            redump_pop_list.append(redump_title)
                                             title_matched = True
                                     if not title_matched:
                                         print('The redump match for '+soft_data['description']+', ('+redump_title+') has already been attached to another entry')
@@ -136,8 +203,7 @@ def map_tosec_entries(sl_dict,dat_dict,redump_tuples):
         for description in partial_matches:
             print(f'    {description}')
         print('\n\n')
-    return tosec_matches, redump_pop_list
-
+    return tosec_matches
 
 def requests_retry_session(
     retries=4,
@@ -614,6 +680,21 @@ def fuzzy_hash_compare(sl_dict,dat_dict,skip_prototype=True):
                 print(f"Match for {soft}: {result[1]} out of {result[2]}, dat name: {result[0]}")
     return replacements
 
+def get_unmatched_roms(sl_dict):
+    unmatched = {}
+    for soft,soft_data in sl_dict.items():
+        for disc,part_data in soft_data['parts'].items():
+            if 'source_dat' not in part_data and 'file_list' in part_data:
+                user_disc = get_user_disc(disc)
+                if user_disc:
+                    user_disc = ' '+user_disc
+                dat_title = f'{part_data["chd_filename"]}{user_disc}'
+                if dat_title in unmatched:
+                    dat_title = soft+' - '+dat_title
+                unmatched.update({dat_title:part_data['file_list']})
+    return unmatched
+                
+
 
 def interactive_title_mapping(interactive_matches,sl_dict,dat_dict,match_type='redump_serial'):
     '''
@@ -706,7 +787,7 @@ def interactive_title_mapping(interactive_matches,sl_dict,dat_dict,match_type='r
         possible_matches = []
         confirmed_matches = {}
         for match_dat in dat_dict['unmatched'].keys():
-            # skip non redump dats
+            # skip non redump dats except for fuzzy matches based on individual hashes
             if dat_dict['dat_group'][match_dat] == 'redump' or match_type == 'fuzzy':
                 possible_matches = possible_matches+[*dat_dict['unmatched'][match_dat]]
             else:
@@ -745,7 +826,7 @@ def interactive_title_mapping(interactive_matches,sl_dict,dat_dict,match_type='r
         return confirmed_matches
 
   
-def create_update_entry(soft_key,sl_dict,dat_dict,dat,redump_title,new_source_sha):
+def create_update_entry(soft_key,sl_dict,dat_dict,dat,source_name,new_source_sha):
     if 'source_dat' in sl_dict[soft_key[0]]['parts'][soft_key[1]]:
         # need to check if there are orig before populating these
         orig_dat = sl_dict[soft_key[0]]['parts'][soft_key[1]]['source_dat']
@@ -757,12 +838,20 @@ def create_update_entry(soft_key,sl_dict,dat_dict,dat,redump_title,new_source_sh
     soft_description = sl_dict[soft_key[0]]['description']
     return {soft_key : { 'raw_romlist':raw_romlist,
                         'orig_title':orig_title,
-                        'redump_title':redump_title,
+                        'source_name':source_name,
                         'source_sha':new_source_sha,
                         'source_dat':dat,
                         'source_group':'redump',
                         'soft_description':soft_description
                         }}
+
+def get_user_disc(mame_part):
+    if mame_part == 'cdrom':
+        return ''
+    else:
+    # set a string for the disc number to use later
+        num = re.sub(r'cdrom(\d+)$',r'\1',mame_part)
+        return f'(Disc {num})'
 
 
 def name_serial_auto_map(platform, sl_dict,dat_dict,script_dir,name_serial_key=True,skip_proto=True):
@@ -775,7 +864,6 @@ def name_serial_auto_map(platform, sl_dict,dat_dict,script_dir,name_serial_key=T
     '''
     print('Starting serial and name mapping')
     redump_softlist_matches = {}
-    redump_pop_list = []
     redump_tuples_list = []
     debug_list = []
     sl_href_lookups = href_lookup_dict(sl_dict)
@@ -795,16 +883,12 @@ def name_serial_auto_map(platform, sl_dict,dat_dict,script_dir,name_serial_key=T
             if 'source_group' in part_data and any(group in part_data['source_group'].lower() for group in ignore_groups):
                 continue
             # set a string for the disc number to use later
-            disc = ''
-            if part == 'cdrom1':
-                disc = ' (Disc 1)'
-            elif part == 'cdrom2':
-                disc = ' (Disc 2)'
+            disc = get_user_disc(part)
+
             # sanitize the description to better match no-intro standard
             nointrofix = tweak_nointro_dat(soft['description'].strip())
             if disc:
                 nointrofix = nointrofix + disc
-            import pprint
             if 'serial' in soft and name_serial_key:
                 for ser in soft['serial']:
                     redump_tuple = (nointrofix,ser)
@@ -813,7 +897,7 @@ def name_serial_auto_map(platform, sl_dict,dat_dict,script_dir,name_serial_key=T
                     matching_keys = [key for key in lookup_dict if key[0].lower() == redump_tuple[0].lower() and key[1] == redump_tuple[1]]
                     if matching_keys:
                         pprint.pprint(matching_keys)
-                        # Retrieve the corresponding values from second_level_dict
+                        # Retrieve the corresponding values from second level key
                         matches = [lookup_dict[key] for key in matching_keys]
                         #print(f'found a match: {matching_keys[0]}')
                         #print('Matching values:', matches)
@@ -829,15 +913,19 @@ def name_serial_auto_map(platform, sl_dict,dat_dict,script_dir,name_serial_key=T
                         else:
                             redump_interactive_matches.update({(soft_title,part):matches[0]})
 
-
             else: # generate a lookup list based on close matches
+                print(f'\ngen matching keys for {soft_title}, {disc}')
                 matching_keys = get_close_matches(nointrofix, lookup_dict.keys(),n=5)
                 if matching_keys:
-                    print('key match')
-                    # Retrieve the corresponding values from second_level_dict
-                    matches = [lookup_dict[key] for key in matching_keys]
-                    redump_interactive_matches.update({(soft_title,part):matches[0]})
-
+                    print(f'key match for {soft_title}, {disc}: {matching_keys}')
+                    # Retrieve the corresponding values for the detailed options
+                    matches = []
+                    for key in matching_keys:
+                        matches += lookup_dict[key]
+                    print(f'L2 matches are: {matches}')
+                    redump_interactive_matches.update({(soft_title,part):matches})
+    from modules.utils import write_data
+    write_data([redump_interactive_matches,lookup_dict])
     if len(redump_single_matches) >= 1:
         # iterate through the matches to see if there are unmatched redump dat entries which match these names
         print(f'\n\n Found {len(redump_single_matches)} discs which should support automatic re-mapping, but results should be closely reviewed')
@@ -865,15 +953,14 @@ def name_serial_auto_map(platform, sl_dict,dat_dict,script_dir,name_serial_key=T
                     # pass the required info to a function which creates a key to append to a list of matches
                     new_source_sha = (dat_dict['unmatched'][dat][redump_title]['sha1_digest'], 'sha1')
                     redump_softlist_matches.update(create_update_entry(soft_key,sl_dict,dat_dict,dat,redump_title,new_source_sha))
-                    redump_pop_list.append(redump_title)
 
-    from modules.utils import write_data
-    debug_list.append({'redump_tuples_list':redump_tuples_list})
-    debug_list.append({'redump_single_matches':redump_single_matches})
-    debug_list.append({'redump_interactive_matches':redump_interactive_matches})
-    debug_list.append({'lookup_dict':lookup_dict})
-    write_data(debug_list)
-    return redump_softlist_matches, redump_interactive_matches, redump_pop_list
+    #from modules.utils import write_data
+    #debug_list.append({'redump_tuples_list':redump_tuples_list})
+    #debug_list.append({'redump_single_matches':redump_single_matches})
+    #debug_list.append({'redump_interactive_matches':redump_interactive_matches})
+    #debug_list.append({'lookup_dict':lookup_dict})
+    #write_data(debug_list)
+    return redump_softlist_matches, redump_interactive_matches
 
        
 

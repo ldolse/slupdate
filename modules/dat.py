@@ -1,3 +1,4 @@
+import xmltodict
 import re, xmltodict, hashlib
 import xml.etree.ElementTree as ET
 import html
@@ -7,33 +8,14 @@ from  lxml import etree
 '''
 XML processing functions for dat and softlist files
 '''
-
-def get_source_stats(sl_dict):
-    '''
-    builds a dict with the total number of dumps which can be attributed to each source group
-    '''
-    from collections import defaultdict
-    group_counts = defaultdict(int)
-
-    for soft_entry in sl_dict.values():
-        for part in soft_entry['parts'].values():
-            if 'source_group' in part:
-                group_counts[part['source_group']] += 1
-
-    return dict(group_counts)
-
-def print_source_stats(source_stats,total_source_ref):
-    '''
-    prints the dict returned by get_source_stats as percentages
-    '''
-    known_sum = 0
-    for group, group_count in source_stats.items():
-        known_sum += group_count
-        percentage = (group_count / total_source_ref) * 100
-        print(f"  {group}: {percentage:.1f}%")
-    if total_source_ref >= 1:
-        other_percent = ((total_source_ref - known_sum) / total_source_ref) * 100
-        print(f"  Unknown: {other_percent:.1f}%")
+def convert_xml(file, comments=False):
+    #read xml content from the file
+    fileptr = open(file,"r",encoding='utf-8')
+    xml_content= fileptr.read()
+    #print("XML content is:")
+    #print(xml_content)
+    my_ordered_dict=xmltodict.parse(xml_content, process_comments=comments, force_list=('info','rom',))
+    return my_ordered_dict
 
 def get_sl_descriptions(softlist,dat_type,field):
     '''
@@ -311,7 +293,7 @@ def comment_to_sl_dict(soft,raw_comment_dict,sl_dict):
                     if comment_location.startswith('cdrom'):
                         rom_sources[comment_location] = sl_romhashes_to_dict(rom_entry)
                     else:
-                        rom_sources[s_name] = sl_romhashes_to_dict(rom_entry)
+                        rom_sources['cdrom'] = sl_romhashes_to_dict(rom_entry)
 
         # set the proper destinations based on whether the comment came from the root of 
         # the softlist or if it came from a disc part
@@ -489,7 +471,7 @@ def write_softlist_output(tree,softlist_xml_file,tags_with_whitespace):
     with open(softlist_xml_file, "w",encoding='utf-8') as f:
         f.write(output)
 
-def update_softlist_chd_sha1s(softlist_xml_file, soft_dict):
+def update_softlist_chd_sha1s(softlist_xml_file, sl_dict):
     # build a dictionary for whitespace in tags that lxml will delete
     tags_with_whitespace = get_lxml_replacements(softlist_xml_file)
     # Parse the XML file using lxml
@@ -500,7 +482,7 @@ def update_softlist_chd_sha1s(softlist_xml_file, soft_dict):
         soft_entry_parts = {}
         needs_update = False
         try:
-            soft_entry_parts = soft_dict[software.get('name')]['parts']
+            soft_entry_parts = sl_dict[software.get('name')]['parts']
         except:
             # print an error as this is unexpected:
             print('Unexpected mismatch in for game title '+software.get('name')+'\nSoftlist: '+softlist_xml_file)
@@ -599,10 +581,10 @@ def add_redump_names_to_slist(softlist_xml_file, answerdict,redump_name_list):
     write_softlist_output(tree,softlist_xml_file,tags_with_whitespace)
 
 
-def update_rom_source_refs(softlist_xml_file, new_sources_map):
+def update_rom_source_refs(softlist_xml_file,sl_dict,dat_dict):
     '''
     new_sources_map is a dict with the following structure:
-    (soft_title, part) = {  'raw_romlist':dat_platform_dict['hashes'][dat][redump_lookup]['raw_romlist'],
+    (soft_title, part) = {  'raw_romlist':dat_platform_dict['hashes'][dat][dat_key]['raw_romlist'],
                             'orig_title':orig_title,
                             'redump_title':redump_title,
                             'redump_lookup':redump_lookup,
@@ -615,11 +597,24 @@ def update_rom_source_refs(softlist_xml_file, new_sources_map):
     parser = etree.XMLParser(remove_blank_text=False, strip_cdata=False)
     tree = etree.parse(softlist_xml_file, parser)
     root = tree.getroot()
-    for disc_key, replace_data in new_sources_map.items():
-        print(f'\nupdating {disc_key[0]}, {replace_data["soft_description"]}')
-        print(f'  Original Source Title: {replace_data["orig_title"]}')
-        print(f'     Redump Replacement: {replace_data["redump_title"]}')
-        modify_rom_source_refs(root,disc_key[0],replace_data['raw_romlist'],disc_key[1])
+    for soft,soft_data in sl_dict.items():
+        if 'update_required' not in soft_data:
+            continue
+        elif soft_data['update_required']:
+            for disc, part_data in soft_data['parts'].items():
+                orig_title = 'Unknown/Unmatched'
+                if 'raw_rom_entry' in part_data:
+                    if 'original_matches' in part_data:
+                        if 'source_name' in part_data['original_matches']:
+                            orig_title = part_data['original_matches']['source_name']
+                        elif 'file_list' in part_data['original_matches']:
+                            source_files = part_data['original_matches']['file_list']
+                            orig_title = next(iter(source_files))
+                    source_group = part_data['source_group']
+                    print(f'\nupdating {soft}, {soft_data["soft_description"]}')
+                    print(f'  Original Source Title: {orig_title}')
+                    print(f'     {source_group} Replacement: {part_data["source_name"]}')
+                    modify_rom_source_refs(root,soft,part_data['raw_romlist'],disc)
     write_softlist_output(tree,softlist_xml_file,tags_with_whitespace)
 
 
@@ -679,6 +674,58 @@ def modify_rom_source_refs(xml_root, software_name, rom_strings, disc):
 '''
 dat processing functions
 '''
+
+def create_dat(rom_dict,platform):
+    # Load the XSD schema
+    xsd_file = "datafile/datafile.xsd"
+    schema = etree.XMLSchema(file=xsd_file)
+
+    # Create the root element of the XML tree
+    root = etree.Element("datafile")
+
+    # Create child elements and set their values
+    header = etree.SubElement(root, "header")
+    name = etree.SubElement(header, "name")
+    name.text = f'MAME {platform} Unmatched'
+    # Add other child elements and their values as needed
+
+    for game_name, game_details in rom_dict.items():
+        #print(f'writing contents for {game_name}')
+        game = etree.SubElement(root, "game")
+        game.set("name", game_name)
+        # Set other attributes for the game element as needed
+
+        # Create child elements for the ROM details and set their values
+        description = etree.SubElement(game, "description")
+        description.text = game_details.get("description", "")
+
+        for rom_name, rom_details in game_details.items():
+            # Add the ROM file details as sub-elements
+            rom = etree.SubElement(game, "rom")
+            rom.set("name", rom_name)
+            rom.set("size", rom_details['@size'])
+            if '@crc' in rom_details:
+                rom.set("crc", rom_details['@crc'])
+            if '@md5' in rom_details:
+                rom.set("md5", rom_details['@md5'])
+            if '@sha1' in rom_details:
+                rom.set("sha1", rom_details['@sha1'])
+
+    # Create the XML tree
+    tree = etree.ElementTree(root)
+
+    # Validate the XML tree against the XSD schema
+    is_valid = schema.validate(tree)
+    
+    dat_file = f'dat/mame {platform} unmatched.dat'
+    # write the XML tree if valid
+    if not is_valid:
+        pass
+        #print("The XML tree is not valid according to the XSD schema.")
+    xml_string = etree.tostring(tree, xml_declaration=True, pretty_print=True, doctype='<!DOCTYPE datafile PUBLIC "-//Logiqx//DTD ROM Management Datafile//EN" "http://www.logiqx.com/Dats/datafile.dtd">', encoding="UTF-8").decode("UTF-8")
+    with open(dat_file, "w",encoding='utf-8') as f:
+        f.write(xml_string)
+
 def build_dat_dict(datfile,dat_dict):
     '''
     grabs data from dat structure puts it into a new dict
@@ -827,8 +874,7 @@ def create_dat_hash_dict_xml(datroot,dat_group):
         raw_romlist = []
         size = 0
         name = game.get('name')
-        if dat_group == 'redump':
-            raw_romlist = get_raw_rom_entry(game)
+        raw_romlist = get_raw_rom_entry(game)
         files = len(game.findall('rom'))
         sha1 = hashlib.sha1()
         for rom in game.findall('rom'):
