@@ -331,23 +331,26 @@ def tweak_nointro_dat(stitle, languages=[], region=''):
     doesn't handle revisions or any of the less frequently used fields
     '''
     lang_sub = {
-        'English': 'En',
+         'English': 'En',
         'Japanese': 'Ja',
-        'French': 'Fr',
-        'German': 'De',
-        'Spanish': 'Es',
-        'Italian': 'It',
-        'Dutch': 'Nl',
-        'Portuguese': 'Pt',
-        'Swedish': 'Sv',
-        'Norwegian': 'No',
-        'Danish': 'Da',
-        'Finnish': 'Fi',
-        'Chinese': 'Zh',
-        'Korean': 'Ko',
-        'Polish': 'Pl',
-        'Russian': 'Ru',
-        'Arabic': 'Ar'
+          'French': 'Fr',
+          'German': 'De',
+         'Spanish': 'Es',
+         'Italian': 'It',
+           'Dutch': 'Nl',
+      'Portuguese': 'Pt',
+         'Swedish': 'Sv',
+       'Norwegian': 'No',
+          'Danish': 'Da',
+         'Finnish': 'Fi',
+         'Chinese': 'Zh',
+          'Korean': 'Ko',
+          'Polish': 'Pl',
+         'Russian': 'Ru',
+          'Arabic': 'Ar',
+           'Czech': 'Cs',
+         'Catalan': 'Ca',
+                '':''
     }
     disc_pat = r'\s\(Disc\s\d+\)'
     disc_match = re.findall(disc_pat, stitle)
@@ -925,8 +928,8 @@ def name_serial_auto_map(platform, sl_dict,dat_dict,script_dir,name_serial_key=T
                         matches += lookup_dict[key]
                     print(f'L2 matches are: {matches}')
                     redump_interactive_matches.update({(soft_title,part):matches})
-    from modules.utils import write_data
-    write_data([redump_interactive_matches,lookup_dict])
+
+
     if len(redump_single_matches) >= 1:
         # iterate through the matches to see if there are unmatched redump dat entries which match these names
         print(f'\n\n Found {len(redump_single_matches)} discs which should support automatic re-mapping, but results should be closely reviewed')
@@ -989,7 +992,7 @@ def build_redump_site_dict(platform,script_dir):
     games_dict = {}
     redump_url = 'http://redump.org/discs/system/'+redump__platform_paths[platform]+'/'
     html = requests_retry_session().request("GET", redump_url, timeout=3)
-    soup = BeautifulSoup(html.text, 'xml')
+    soup = BeautifulSoup(html.text, 'lxml')
     max_page = get_largest_page_number(soup)
     games_dict = {}
     games_dict.update(parse_games_table(games_dict,soup))
@@ -997,7 +1000,7 @@ def build_redump_site_dict(platform,script_dir):
         time.sleep(3)
         url = redump_url+'?page='+str(page)
         html = requests_retry_session().request("GET", url, timeout=3)
-        soup = BeautifulSoup(html.text, 'xml')
+        soup = BeautifulSoup(html.text, 'lxml')
         games_dict.update(parse_games_table(games_dict,soup))
     redump_site_dict[platform] = games_dict
     save_data(redump_site_dict,'redump_site_dict',script_dir)
