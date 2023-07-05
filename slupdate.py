@@ -264,6 +264,7 @@ def find_dat_matches(platform,sl_platform_dict,dathash_platform_dict):
                     # add the dat group to the entry
                     disc_data['source_group'] = dat_group
                     disc_data['source_name'] = dathashdict[sourcehash]['name']
+                    disc_data['raw_rom_entry'] = dathashdict[sourcehash]['raw_romlist']
                     dat_name_list.update({dathashdict[sourcehash]['name']:[datfile]})
                     
                     # add the matching entries from the softlist to the dat dict for reference
@@ -694,6 +695,7 @@ def romvault_dat_to_romfolder(dat_directory,dat_files):
     DAT directories with multiple DATs will create subfolders based on the DAT title
     returns a dict with the DAT to ROM folder mapping
     '''
+    from modules.dat import get_dat_name
     #print('dat dir is '+dat_directory)
     #rom_dir = settings['romroot']+re.sub(settings['datroot'],'',dat_directory)
     rom_dir = settings['romroot']+dat_directory.replace(settings['datroot'], '')

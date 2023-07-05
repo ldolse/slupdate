@@ -342,11 +342,16 @@ def comment_to_sl_dict(soft,raw_comment_dict,sl_dict):
                 except_dest_outer.update({except_dest_inner:notedict})
 
         if redump_sources:
-            if len(redump_sources) == 1:
+            if len(redump_sources) == 1 and comment_location == 'main_entry':
                 if 'cdrom' in sl_dict[s_name]['parts']:
                     sl_dict[s_name]['parts']['cdrom'].update({'redump_url':redump_sources[0].strip()})
                 else:
                     print(f'could not find the cdrom disc to insert redump url for {soft["@name"]}')
+            elif len(redump_sources) == 1 and comment_location.startswith('cdrom'):
+                if comment_location in sl_dict[s_name]['parts']:
+                    sl_dict[s_name]['parts'][comment_location].update({'redump_url':redump_sources[0].strip()})
+                else:
+                    print(f'could not find the {comment_location} disc to insert redump url for {soft["@name"]}')
             else:
                 discnum = 1
                 for url in redump_sources:
@@ -633,17 +638,27 @@ def update_rom_source_refs(softlist_xml_file,sl_dict,dat_dict):
             for disc, part_data in soft_data['parts'].items():
                 orig_title = 'Unknown/Unmatched'
                 if 'raw_rom_entry' in part_data:
+                    source_group = part_data['source_group']
+                    new_comment_lines = part_data['raw_rom_entry'].copy()
+                    if 'redump_url' in part_data:
+                        new_comment_lines.insert(0,part_data['redump_url'])
+                    elif source_group == 'redump':
+                        new_comment_lines.insert(0,'original images (Redump)')
+                    elif source_group == 'TOSEC':
+                        new_comment_lines.insert(0,'original images (TOSEC)')
+                    elif source_group == 'no-intro':
+                        new_comment_lines.insert(0,'original images (No-Intro)')
                     if 'original_matches' in part_data:
                         if 'source_name' in part_data['original_matches']:
                             orig_title = part_data['original_matches']['source_name']
                         elif 'file_list' in part_data['original_matches']:
                             source_files = part_data['original_matches']['file_list']
                             orig_title = next(iter(source_files))
-                    source_group = part_data['source_group']
+
                     print(f'\nupdating {soft}, {soft_data["description"]} {disc}')
                     print(f'  Original Source Title: {orig_title}')
                     print(f'     {source_group} Replacement: {part_data["source_name"]}')
-                    modify_rom_source_refs(root,soft,part_data['raw_rom_entry'],disc)
+                    modify_rom_source_refs(root,soft,new_comment_lines,disc)
     write_softlist_output(tree,softlist_xml_file,tags_with_whitespace)
 
 
@@ -654,7 +669,10 @@ def modify_rom_source_refs(xml_root, software_name, rom_strings, disc):
         if disc == 'cdrom':
             handle_comment_nodes(software_node, rom_strings,disc)
         else:
-            handle_comment_nodes(software_node, [],disc)
+            if rom_strings and rom_strings[0].startswith('http://redump.org'):
+                handle_comment_nodes(software_node, [],disc,delete_string=rom_strings[0])
+            else:
+                handle_comment_nodes(software_node, [],disc)
             part_nodes = software_node.xpath(f'part[@name="{disc}"]')
             for part_node in part_nodes:
                 handle_comment_nodes(part_node, rom_strings,disc)
@@ -662,7 +680,15 @@ def modify_rom_source_refs(xml_root, software_name, rom_strings, disc):
 
 
 
-def handle_comment_nodes(node, rom_strings, disc):
+def handle_comment_nodes(node, rom_strings, disc, delete_string=None):
+    delete_strings = ['unknown source','original images (redump)']
+    if delete_string is not None:
+        delete_strings.append(delete_string)
+    if rom_strings and rom_strings[0].startswith('http://redump.org'):
+        delete_strings.append(rom_strings[0])
+        source_url = True
+    else:
+        source_url = False
     comment_nodes = node.xpath('comment()')
     if disc == 'cdrom':
         c_head = '\t\t'
@@ -688,6 +714,13 @@ def handle_comment_nodes(node, rom_strings, disc):
                 print(f'rom 1 is:\n{rom_strings[0]}')
             else:
                 print('no rom_strings')
+            
+            for string in delete_strings:
+                comment_text = '\n'.join(line for line in comment_text.splitlines() if string not in line.strip().lower())
+                
+            # delete the comment if it's now empty
+            if comment_text.strip() == '':
+                node.remove(comment_node)            
 
             if any(line.strip().startswith('<rom') for line in comment_text.splitlines()):
                 print('removing <rom lines')
@@ -700,31 +733,48 @@ def handle_comment_nodes(node, rom_strings, disc):
 
                 # Add the new rom entries to the rewritten comment
                 if unwritten:
+                    print('writing the new lines to this comment as still unwritten')
                     for rom_string in rom_strings:
                         rewritten_comment += c_head + rom_string + '\n'
+                    if source_url:
+                        comment_head = ' '
+                        
                     unwritten = False
 
                 if rewritten_comment.strip() == '':
+                    print('comment empty after modifications')
                     node.remove(comment_node)
                     continue
                 else:
+                    print('writing the rewritten comment')
                     rewritten_comment = etree.Comment(comment_head + rewritten_comment.strip() + c_tail)
                     rewritten_comment.tail = c_tail
                     node.replace(comment_node, rewritten_comment)
                     continue
+
+            elif counter < len(comment_nodes):
+                continue # keep going as their might be better comments to insert into
+            
             elif rom_strings and unwritten:
                 print('creating a new comment because no existing comments matched modify rules')
                 create_new_comment(node,rom_strings,c_head,c_tail)
+                unwritten = False
 
-    elif unwritten:
+    elif unwritten and rom_strings:
         print(f'creating a new comment because no comments exist in this {disc} node')
         create_new_comment(node,rom_strings,c_head,c_tail)
+        unwritten = False
         
 def create_new_comment(node,rom_strings,c_head,c_tail):
-    new_comment = etree.Comment('\n')
+    if rom_strings[0].startswith('http://redump.org'):
+        comment_head = ' '
+    else:
+        comment_head = '\n'
+    new_comment_string = ''
+    new_comment = etree.Comment(comment_head)
     for rom_string in rom_strings:
-        new_comment.text += c_head + rom_string + '\n'
-    new_comment.text += c_head
+        new_comment_string += c_head + rom_string + '\n'
+    new_comment = etree.Comment(comment_head + new_comment_string.strip() + c_tail)
     new_comment.tail = c_tail
     node.insert(0, new_comment)
 

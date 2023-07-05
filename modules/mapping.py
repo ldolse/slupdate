@@ -897,7 +897,7 @@ def interactive_title_mapping(interactive_matches,sl_dict,dat_dict,platform,scri
         source_dat = None
         source_name = None
         print(f'redump_sha_href is {redump_sha_href}')
-        print(f'downloading hashes for {match_list[0][0]} from the redump website')
+        print(f'downloading hashes for {dat_title_name} from the redump website')
         redump_hash_key = get_redump_site_file_data(redump_sha_href,redump_dict_entry)
         #redump_hash_key = calculate_hash(preprocess_redump_sha_txt(redump_sha_href))
         print(f'redump_hash_key is {redump_hash_key}')
@@ -954,9 +954,10 @@ def interactive_title_mapping(interactive_matches,sl_dict,dat_dict,platform,scri
         for soft_key, match_list in interactive_matches.items():
             match_list = list(set(match_list)) # get rid of dupes
             print(f'soft key is {soft_key}, match_list is {match_list}')
-            print(f'searching {match_list[0][0]}\n')
+
             # if there is only a single match see if it can be automatically matched against the hash on the redump website
             if len(match_list) == 1 and len(get_close_matches(match_list[0][0],possible_matches)) > 0 and match_type == 'redump_serial':
+                print('single match logic, will automatically choose a dat match based on Redump website hash')
                 print_preface(soft_key,sl_dict[soft_key[0]],match_type)
                 redump_url = 'http://redump.org'+match_list[0][4]
                 redump_sha_href = redump_url+'sha1'
@@ -968,6 +969,7 @@ def interactive_title_mapping(interactive_matches,sl_dict,dat_dict,platform,scri
                     confirmed_matches.update(create_update_entry(soft_key,sl_dict,dat_dict,source_dat,dat_title_name,source_sha,redump_url))
 
             else:
+                print('more than one match, user select.')
                 possible_interactive = build_select_list(match_list,match_type)
                 
                 print_preface(soft_key,sl_dict[soft_key[0]],match_type)
@@ -978,7 +980,7 @@ def interactive_title_mapping(interactive_matches,sl_dict,dat_dict,platform,scri
                 if 'redump' in match_type and user_choice['u_match'] is not None:
                     redump_url = 'http://redump.org'+user_choice['u_match'][1]
                     redump_sha_href = redump_url+'sha1'
-                    redump_dict_entry = redump_site_dict[platform][match_list[0][4]]
+                    redump_dict_entry = redump_site_dict[platform][user_choice['u_match'][1]]
                     dat_title_name = user_choice['u_match'][0]
                     source_sha, source_dat, source_title = match_redump_db_to_dat(redump_sha_href,dat_title_name,redump_dict_entry)
                     if source_sha is not None:
@@ -1291,15 +1293,21 @@ def parse_games_table(games_dict, soup):
     return games_dict
 
 def get_missing_zips(sl_dict,dat_dict):
-    missing = []
+    missing = {}
     for soft, soft_data in sl_dict.items():
         if 'source_found' in soft_data and soft_data['source_found']:
             for disc, disc_data in soft_data['parts'].items():
                 if 'source_rom' not in disc_data:
+                    if 'source_group' in disc_data:
+                        source_group = disc_data['source_group']
+                        if source_group not in missing:
+                            missing.update({source_group:[]})
+                    else:
+                        continue
                     if 'source_sha' and 'source_dat' in disc_data:
                         try:
                             dat_title = dat_dict['hashes'][disc_data['source_dat']][disc_data['source_sha']]['name']
-                            missing.append(dat_title)
+                            missing[source_group].append(dat_title)
                         except:
                             print('    key error')
                             print('    Title '+soft+': '+soft_data['description'])
@@ -1307,8 +1315,10 @@ def get_missing_zips(sl_dict,dat_dict):
                 else:
                     continue
     if missing:
-        for title in sorted(list(set(missing))):
-            print(title)
+        for group, titles in missing.items():
+            print(f'\nDAT Group {group}:')
+            for rom in sorted(list(set(titles))):
+                print(rom)
 
 
 def update_description(soft):
