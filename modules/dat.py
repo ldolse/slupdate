@@ -220,7 +220,7 @@ def split_data_by_discs(commmentlines):
 
 def process_commentlines(raw_comment_lines):
     romhash = r'^(\s+)?<rom name'
-    redump_url = r'http://redump\.org/disc/\d{4,6}/?'
+    redump_url = r'http://redump\.org/disc/\d{2,6}/?'
     note_entry = ''
     rom_entry = ''
     redump_sources = []
@@ -373,15 +373,37 @@ def process_comments(soft, sl_dict):
         return None
     else:
         comment_to_sl_dict(soft,raw_comment_dict,sl_dict)
+        
+def expand_serial_range(serial_range):
+    start, end = serial_range.split('~')
+    prefix = re.match(r"([A-Za-z-]+)", start).group(1)
+    start_num = re.search(r"\d+", start).group()
+    end_num = re.search(r"\d+", end).group()
 
-def sanitize_serials(raw_serial):
+    serial_numbers = [prefix + str(num).zfill(len(start_num)) for num in range(int(start_num), int(end_num) + 1)]
+    return serial_numbers
+
+def sanitize_serials(raw_serial,platform):
+    # some platforms use bracket comments
+    bracket_c = ['dc','psx']
     serials = []
-    raw_serial = re.sub(r'\([^\)]+\)','',raw_serial)
-    for serial in raw_serial.replace(',',' ').split():
-        serials.append(serial.strip())
-    return serials
+    if platform in bracket_c: # delete bracketed in serial comments
+        raw_serial = re.sub(r'\([^\)]+\)','',raw_serial)
+    if platform == 'psx':  # add back hyphen for cases where space is used
+        raw_serial = re.sub(r'([A-Z]{4})\s(\d{5})', r'\1-\2', raw_serial)
+    for serial in raw_serial.replace(' ',',').split(','):
+        if platform == 'psx':
+            if re.findall(r'(\d+)~([A-Z]+)',serial):
+                try:
+                    serials += expand_serial_range(serial.strip())
+                    continue
+                except:
+                    print(f'error expanding serial string {serial}')
+        if serial.strip():
+            serials.append(serial.strip())
+    return list(filter(None,serials))
 
-def build_sl_dict(softlist, sl_dict):
+def build_sl_dict(softlist, sl_dict,platform):
     '''
     grabs useful sofltist data and inserts into a simpler dict object
     '''
@@ -398,7 +420,7 @@ def build_sl_dict(softlist, sl_dict):
             for tag in soft['info']:
                 if tag['@name'] == 'serial':
                     soft_entry.update({'rawserial':tag['@value']})
-                    soft_entry['serial'] = sanitize_serials(soft_entry['rawserial'])
+                    soft_entry['serial'] = sanitize_serials(soft_entry['rawserial'],platform)
                 if tag['@name'] == 'release':
                     soft_entry.update({'release':tag['@value']})
         sl_dict.update({soft_id:soft_entry})
@@ -501,9 +523,6 @@ def update_softlist_chd_sha1s(softlist_xml_file, sl_dict):
             if 'new_sha1' in part_data:
                 needs_update = True
         if needs_update:
-            # map single disk back correctly (was rewritten for source matching)
-            if len(soft_entry_parts) == 1 and 'cdrom1' in soft_entry_parts:
-                soft_entry_parts['cdrom'] = soft_entry_parts.pop('cdrom1')
             for part in software.findall('part'):
                 if 'new_sha1' in soft_entry_parts[part.get('name')]:
                     diskarea = part.find('diskarea')
@@ -590,56 +609,124 @@ def add_redump_names_to_slist(softlist_xml_file, answerdict,redump_name_list):
                 software.insert(part_index, new_tag)
     write_softlist_output(tree,softlist_xml_file,tags_with_whitespace)
 
+
+def update_rom_source_refs(softlist_xml_file,sl_dict,dat_dict):
+    '''
+    new_sources_map is a dict with the following structure:
+    (soft_title, part) = {  'raw_romlist':dat_platform_dict['hashes'][dat][dat_key]['raw_romlist'],
+                            'orig_title':orig_title,
+                            'redump_title':redump_title,
+                            'redump_lookup':redump_lookup,
+                            'source_dat':dat,
+                            'soft_description':soft_description}
+    '''
+    # build a dictionary for whitespace in tags that lxml will delete
+    tags_with_whitespace = get_lxml_replacements(softlist_xml_file)
+    # Parse the XML file using lxml
+    parser = etree.XMLParser(remove_blank_text=False, strip_cdata=False)
+    tree = etree.parse(softlist_xml_file, parser)
+    root = tree.getroot()
+    for soft,soft_data in sl_dict.items():
+        if 'update_required' not in soft_data:
+            continue
+        elif soft_data['update_required']:
+            for disc, part_data in soft_data['parts'].items():
+                orig_title = 'Unknown/Unmatched'
+                if 'raw_rom_entry' in part_data:
+                    if 'original_matches' in part_data:
+                        if 'source_name' in part_data['original_matches']:
+                            orig_title = part_data['original_matches']['source_name']
+                        elif 'file_list' in part_data['original_matches']:
+                            source_files = part_data['original_matches']['file_list']
+                            orig_title = next(iter(source_files))
+                    source_group = part_data['source_group']
+                    print(f'\nupdating {soft}, {soft_data["description"]} {disc}')
+                    print(f'  Original Source Title: {orig_title}')
+                    print(f'     {source_group} Replacement: {part_data["source_name"]}')
+                    modify_rom_source_refs(root,soft,part_data['raw_rom_entry'],disc)
+    write_softlist_output(tree,softlist_xml_file,tags_with_whitespace)
+
+
 def modify_rom_source_refs(xml_root, software_name, rom_strings, disc):
     software_nodes = xml_root.xpath(f'//software[@name="{software_name}"]')
 
     for software_node in software_nodes:
         if disc == 'cdrom':
-            handle_comment_nodes(software_node, rom_strings, disc)
+            handle_comment_nodes(software_node, rom_strings,disc)
         else:
-        
+            handle_comment_nodes(software_node, [],disc)
             part_nodes = software_node.xpath(f'part[@name="{disc}"]')
             for part_node in part_nodes:
-                handle_comment_nodes(part_node, rom_strings, disc)
-
+                handle_comment_nodes(part_node, rom_strings,disc)
     return xml_root
+
 
 
 def handle_comment_nodes(node, rom_strings, disc):
     comment_nodes = node.xpath('comment()')
     if disc == 'cdrom':
-        w_s = '\t\t'
-        trail = '\n\t\t'
+        c_head = '\t\t'
+        c_tail = '\n\t\t'
     else:
-        w_s = '\t\t\t'
-        trail = '\n\t\t\t'
+        c_head = '\t\t\t'
+        c_tail = '\n\t\t\t'
+    unwritten = True
     if comment_nodes:
+        counter = 0
         for comment_node in comment_nodes:
+            comment_updated = False
+            counter +=1
+            comment_head = re.match(r'^\s+',comment_node.text)[0]
             comment_text = comment_node.text.strip()  # Extract comment content as a string
+            if comment_text.strip() == '':
+                # Delete empty comments
+                node.remove(comment_node)
+                continue
+
+            print(f'comment_text is {comment_text}\ndisc is {disc} loop count is {counter}')
+            if rom_strings:
+                print(f'rom 1 is:\n{rom_strings[0]}')
+            else:
+                print('no rom_strings')
+
             if any(line.strip().startswith('<rom') for line in comment_text.splitlines()):
+                print('removing <rom lines')
                 # Remove rom entries from the rewritten comment
                 rewritten_comment = ''
                 for line in comment_text.splitlines():
                     if line.strip().startswith('<rom'):
                         continue
-                    rewritten_comment += w_s + line + '\n'
+                    rewritten_comment += c_head + line + '\n'
 
                 # Add the new rom entries to the rewritten comment
-                for rom_string in rom_strings:
-                    rewritten_comment += w_s + rom_string + '\n'
+                if unwritten:
+                    for rom_string in rom_strings:
+                        rewritten_comment += c_head + rom_string + '\n'
+                    unwritten = False
 
-                rewritten_comment = etree.Comment(trail + rewritten_comment.strip() + trail)
-                rewritten_comment.tail = trail
-                node.replace(comment_node, rewritten_comment)
+                if rewritten_comment.strip() == '':
+                    node.remove(comment_node)
+                    continue
+                else:
+                    rewritten_comment = etree.Comment(comment_head + rewritten_comment.strip() + c_tail)
+                    rewritten_comment.tail = c_tail
+                    node.replace(comment_node, rewritten_comment)
+                    continue
+            elif rom_strings and unwritten:
+                print('creating a new comment because no existing comments matched modify rules')
+                create_new_comment(node,rom_strings,c_head,c_tail)
 
-    else:
-        new_comment = etree.Comment('\n')
-        for rom_string in rom_strings:
-            new_comment.text += w_s + rom_string + '\n'
-        new_comment.text += w_s
-        new_comment.tail = trail
-        node.insert(0, new_comment)
-
+    elif unwritten:
+        print(f'creating a new comment because no comments exist in this {disc} node')
+        create_new_comment(node,rom_strings,c_head,c_tail)
+        
+def create_new_comment(node,rom_strings,c_head,c_tail):
+    new_comment = etree.Comment('\n')
+    for rom_string in rom_strings:
+        new_comment.text += c_head + rom_string + '\n'
+    new_comment.text += c_head
+    new_comment.tail = c_tail
+    node.insert(0, new_comment)
 
 
 def modify_rom_source_refs_old(xml_root, software_name, rom_strings, disc):
@@ -763,8 +850,8 @@ def build_dat_dict(datfile,dat_dict):
     root = tree.getroot()
     if 'dat_group' not in dat_dict:
         dat_dict.update({'dat_group':{}})
-    if 'unmatched' not in dat_dict:
-        dat_dict.update({'unmatched':{}})
+    if 'name_lookup' not in dat_dict:
+        dat_dict.update({'name_lookup':{}})
     if 'hashes' not in dat_dict:
         dat_dict.update({'hashes':{}})
     if 'duplicates' not in dat_dict:
@@ -775,7 +862,7 @@ def build_dat_dict(datfile,dat_dict):
         keyresult, nameresult = create_dat_hash_dict_xml(root,dat_group)
         dat_dict['hashes'].update({datfile : keyresult})
         dat_dict['dat_group'].update({datfile : dat_group})
-        dat_dict['unmatched'].update({datfile : nameresult})
+        dat_dict['name_lookup'].update({datfile : nameresult})
 
 
 def remove_dupe_dat_entries(platform_dat_dict):
@@ -942,6 +1029,7 @@ def create_dat_hash_dict_xml(datroot,dat_group):
     
 def shift_sibling_comments(xml_file):
     import lxml.etree, lxml.html
+    tags_with_whitespace = get_lxml_replacements(xml_file)
     parser = etree.XMLParser(remove_blank_text=False, strip_cdata=False)
     tree = etree.parse(xml_file, parser)
     root = tree.getroot()
@@ -957,8 +1045,9 @@ def shift_sibling_comments(xml_file):
                     comment_string = etree.tostring(sibling)
                     #comment_bytes = str(lxml.html.tostring(sibling))
                     #comment_string = comment_bytes.decode('UTF-8')
-                    if comment_string.endswith(b'-->\n\t'):
-                        print('shifting comment\n',lxml.html.tostring(sibling))
+                    # shift only redump source references
+                    if b'http://redump.org' in comment_string and comment_string.endswith(b'-->\n\t'):
+                        #print('shifting comment\n',lxml.html.tostring(sibling))
                         sibling.tail = '\n\t\t'
                         child.insert(0,sibling)
                 firstsibling = False
@@ -975,16 +1064,7 @@ def shift_sibling_comments(xml_file):
 #                    child[-1].insert(-1, sibling)
 
         # save the modified XML document
-    output = etree.tostring(
-        tree,
-        pretty_print=True,
-        xml_declaration=True,
-        encoding="UTF-8",
-        doctype='<!DOCTYPE softwarelist SYSTEM "softwarelist.dtd">'
-    ).decode("UTF-8")
-
-    with open(xml_file, "w") as f:
-        f.write(output)
+    write_softlist_output(tree,xml_file,tags_with_whitespace)
 
 
 

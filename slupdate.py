@@ -33,8 +33,8 @@ builtins.script_dir = script_dir
 
 __version__ = '.1'
 
-# Require at least Python 3.2
-assert sys.version_info >= (3, 2)
+# Require at least Python 3.7
+assert sys.version_info >= (3, 7)
 
 
 settings = restore_dict('settings')
@@ -100,8 +100,9 @@ menu_msgs = {'0' : 'Main Menu, select an option',
              '5c' : 'Select a DAT to remove',
              'dir_d' : 'Select a Directory to Remove',
              'romvault' : 'Are you using ROMVault to manage DATs and ROMs?',
-             'tosec_commit' : 'Proceed to update the Softlist XML file?',
-             'fuzzy_commit' : 'Proceed to update the Softlist XML file?'
+             'url_commit' : 'Updates based on Redump source URLs successful. Proceed to update the Softlist data?',
+             'tosec_commit' : 'Proceed to update the Softlist data?',
+             'fuzzy_commit' : 'Proceed to update the Softlist data?'
     }
 # unless a list entry maps to a function it should always map to another menu in the tree
 # This allows completed functions to go back to their parent menu automatically
@@ -116,20 +117,22 @@ menu_lists = {'0' : [('1. Mapping Functions', 'map'),
                       ('c. Change Platform','change_platform_function'),
                       ('d. Back', '0')],
              'map-2' : [('a. Mapping Stage 3','map-3'),
-                        ('b. Remap TOSEC sources to Redump','tosec_map_function'),
-                        ('c. Automated Redump re-map based on disc serial & name','name_serial_automap_function'),
-                        ('d. List missing matched ROM Files','list_missing_function'),
-                        ('e. List TOSEC sources','tosec_list_function'),
-                        ('f. List unknown sources','unknown_list_function'),
-                        ('g. Update Sofltist XML','sl_update_function'),
-                        ('g. Build CHDs','chd_build_function'),
-                        ('h. Back', 'map')],
+                        ('b. Redump URL Based Mapping','url_map_function'),
+                        ('c. Remap TOSEC sources to Redump','tosec_map_function'),
+                        ('d. Automated Redump re-map based on disc serial & name','name_serial_automap_function'),
+                        ('e. List missing matched ROM Files','list_missing_function'),
+                        ('f. List TOSEC sources','tosec_list_function'),
+                        ('g. List unknown sources','unknown_list_function'),
+                        ('h. Update Sofltist XML','sl_update_function'),
+                        ('i. Build CHDs','chd_build_function'),
+                        ('j. Back', 'map')],
              'map-3' : [('a. Fuzzy Matches - Remap bad/alternate Dumps','hash_map_function'),
-                        ('b. Interactive Name/Serial Mapping','interactive_map_function'),   
-                        ('c. Update Sofltist XML','sl_update_function'),
-                        ('d. Build CHDs','chd_build_function'),
-                        ('e. Generate Missing DAT','dat_build_function'),
-                        ('f. Back', 'map-2')],
+                        ('b. Serial Only Mapping','serial_map_function'),
+                        ('c. Interactive Name/Serial Mapping','interactive_map_function'),   
+                        ('d. Update Sofltist XML','sl_update_function'),
+                        ('e. Build CHDs','chd_build_function'),
+                        ('f. Generate Missing DAT','dat_build_function'),
+                        ('g. Back', 'map-2')],
              '2' : [('a. Console List','chd_build_function'),
                     ('b. Back', '0')],
              '3' : [('Map entries with no source information to Redump sources','no_src_map_function'),
@@ -144,11 +147,22 @@ menu_lists = {'0' : [('1. Mapping Functions', 'map'),
                       ('Remove DATs','del_dats_function'),
                       ('Back', '4')],
     }
-    
+
 def sl_update_function(platform):
     from modules.dat import update_rom_source_refs
     update_rom_source_refs(settings['sl_dir']+os.sep+platform+'.xml',softlist_dict[platform],all_dat_dict[platform])
     return 'map-2'
+
+def url_map_function(platform):
+    from modules.mapping import redump_url_mapping
+    if platform not in softlist_dict:
+        print('please run the initial mapping function first')
+        return 'map'
+    url_remaps = redump_url_mapping(softlist_dict[platform],all_dat_dict[platform],script_dir,platform)
+    if url_remaps:
+        proceed = inquirer.confirm(menu_msgs['url_commit'], default=False)
+        if proceed:
+            update_soft_dict(softlist_dict[platform],all_dat_dict[platform],url_remaps)
 
 def list_missing_function(platform):
     from modules.mapping import get_missing_zips
@@ -255,7 +269,7 @@ def find_dat_matches(platform,sl_platform_dict,dathash_platform_dict):
                     # add the matching entries from the softlist to the dat dict for reference
                     if 'softlist_matches' not in dathashdict[sourcehash]:
                         dathashdict[sourcehash]['softlist_matches'] = []
-                    dathashdict[sourcehash]['softlist_matches'].append(sl_title)
+                    dathashdict[sourcehash]['softlist_matches'].append((sl_title,disc))
 
                     # set boolean flag at the softlist level to flag a match occurred
                     sl_platform_dict[sl_title].update({'source_found':True})
@@ -263,7 +277,8 @@ def find_dat_matches(platform,sl_platform_dict,dathash_platform_dict):
             # add the matched titles to the matched dict
             matched_titles.append(dat_name_list)
             # check to see if there are valid zips for this softlist entry, creates 'source_rom' key(s) if so
-            zip_name = find_rom_zips(datfile,sl_data,dathashdict,settings[platform])
+            dat_rom_map = {file: path for sub_dict in settings[platform].values() for file, path in sub_dict.items()}
+            zip_name = find_rom_zips(datfile,sl_data,dathashdict,dat_rom_map)
             if zip_name:
                 dat_zips = dict(zip(dat_name_list.keys(),zip_name))
                 print('\nMatch Found:\n  Softlist: '+sl_data['description'])
@@ -271,18 +286,19 @@ def find_dat_matches(platform,sl_platform_dict,dathash_platform_dict):
                     print('       Dat: '+datname+'\n       Zip: '+zipname)
                     if chds_exist:
                         print('       CHD(s) for this title found')
-    # final iteration through the softlist to identify the matched titles and remove them from the unmatched dict
-    dat_matched_list = {}
+    # final iteration through the softlist to identify the matched titles add them to the name lookup dict
     for sl_title, sl_data in sl_platform_dict.items():
-        for disc_data in sl_data['parts'].values():
+        for disc, disc_data in sl_data['parts'].items():
             if 'source_dat' in disc_data:
                 datfile = disc_data['source_dat']
                 source_sha = disc_data['source_sha']
                 dat_entry_name = dathash_platform_dict['hashes'][datfile][source_sha]['name']
-                if dat_entry_name in dathash_platform_dict['unmatched'][datfile]:
-                    dat_matched_list.update({dat_entry_name:dathash_platform_dict['unmatched'][datfile].pop(dat_entry_name)})
-                else:
-                    print(f'{dat_entry_name} not found in to be matched titles, possible duplicate entry')
+                if dat_entry_name in dathash_platform_dict['name_lookup'][datfile]:
+                    if 'softlist_matches' not in dathash_platform_dict['name_lookup'][datfile][dat_entry_name]:
+                        dathash_platform_dict['name_lookup'][datfile][dat_entry_name]['softlist_matches'] = [(sl_title,disc)]
+                    else:
+                        dathash_platform_dict['name_lookup'][datfile][dat_entry_name]['softlist_matches'].append((sl_title,disc))
+
     # Count the total number of softlist entries
     total_softlist_entries = len(sl_platform_dict)
     # count the total number of entries with source references
@@ -308,9 +324,7 @@ def find_dat_matches(platform,sl_platform_dict,dathash_platform_dict):
     source_stats = get_source_stats(sl_platform_dict)
     print_source_stats(source_stats,total_source_ref)
     print('\n\nMatched DAT Entry Titles:')
-    for softtitle in dat_matched_list.keys():
-        print(f'   {softtitle}')
-    print('\n')
+
     
 
 
@@ -338,7 +352,7 @@ def platform_select(list_type='rom'):
 def  hash_map_function(platform):
     from modules.mapping import fuzzy_hash_compare,interactive_title_mapping
     fuzzy_matches = fuzzy_hash_compare(softlist_dict[platform], all_dat_dict[platform])
-    confirmed = interactive_title_mapping(fuzzy_matches, softlist_dict[platform], all_dat_dict[platform], 'fuzzy')
+    confirmed = interactive_title_mapping(fuzzy_matches, softlist_dict[platform], all_dat_dict[platform],platform,script_dir, 'fuzzy')
     if confirmed:
         proceed = inquirer.confirm(menu_msgs['fuzzy_commit'], default=False)
         if proceed:
@@ -387,26 +401,29 @@ def entry_create_function(platform):
     proceed = inquirer.confirm(menu_msgs['new'], default=False)
 
 def setup_platform_dicts(platform):
-    from modules.dat import build_dat_dict, remove_dupe_dat_entries, build_sl_dict, convert_xml
+    from modules.dat import build_dat_dict, remove_dupe_dat_entries, build_sl_dict, convert_xml,shift_sibling_comments
         # process each DAT to build a list of fingerprints
     print('processing '+platform+' DAT Files')
     if platform not in all_dat_dict:
         all_dat_dict.update({platform:{}})
     dat_platform_dict = all_dat_dict[platform]
-    for dat in settings[platform]:
-        build_dat_dict(dat,dat_platform_dict)
+    for dats in settings[platform].values():
+        for dat in dats:
+            build_dat_dict(dat,dat_platform_dict)
     # hashes may be identical across DAT groups, prioritise redump hashes and delete dupes in others
     remove_dupe_dat_entries(all_dat_dict[platform])
 
     # process the software list into a dict, creating hash based fingerprints from comments
     print('processing '+platform+' software list')
     process_comments = True
-    raw_sl_dict = convert_xml(settings['sl_dir']+os.sep+platform+'.xml',process_comments)
+    softlist_xml = settings['sl_dir']+os.sep+platform+'.xml'
+    shift_sibling_comments(softlist_xml)
+    raw_sl_dict = convert_xml(softlist_xml,process_comments)
     softdict = dict(raw_sl_dict['softwarelist'])
     if platform not in softlist_dict:
         softlist_dict.update({platform:{}})
     # build the dict object with relevant softlist data for this script, return bool whether crc source keys are needed
-    build_sl_dict(softdict['software'], softlist_dict[platform])
+    build_sl_dict(softdict['software'], softlist_dict[platform],platform)
     
 
 def automap_function(platform):
@@ -439,15 +456,15 @@ def automap_function(platform):
 def process_interactive_matches(interactive_matches,platform,match_type):
     from modules.mapping import interactive_title_mapping,update_soft_dict
     print('Some matches require user review\n')
-    confirmed_interactive = interactive_title_mapping(interactive_matches,softlist_dict[platform],all_dat_dict[platform],match_type)
+    confirmed_interactive = interactive_title_mapping(interactive_matches,softlist_dict[platform],all_dat_dict[platform],platform,script_dir,match_type)
     if confirmed_interactive:
         proceed = inquirer.confirm(menu_msgs['tosec_commit'], default=False)
         if proceed:
             update_soft_dict(softlist_dict[platform],all_dat_dict[platform],confirmed_interactive)
 
-def name_serial_automap_function(platform):
-    from modules.mapping import name_serial_auto_map,interactive_title_mapping,update_soft_dict
-    name_serial_matches, redump_interactive_matches = name_serial_auto_map(platform, softlist_dict[platform],all_dat_dict[platform],script_dir)
+def automated_mapping(platform,lookup_type):
+    from modules.mapping import name_serial_auto_map,update_soft_dict
+    name_serial_matches, redump_interactive_matches = name_serial_auto_map(platform, softlist_dict[platform],all_dat_dict[platform],script_dir,lookup_type)
     if name_serial_matches:
         print('\nThe above Name / Serial matches have been found, do you want to commit the new hashes the softlist?')
         proceed = inquirer.confirm(menu_msgs['tosec_commit'], default=False)
@@ -463,11 +480,19 @@ def name_serial_automap_function(platform):
     # flag that this stage is completed for this platform
     if platform not in mapping_stage['name_serial_auto_map']:
         mapping_stage['name_serial_auto_map'].append(platform)
+
+
+def serial_map_function(platform):
+    automated_mapping(platform,'serial')
+    return 'map-3'
+
+def name_serial_automap_function(platform):
+    automated_mapping(platform,'name_serial')
     return 'map-3'
 
 def interactive_map_function(platform):
     from modules.mapping import name_serial_auto_map
-    name_serial_matches, interactive_matches = name_serial_auto_map(platform, softlist_dict[platform],all_dat_dict[platform],script_dir,name_serial_key=False)
+    name_serial_matches, interactive_matches = name_serial_auto_map(platform, softlist_dict[platform],all_dat_dict[platform],script_dir,lookup_type='name')
     if interactive_matches:
         match_type = 'redump_name'
         process_interactive_matches(interactive_matches,platform,match_type)
@@ -701,14 +726,7 @@ def romvault_dat_to_romfolder(dat_directory,dat_files):
                 dat_rom_dict.update({dat_path:full_rom_dir})
         return dat_rom_dict
 
-
-def platform_dat_rom_function(platform):
-    if platform not in settings:
-        settings.update({platform : {}})
-    # get the dat dir first
-    if 'datroot' not in settings:
-        single_dir_function('datroot','Root DAT Directory')
-    dat_directory = select_directory('dat',settings['datroot'])
+def map_dats_to_romdirs(dat_directory):
     dat_files = [f for f in os.listdir(dat_directory) if f.endswith('.dat') or f.endswith('.xml')]
     print(f"DAT files in {dat_directory}: {dat_files}")
     # if using romvault map the ROM directores for the DATs automatically
@@ -716,15 +734,26 @@ def platform_dat_rom_function(platform):
         datrom_dirmap = romvault_dat_to_romfolder(dat_directory, dat_files)
     else:
         datrom_dirmap = {}
-        if 'romroot' not in settings:
-            single_dir_function('romroot','Root ROM Directory')
         for dat in dat_files:
             if not dat.endswith('.xml'):
                 dat_path = dat_directory+os.sep+dat
                 print('Select ROM Directory for DAT:\n'+dat+'\n')
                 rom_directory = select_directory('rom',settings['romroot'])
                 datrom_dirmap.update({dat_path:rom_directory})
-    settings[platform].update(datrom_dirmap)
+    return datrom_dirmap
+
+
+def platform_dat_rom_function(platform):
+    if platform not in settings:
+        settings.update({platform : {}})
+    # get the dat dir first
+    if 'datroot' not in settings:
+        single_dir_function('datroot','Root DAT Directory')
+    if 'romroot' not in settings:
+        single_dir_function('romroot','Root ROM Directory')
+    dat_directory = select_directory('dat',settings['datroot'])
+    datrom_dirmap = map_dats_to_romdirs(dat_directory)
+    settings[platform][dat_directory] = datrom_dirmap
 
 def get_os_dirs(path):
     """

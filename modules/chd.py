@@ -151,7 +151,7 @@ def convert__bincue_to_chd(chd_file_path: pathlib.Path, output_cue_file_path: pa
             raise ConversionException("Failed to convert .chd using chdman", chd_file_path, None)
 
 
-def find_rom_zips(dat,soft_entry_data,dathashdict,platform_settings):
+def find_rom_zips(dat,soft_entry_data,dathashdict,dat_rom_map):
     zips = []
     zip_matches = False
     for disc, disc_info in soft_entry_data['parts'].items():
@@ -159,7 +159,7 @@ def find_rom_zips(dat,soft_entry_data,dathashdict,platform_settings):
             dat_game_entry = dathashdict[disc_info['source_sha']]
             try:
                 # check the entry from the dat against the directory the DAT points to
-                goodzip = check_valid_zips(dat_game_entry,platform_settings[dat])
+                goodzip = check_valid_zips(dat_game_entry,dat_rom_map[dat])
             except:
                 print('key error for '+disc+', dat: '+dat)
                 continue
