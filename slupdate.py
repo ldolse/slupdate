@@ -168,7 +168,7 @@ def url_map_function(platform):
 def list_missing_function(platform):
     from modules.mapping import get_missing_zips
     get_missing_zips(softlist_dict[platform],all_dat_dict[platform])
-    return 'map'
+    return 'map-2'
 
 def first_run():
     print('Please Configure the MAME Softlist hash directory location.\n')
