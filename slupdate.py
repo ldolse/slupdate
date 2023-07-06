@@ -16,6 +16,7 @@ import modules.chd
 import modules.mapping
 import modules.dat
 from modules.mapping import update_soft_dict
+from modules.dat import get_dat_group
 
 try:
     # get the script location directory to ensure settings are saved and update environment var
@@ -235,7 +236,6 @@ def find_dat_matches(platform,sl_platform_dict,dathash_platform_dict):
     matches source hash fingerprints to the dat fingerprint dicts
     updates the softlist dict to point to the dat for that source
     '''
-    from modules.dat import get_dat_group
     from modules.chd import find_rom_zips
     from modules.mapping import get_source_stats, print_source_stats
     matched_titles = []
@@ -507,6 +507,7 @@ def chd_builder(platform):
     sources.  CHD hash is added to the soft-dict.  If a CHD already exists in the build 
     directory it's skipped, but there is a flag to enable grabbing hashes for built CDs.
     '''
+    from modules.chd import create_chd_from_zip, chdman_info
     new_hashes = False
     built_sources = {}
     discontinue = False
@@ -595,6 +596,7 @@ def chd_builder(platform):
 
 
 def chd_build_function(platform=None):
+    from modules.chd import is_greater_than_0_176, chdman_info
     if not is_greater_than_0_176(chdman_info()):
         print('Outdated Chdman, please upgrade to a recent version')
         return None
