@@ -579,7 +579,12 @@ def chd_builder(platform):
                 if os.path.isfile(chd_path):
                     if disc_data['source_rom'] in built_sources or get_sha_from_existing_chd:
                         new_chd_hash = chdman_info(chd_path)
-                        if new_chd_hash == disc_data['chd_sha1']:
+                        if 'chd_sha1' in disc_data:
+                            current_chd_hash = disc_data['chd_sha1']
+                        else:
+                            current_chd_hash = ''
+                            disc_data['chd_sha1'] = current_chd_hash
+                        if new_chd_hash == current_chd_hash:
                             print('\nHash matches softlist: '+chd_name+'\n')
                         else:
                             new_hashes = True
