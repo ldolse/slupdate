@@ -183,6 +183,10 @@ def first_run():
     print('\nPlease configure the destination directory for created CHDs - note this directory should not contain CHDs from other sources')
     chd_dir_function()
 
+def dat_build_function(platform):
+    from modules.dat import create_dat
+    create_dat(softlist_dict[platform],platform)
+
 def main_menu(exit):
     '''
     return a list answer value from any function called by this menu to get back to the 
