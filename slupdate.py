@@ -514,6 +514,7 @@ def chd_builder(platform):
     directory it's skipped, but there is a flag to enable grabbing hashes for built CDs.
     '''
     from modules.chd import create_chd_from_zip, chdman_info
+    from modules.dat import update_softlist_chd_sha1s
     new_hashes = False
     built_sources = {}
     discontinue = False
