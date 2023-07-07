@@ -517,7 +517,6 @@ def update_softlist_chd_sha1s(softlist_xml_file, sl_dict):
     root = tree.getroot()
     for software in root.findall('software'):
         soft_entry_parts = {}
-        needs_update = False
         try:
             soft_entry_parts = sl_dict[software.get('name')]['parts']
         except:
@@ -526,13 +525,23 @@ def update_softlist_chd_sha1s(softlist_xml_file, sl_dict):
             continue
         for part, part_data in soft_entry_parts.items():
             if 'new_sha1' in part_data:
-                needs_update = True
-        if needs_update:
-            for part in software.findall('part'):
-                if 'new_sha1' in soft_entry_parts[part.get('name')]:
-                    diskarea = part.find('diskarea')
-                    disk = diskarea.find('disk')
-                    disk.set('sha1', soft_entry_parts[part.get('name')]['new_sha1'])
+                for part in software.findall('part'):
+                    if 'source_group' in soft_entry_parts[part.get('name')]:
+                        source_group = soft_entry_parts[part.get('name')]['source_group']
+                        if source_group in ['redump', 'TOSEC', 'no-intro']:
+                            good_source = True
+                        else:
+                            good_source = False
+                    if 'new_sha1' in soft_entry_parts[part.get('name')]:
+                        diskarea = part.find('diskarea')
+                        disk = diskarea.find('disk')
+                        if disk is not None:
+                            status = disk.get('status')
+                            if status == 'nodump':
+                                del disk.attrib['status']
+                            if status == 'baddump' and good_source:
+                                del disk.attrib['status']
+                            disk.set('sha1', soft_entry_parts[part.get('name')]['new_sha1'])
         else:
             continue
     write_softlist_output(tree,softlist_xml_file,tags_with_whitespace)
@@ -647,7 +656,7 @@ def update_rom_source_refs(softlist_xml_file,sl_dict,dat_dict):
                     elif source_group == 'TOSEC':
                         new_comment_lines.insert(0,'original images (TOSEC)')
                     elif source_group == 'no-intro':
-                        new_comment_lines.insert(0,'original images (No-Intro)')
+                        new_comment_lines.insert(0,'original images (No-Intro Non-Redump)')
                     if 'original_matches' in part_data:
                         if 'source_name' in part_data['original_matches']:
                             orig_title = part_data['original_matches']['source_name']
