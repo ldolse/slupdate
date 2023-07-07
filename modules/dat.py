@@ -686,9 +686,10 @@ def handle_comment_nodes(node, rom_strings, disc, delete_string=None):
         delete_strings.append(delete_string)
     if rom_strings and rom_strings[0].startswith('http://redump.org'):
         delete_strings.append(rom_strings[0])
-        source_url = True
+    if rom_strings and not rom_strings[0].startswith('<rom'):
+        source_info = True
     else:
-        source_url = False
+        source_info = False
     comment_nodes = node.xpath('comment()')
     if disc == 'cdrom':
         c_head = '\t\t'
@@ -736,7 +737,7 @@ def handle_comment_nodes(node, rom_strings, disc, delete_string=None):
                     print('writing the new lines to this comment as still unwritten')
                     for rom_string in rom_strings:
                         rewritten_comment += c_head + rom_string + '\n'
-                    if source_url:
+                    if source_info:
                         comment_head = ' '
                         
                     unwritten = False
@@ -766,7 +767,7 @@ def handle_comment_nodes(node, rom_strings, disc, delete_string=None):
         unwritten = False
         
 def create_new_comment(node,rom_strings,c_head,c_tail):
-    if rom_strings[0].startswith('http://redump.org'):
+    if not rom_strings[0].startswith('<rom'):
         comment_head = ' '
     else:
         comment_head = '\n'
@@ -867,7 +868,10 @@ def create_dat(rom_dict,platform):
             # Add the ROM file details as sub-elements
             rom = etree.SubElement(game, "rom")
             rom.set("name", rom_name)
-            rom.set("size", rom_details['@size'])
+            try:
+                rom.set("size", rom_details['@size'])
+            except:
+                print(f'error setting size for rom_name:\n{rom_details}')
             if '@crc' in rom_details:
                 rom.set("crc", rom_details['@crc'])
             if '@md5' in rom_details:

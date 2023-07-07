@@ -185,7 +185,9 @@ def first_run():
 
 def dat_build_function(platform):
     from modules.dat import create_dat
-    create_dat(softlist_dict[platform],platform)
+    from modules.mapping import get_unmatched_roms
+    rom_dict = get_unmatched_roms(softlist_dict[platform])
+    create_dat(rom_dict,platform)
 
 def main_menu(exit):
     '''
