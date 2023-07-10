@@ -8,6 +8,7 @@ import zipfile
 import logging
 import builtins
 import inquirer
+import requests
 from distutils.version import LooseVersion
 
 '''
@@ -32,6 +33,7 @@ def chdman_info(chd=None):
     returns the data sha1 if a CHD path is provided
     otherwise returns chdman version
     '''
+    info = None
     if chd:
         command = ['chdman', 'info', '-i', chd]
     else:
@@ -46,8 +48,11 @@ def chdman_info(chd=None):
         for line in output:
             if re.findall(r'^\s*SHA1', line):
                 info = re.sub(r'\s*SHA1:\s*','',line).strip()
-                #info = re.sub(r'\s*Data\sSHA1:\s*','',line)
                 break
+        if info == None:
+            delete = inquirer.confirm('CHD is corrupt, delete?' , default=True)
+            if delete:
+                os.remove(chd)
     else:
         info = re.findall(r'\d+\.\d+',output[0])[0] # return version
     return info
@@ -79,14 +84,20 @@ def extract_zip_to_tempdir(zip_path):
 
 def create_chd_from_zip(zip_path, chd_path, settings, special_info=None):
     original_path = os.getcwd()
+    user_provided_toc = False
     with zipfile.ZipFile(zip_path, 'r') as zip_file:
         toc_file = None
         for file_info in zip_file.infolist():
-            if file_info.filename.endswith('.gdi') or file_info.filename.endswith('.cue') or file_info.filename.endswith('.iso'):
+            if file_info.filename.endswith('.gdi') or file_info.filename.endswith('.cue'):
                 toc_file = file_info.filename
                 break
-        if not toc_file:
-            return 'No gdi, cue or iso file found in the zip archive'
+            elif file_info.filename.endswith('.iso') and sum(1 for file in zip_file.infolist() if file.lower().endswith('.iso')) == 1:
+                toc_file = file_info.filename
+                break
+        if not toc_file and special_info=None:
+            user_provided_toc = inquirer.confirm('No TOC or ISO in the zip archive, do you want to provide a CUE?' , default=False)
+            if not user_provided_toc:
+                return 'No gdi, cue or iso file found in the zip archive'
     try:
         with zipfile.ZipFile(zip_path, 'r') as zip_file:
             temp_dir = tempfile.mkdtemp(dir=settings['zip_temp'])
@@ -98,13 +109,19 @@ def create_chd_from_zip(zip_path, chd_path, settings, special_info=None):
                     file_path = os.path.join(temp_dir, file_info.filename)
                     with open(file_path, 'wb') as f:
                         f.write(zip_file.read(file_info.filename))
-
+    
+            if user_provided_toc:
+                user_continue = inquirer.confirm(f'Please add a TOC file to {temp_dir} and confirm when completed, or skip' , default=False)
+                if user_continue:
+                    toc_file = inquirer.text(message="Please provide the name of the TOC file provided").strip()
+                else:
+                    return 'No TOC file, skipping this title'
             os.chdir(temp_dir)
             
             # if the final argument is populated then take action
             if special_info:
                 # dat group will always be here
-                if special_info['dat_group'] == 'no-intro':
+                if special_info['dat_group'] in ['no-intro','other']:
                     manual_fix_check = False
                     while not manual_fix_check:
                         if toc_file.endswith('.cue'):
@@ -226,3 +243,43 @@ def check_valid_zips(dat_entry,rom_folder):
                 return zip_path
             else:
                 return None
+
+def get_imgs_from_bin(cue):
+    def get_file_name(line):
+        # strip off leading 'FILE '
+        pos = line.lower().index('file ')
+        line = line[pos + 5:]
+        # strip off leading 'FILE '
+        pos = line.lower().index(' binary')
+        line = line[:pos+1]
+        #strip off leading ' '
+        while line[0] == ' ':
+            line = line[1:]
+        #strip off trailing ' '
+        while line[-1] == ' ':
+            line = line[:-1]
+        # remove double quotes
+        if line[0] == '"':
+            line = line[1:-1]
+        # remove single quotes
+        if line[0] == '\'':
+            line = line[1:-1]
+        return line
+    
+    print('CUE', cue) if verbose else None
+
+    img_files = []
+    with open(cue, 'r') as f:
+        lines = f.readlines()
+        for line in lines:
+            # FILE
+            if re.search('^\s*FILE', line):
+                f = get_file_name(line)
+                if f[0] != '/':
+                    s = cue.split('/')
+                    if len(s) > 1:
+                        f = '/'.join(s[:-1]) + '/' + f
+                img_files.append(f)
+    return img_files
+
+

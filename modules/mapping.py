@@ -28,7 +28,8 @@ redump__platform_paths = { 'jaguar':'ajcd',
                          'dc':'dc',
                       'neocd':'ngcd',
                         'psx':'psx',
-                     '3do_m2':'3do'
+                     '3do_m2':'3do',
+               'psx_libcrypt':'psx/libcrypt/2'
                     }
 
 def get_source_stats(sl_dict):
@@ -158,6 +159,16 @@ def update_soft_dict(sl_dict,dat_dict,new_sources_map):
             soft_part.pop('source_rom')
         # flag update for later functions to leverage
         sl_dict[soft_name]['update_required'] = True
+
+def libcrypt_report(psx_dict):
+    from modules.gamedb import libcrypt
+    for soft, soft_data in psx_dict.items():
+        if 'serial' in soft_data:
+            for string in soft_data['serial']:
+                check = string.replace('-','')
+                check = check.replace(' ','')
+                if check in libcrypt:
+                    print(f'{soft}: {soft_data["description"]} uses libcrypt')
 
 
 def map_tosec_entries(sl_dict,dat_dict,redump_tuples):
@@ -543,6 +554,34 @@ def print_redump_info(redump_dict):
     else:
         print('     Edition: '+redump_dict['Edition'])
     print('')
+
+
+
+def dat_key_lookup_dict(sl_dict):
+    source_sha_dict = {}
+
+    for soft_key, soft in sl_dict.items():
+        for part_key, part in soft['parts'].items():
+            if 'source_sha' in part:
+                source_sha = part['source_sha']
+                if source_sha not in source_sha_dict:
+                    source_sha_dict[source_sha] = [(soft_key, part_key)]
+                else:
+                    source_sha_dict[source_sha].append((soft_key, part_key))
+    return source_sha_dict
+
+def dup_report(sl_dict):
+    dupe_list = []
+    source_sha_dict = dat_key_lookup_dict(sl_dict)
+    for titles in source_sha_dict.values():
+        if len(titles) > 1:
+            dupe_list.append(titles)
+    if len(dupe_list) > 0:
+        print('Duplicates Found:')
+        for dupe_items in dupe_list:
+            for dupe in dupe_items:
+                print(f'{dupe[0]}: {sl_dict[dupe[0]]["description"]} {get_user_disc(dupe[1])}')
+            print('')
 
 def href_sl_lookup_dict(sl_dict):
     lookup_dict = {}
@@ -1125,6 +1164,9 @@ def name_serial_auto_map(platform, sl_dict,dat_dict,script_dir,lookup_type='name
                     redump_interactive_matches.update({(soft_title,part):matches})
             elif 'serial' in soft and lookup_type == 'serial': # look for exact serial matches
                 print('in name_serial_auto_map exact serial mapping function')
+                if len(soft['serial']) < len(soft['parts']):
+                    print('fewer serial numbers than disc parts, this title can\'t be automatically mapped')
+                    continue
                 for ser in soft['serial']:
                     part_matches = update_match_lists(ser, part_matches,lookup_dict)
                     
@@ -1166,11 +1208,11 @@ def name_serial_auto_map(platform, sl_dict,dat_dict,script_dir,lookup_type='name
                     redump_softlist_matches.update(create_update_entry(soft_key,sl_dict,dat_dict,dat,redump_title,new_source_sha,redump_url))
                     
 
-    from modules.utils import write_data
-    debug_list.append({'redump_single_matches':redump_single_matches})
-    debug_list.append({'redump_interactive_matches':redump_interactive_matches})
-    debug_list.append({'lookup_dict':lookup_dict})
-    write_data(debug_list)
+    #from modules.utils import write_data
+    #debug_list.append({'redump_single_matches':redump_single_matches})
+    #debug_list.append({'redump_interactive_matches':redump_interactive_matches})
+    #debug_list.append({'lookup_dict':lookup_dict})
+    #write_data(debug_list)
     return redump_softlist_matches, redump_interactive_matches
 
        
@@ -1191,8 +1233,11 @@ def build_redump_site_dict(platform,script_dir):
 
     def get_largest_page_number(soup):
         pages_div = soup.find('div', {'class': 'pages'})
-        page_numbers = [int(page.text) for page in pages_div.find_all('a') if page.text.isdigit()]
-        largest_page_number = max(page_numbers)
+        if pages_div is not None:
+            page_numbers = [int(page.text) for page in pages_div.find_all('a') if page.text.isdigit()]
+            largest_page_number = max(page_numbers)
+        else:
+            largest_page_number = 1
         return largest_page_number
 
     import time
@@ -1291,6 +1336,11 @@ def parse_games_table(games_dict, soup):
         else:
             games_dict[disc_href] = game_entry
     return games_dict
+
+def build_libcrypt_dict(script_dir):
+    build_redump_site_dict('psx_libcrypt',script_dir)
+    
+
 
 def get_missing_zips(sl_dict,dat_dict):
     missing = {}

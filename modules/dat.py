@@ -565,7 +565,7 @@ def update_softlist_chd_sha1s(softlist_xml_file, sl_dict):
                 for part in software.findall('part'):
                     if 'source_group' in soft_entry_parts[part.get('name')]:
                         source_group = soft_entry_parts[part.get('name')]['source_group']
-                        if source_group in ['redump', 'TOSEC', 'no-intro']:
+                        if source_group in ['redump', 'TOSEC']: # 'no-intro' - leave out for now
                             good_source = True
                         else:
                             good_source = False
