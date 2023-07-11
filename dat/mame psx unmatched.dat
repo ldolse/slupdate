@@ -1,0 +1,158 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE datafile PUBLIC "-//Logiqx//DTD ROM Management Datafile//EN" "http://www.logiqx.com/Dats/datafile.dtd">
+<datafile>
+  <header>
+    <name>MAME psx Unmatched</name>
+  </header>
+  <game name="art camion - geijutsuden (japan) [slpm-87186]">
+    <description></description>
+    <rom name="Art Camion - Geijutsuden (Japan) [SLPM-87186].bin" size="721471296" crc="5f91cc5f" sha1="14dd48e5d5f4e026f33e921df4205ae0e8e38d65"/>
+    <rom name="Art Camion - Geijutsuden (Japan) [SLPM-87186].cue" size="111" crc="15108c4c" sha1="a84e5b8807ecb2413ef5bae06882e3f992aa2428"/>
+  </game>
+  <game name="inuyasha - sengoku otogi gassen (japan) [slps-03504]">
+    <description></description>
+    <rom name="InuYasha - Sengoku Otogi Gassen (Japan) [SLPS-03504].bin" size="667448208" crc="fc837ddb" sha1="9861792c23e2a0400972bafe3350329be21c7f9c"/>
+    <rom name="InuYasha - Sengoku Otogi Gassen (Japan) [SLPS-03504].cue" size="116" crc="9f731483" sha1="405f8ed8e68af11c0369f79567c7d5d90c4f06f7"/>
+  </game>
+  <game name="princess maker - go go princess (japan) [slps-01505]">
+    <description></description>
+    <rom name="Princess Maker - Go! Go! Princess (Japan) [SLPS-01505].bin" size="692285328" crc="4649c99c" sha1="ec9a5997789cbfcb995157397b4163ca8f7b484c"/>
+    <rom name="Princess Maker - Go! Go! Princess (Japan) [SLPS-01505].cue" size="120" crc="16f5ce87" sha1="58a914baf35ee2c695b737c4f9aa0e4f867c83e7"/>
+  </game>
+  <game name="ddrdmp">
+    <description></description>
+    <rom name="Dance Dance Revolution - Disney Mix.bin" size="251367648" crc="553c50d8" sha1="057c297fe197dd3643562ba1d5832436314d8540"/>
+    <rom name="Dance Dance Revolution - Disney Mix.cue" size="101" crc="aef8f018" sha1="44f354e24d47735ff61c5ddde8754dda619620d0"/>
+  </game>
+  <game name="bubble bobble ii (prototype)">
+    <description></description>
+    <rom name="bb2.bin" size="62620864" crc="1c2c9f63" sha1="2d9cf9e34057c93fe1d40940428c463a7224444e"/>
+    <rom name="bb2.cue" size="69" crc="096e5077" sha1="a56c5425f32b5ead296ecd4d3b1ac909d8144972"/>
+  </game>
+  <game name="biohazard-2-beta">
+    <description></description>
+    <rom name="biohazard-2-beta.img" size="690020352" crc="107751a0" sha1="199ea757305063223e90430dfaa771ba54127489"/>
+    <rom name="biohazard-2-beta.ccd" size="743" crc="7c549fd8" sha1="442760fd3c8e080b4860b17951f85f77a04c56e9"/>
+    <rom name="biohazard-2-beta.sub" size="28164096" crc="9af638a3" sha1="e89a6ea0dee1a217d2faedbb2d6769992b2b4aeb"/>
+  </game>
+  <game name="biohazard 2 (beta 2)">
+    <description></description>
+    <rom name="biohazard 2 (beta 2).bin" size="780788736" crc="b7e5b1b9" sha1="354cd30e1c570e85accaf3af716d0843614dfc40"/>
+    <rom name="biohazard 2 (beta 2).cue" size="86" crc="1fd0def1" sha1="00bb06023a89a3ef11b9fcd58593eaef813f8e2a"/>
+  </game>
+  <game name="breakneck">
+    <description></description>
+    <rom name="breakneck.img" size="141343440" crc="227f6f58" sha1="604daf22f908dc919211bbf218b825e4b09fd3ae"/>
+    <rom name="breakneck.ccd" size="788" crc="2662a57c" sha1="176e43ccfe1eb79941cc2e9b69f0376a0a6a1748"/>
+    <rom name="breakneck.sub" size="5769120" crc="d7034ad8" sha1="fd2ab53f8d0ebb72a8cedae7b5768ff9a6ed8ffd"/>
+  </game>
+  <game name="diablo">
+    <description></description>
+    <rom name="diablo.iso" size="783745200" crc="3a0268cd" sha1="c29775b8eadca5be2ba35ec2a76f956d18416edc"/>
+    <rom name="diablo.cue" size="327" crc="4ba55415" sha1="af32c37875d28eb30e6e841fe3ba35d943576e5f"/>
+  </game>
+  <game name="driver (beta demo 3)">
+    <description></description>
+    <rom name="driver_you_are_the_wheelman_demo.iso" size="47482176" crc="8c11918d" sha1="64b75114d91cbd8fbfb62af595e000f3b4339727"/>
+  </game>
+  <game name="ttk">
+    <description></description>
+    <rom name="ttk.mdf" size="287174880" crc="66ce93d8" sha1="17dc62d346b705fbf1fa657f6075075f11e7929e"/>
+    <rom name="ttk.mds" size="494" crc="a068816f" sha1="66a69f81ed0d7d7b6967ce855364714f85f34792"/>
+  </game>
+  <game name="slus-01419">
+    <description></description>
+    <rom name="global domination [ntsc-u][slus-01419].bin" size="611564688" crc="f5e70299" sha1="35b457af1241c333d82a5f606f68818f28ea4403"/>
+    <rom name="global domination [ntsc-u][slus-01419].cue" size="105" crc="8a9e7192" sha1="3eef0d1ebe2ffc2b54e07d68dcf059a2093517cd"/>
+  </game>
+  <game name="imsa">
+    <description></description>
+    <rom name="IMSA.bin" size="61283712" crc="7941f9b8" sha1="260d958310382073f756a447c6749c6de4dab64e"/>
+    <rom name="IMSA.cue" size="126" crc="f42a8822" sha1="479cfc179893836701069643ec56bdb76eb1911a"/>
+  </game>
+  <game name="legacy of kain - soul reaver (usa, prototype 19990512)">
+    <description></description>
+    <rom name="sr1-psx-beta.ccd" size="772" crc="250f9eb1" sha1="12a6e69a0ae4a06f6dfc79a6198a93191feea90c"/>
+    <rom name="sr1-psx-beta.img" size="635820864" crc="22f06bfd" sha1="a2f1833f63e934f35f09c48c6bf5f6dc58661e9a"/>
+    <rom name="sr1-psx-beta.sub" size="25951872" crc="4183f8c3" sha1="acb107be9144e873757624f7dcad11e5bcff088c"/>
+  </game>
+  <game name="madden96">
+    <description></description>
+    <rom name="madden96.bin" size="189646464" crc="4d9f6048" sha1="d8d9ea110e26138eaf9a14ce02e635cd8af836a1"/>
+    <rom name="madden96.cue" size="78" crc="243f16c7" sha1="f1f6613572bf62cf62c4eb0e8d5dbdd9e8190685"/>
+  </game>
+  <game name="missilecommand">
+    <description></description>
+    <rom name="MISSILECOMMAND.BIN" size="328602624" crc="7eeabdc7" sha1="cf2a4916c103eff856046a44f7b6e134a812180f"/>
+    <rom name="MISSILECOMMAND.CUE" size="121" crc="1af0a4f5" sha1="e173bf59f5a6f612ac7d45cac9b331a92bab5448"/>
+  </game>
+  <game name="persona2xus">
+    <description></description>
+    <rom name="persona2xus.bin" size="724992240" crc="9eb5619d" sha1="8dfb6d2e08257525566c80d8e17c141928290d47"/>
+    <rom name="persona2xus.cue" size="77" crc="9d8dc4db" sha1="8977b08c99e52e3b1acf8c40b131faba2f9acb5a"/>
+  </game>
+  <game name="qbert beta pal">
+    <description></description>
+    <rom name="SLUS_00904.BIN" size="289194864" crc="774c1174" sha1="3edb5222987ff95f30bf680e6b4b8771736520fe"/>
+    <rom name="SLUS_00904.CUE" size="101" crc="2d0364af" sha1="e9726433173434a1b9653550ef797dc10935b88e"/>
+  </game>
+  <game name="rockman 8 beta v1">
+    <description></description>
+    <rom name="rockman 8 beta v1.bin" size="53352768" crc="bb8df0ca" sha1="69ed6c03831f9dae6bcf8c2e54a92935261a9cd3"/>
+    <rom name="rockman 8 beta v1.cue" size="80" crc="5ff4ae72" sha1="34e8a485039859d2d54e1fb75097da4651a08f31"/>
+  </game>
+  <game name="spirit master (u) (prototype)">
+    <description></description>
+    <rom name="spirit master (u) (prototype).bin" size="13547520" crc="92bf9773" sha1="98d5b62fed0ec04ba09577654f4366529bc0cab4"/>
+    <rom name="spirit master (u) (prototype).cue" size="95" crc="9fdd687b" sha1="4184f28f49f29bb14387f9a364ce21b448da8147"/>
+  </game>
+  <game name="thrill kill [sles-01337]">
+    <description></description>
+    <rom name="thrill kill [sles-01337].bin" size="543892944" crc="ecee0c8e" sha1="b31ded0a99acc51a98c8fdbf7ef353d3d27b8aba"/>
+    <rom name="thrill kill [sles-01337].cue" size="603" crc="ab9afb6e" sha1="e8a40c6456dac23e120c2d1dd9f1b0e7c5010d6f"/>
+  </game>
+  <game name="thrill kill (usa) beta [slus-12345]">
+    <description></description>
+    <rom name="thrill kill (usa) beta [slus-12345].bin" size="164430672" crc="f72ccb2a" sha1="ec359a95b0bfe153b46f6ecf1e160030a13f62e9"/>
+    <rom name="thrill kill (usa) beta [slus-12345].cue" size="467" crc="86f88cef" sha1="979aeab2cf4e59e595b9f1ecbc8fb64ad947ab24"/>
+  </game>
+  <game name="tomb raider (beta)(07-22-1996)">
+    <description></description>
+    <rom name="tombraider.bin" size="615734784" crc="63999513" sha1="672efcd03a8342b0e54904adc606c5d140610c9b"/>
+    <rom name="tombraider.cue" size="2238" crc="a1d37c30" sha1="fa46b66a3346a226817a6f1b5c5b843994854d64"/>
+  </game>
+  <game name="tomb raider ii (usa, prototype)">
+    <description></description>
+    <rom name="tomb raider 2 [beta] [ntsc] [psx].ccd" size="13748" crc="8158505c" sha1="214d47508e8daefde9a7fe7ccfd04072cce641a8"/>
+    <rom name="tomb raider 2 [beta] [ntsc] [psx].cue" size="3624" crc="030aec00" sha1="19fa1466938c4aa3092dcc70d8c7ebc5ecf83618"/>
+    <rom name="tomb raider 2 [beta] [ntsc] [psx].img" size="755624688" crc="c3330f3c" sha1="8d4f6409c9b70c460686ea4a709ce9e22651afaf"/>
+    <rom name="tomb raider 2 [beta] [ntsc] [psx].sub" size="30841824" crc="19143fb6" sha1="9eeeb08b6b697ec1689904213a5375c2639b4976"/>
+  </game>
+  <game name="torc - legend of the ogre crown (prototype)">
+    <description></description>
+    <rom name="killwheel.nrg" size="379698268" crc="4bb001c3" sha1="99be78ad2b3df1f18c826c64382983543b749b08"/>
+  </game>
+  <game name="virtuoso 960514">
+    <description></description>
+    <rom name="virtuoso (japan) (prototype 1996-05-14) (track 1).bin" size="27269088" crc="47f5fd22" sha1="084be1e87349755fc1deedf5a1e06e3fcfaf6a11"/>
+    <rom name="virtuoso (japan) (prototype 1996-05-14) (track 2).bin" size="8293152" crc="5272b4e7" sha1="752d6e70d122000ac9bbc2b903ec2a4abf7c279b"/>
+    <rom name="virtuoso (japan) (prototype 1996-05-14) (track 3).bin" size="40045152" crc="209896a4" sha1="37d11c227eb6ffcd28ecb94414689d9ecb3e99bc"/>
+    <rom name="virtuoso (japan) (prototype 1996-05-14).cue" size="381" crc="76ce14e0" sha1="86be87af128d63f164147ccc1081cf76bb6f7985"/>
+  </game>
+  <game name="wwf smackdown (beta)">
+    <description></description>
+    <rom name="wwf smackdown! (usa) [beta].bin" size="588961968" crc="4ac3a9b7" sha1="f650a04c7ca155b7776deb72d98cfc526b03734d"/>
+    <rom name="wwf smackdown! (usa) [beta].cue" size="105" crc="21a5c146" sha1="dbe108e9816e01a6c6750a1c0f3ea73d53eb2fcf"/>
+  </game>
+  <game name="bountyarms">
+    <description></description>
+    <rom name="bountyarms.bin" size="4111296" crc="250e1845" sha1="602bcbb72c47667a95eebe9b1ff6fb2b88dd0d36"/>
+    <rom name="bountyarms.cue" size="76" crc="78100862" sha1="0dc0f092b2bc15faf210ffcb9f51b42a23e26ceb"/>
+  </game>
+  <game name="sotn e3 demo">
+    <description></description>
+    <rom name="castlevania - symphony of the night e3 demo.img" size="587811840" crc="22b981c9" sha1="c94c1fb5548c21721835928f294d0301452eb90d"/>
+    <rom name="castlevania - symphony of the night e3 demo.ccd" size="964" crc="d6a03944" sha1="b1a1e08e3837d3d39949097fb1c5f12b648aa5ce"/>
+    <rom name="castlevania - symphony of the night e3 demo.cue" size="163" crc="919c7241" sha1="09413093892a1cb79b5bf99e0424000ace0eeae8"/>
+  </game>
+</datafile>

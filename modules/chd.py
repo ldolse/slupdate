@@ -65,6 +65,21 @@ def parse_cue_sheet(cue_file_path):
     file_entries = re.findall(r'FILE "(.+?)"', cue_contents)
     return file_entries
 
+def create_cue(file):
+    # Extract the base file name without the extension
+    file_name = os.path.splitext(file)[0]
+    # Create the cue file name by replacing the extension with ".cue"
+    cue_file_name = f"{file_name}.cue"
+
+    # Define the content of the cue file
+    cue_content = f'FILE "{file}" BINARY\n  TRACK 01 MODE2/2352\n    INDEX 01 00:00:00'
+
+    # Write the cue content to the cue file using UTF-8 encoding
+    with open(cue_file_name, 'w', encoding='utf-8') as cue_file:
+        cue_file.write(cue_content)
+
+    print(f"Cue file '{cue_file_name}' created successfully.")
+    return cue_file_name
 
 def extract_zip_to_tempdir(zip_path):
     with zipfile.ZipFile(zip_path, 'r') as zip_file:
@@ -81,6 +96,18 @@ def extract_zip_to_tempdir(zip_path):
         temp_file.seek(0)
         return temp_file, temp_dir
 
+def get_tocname_create_cue(ext,file_list):
+    for file in file_list:
+        if file.endswith(ext) and ext == '.mdf':
+            file_name = os.path.splitext(file)[0]
+            toc_file = create_cue(file_name+'.iso')
+            break
+        elif file.endswith(ext):
+            toc_file = create_cue(file)
+            break
+        else:
+            continue
+    return toc_file
 
 def create_chd_from_zip(zip_path, chd_path, settings, special_info=None):
     original_path = os.getcwd()
@@ -91,7 +118,7 @@ def create_chd_from_zip(zip_path, chd_path, settings, special_info=None):
             if file_info.filename.endswith('.gdi') or file_info.filename.endswith('.cue'):
                 toc_file = file_info.filename
                 break
-            elif file_info.filename.endswith('.iso') and sum(1 for file in zip_file.infolist() if file.lower().endswith('.iso')) == 1:
+            elif file_info.filename.endswith('.iso') and sum(1 for file in zip_file.infolist() if file.filename.endswith('.iso')) == 1:
                 toc_file = file_info.filename
                 break
     try:
@@ -113,41 +140,52 @@ def create_chd_from_zip(zip_path, chd_path, settings, special_info=None):
                 # dat group will always be here
                 if special_info['dat_group'] in ['no-intro','other']:
                     manual_fix_check = False
-                    while not manual_fix_check:
-                        if toc_file == None:
-                            img_count = sum(1 for file in zip_file.infolist() if file.lower().endswith('.img'))
-                            ccd_count = sum(1 for file in zip_file.infolist() if file.lower().endswith('.ccd'))
-                            bin_count = sum(1 for file in zip_file.infolist() if file.lower().endswith('.bin'))
-                            if not all(1 <= x for x in [img_count,ccd_count,bin_count]):
-                                manual_fix_check = True
-                            elif img_count == 1 and ccd_count == 1:
-                                create_cue()
-                        elif toc_file.endswith('.cue'):
-                            # no-intro non redump files use original cues but changed the actual filenames
-                            cue_file_list = parse_cue_sheet(toc_file)
-                            # only handling renaming a single file at this time
-                            if len(cue_file_list) == 1:
-                                for file in special_info['file_list']:
-                                    if file.endswith('.gdi') or file.endswith('.cue'):
-                                        continue
-                                    else:
-                                        os.rename(file,cue_file_list[0])
-                                manual_fix_check = True
-                            else:
-                                print('DAT & cue file contents don\'t match')
-                                user_fix = inquirer.confirm('Do you want to manually fix the files?' , default=False)
-                                if user_fix:
-                                    print('Navigate to the temp directory configured for this script and ensure the filenames and cue contents match')
-                                    fixed = inquirer.confirm('Confirm Here when completed' , default=False)
-                                    if not fixed:
-                                        return 'no fix, continuing'
-                                    else:
-                                        manual_fix_check = True
-                                else:
-                                    return 'no fix, continuing'
-                        else:
+                    fix_message = f'Navigate to {temp_dir} and ensure the filenames and cue contents match.'
+                    if toc_file == None:
+                        file_list = special_info['file_list']
+                        img_count = sum(1 for file in zip_file.infolist() if file.filename.endswith('.img'))
+                        ccd_count = sum(1 for file in zip_file.infolist() if file.filename.endswith('.ccd'))
+                        bin_count = sum(1 for file in zip_file.infolist() if file.filename.endswith('.bin'))
+                        mdf_count = sum(1 for file in zip_file.infolist() if file.filename.endswith('.mdf'))
+
+                        if mdf_count > 0:
+                            print('archive contains an MDF file, this isn\'t supported by chdman, it will need to be converted to iso')
+                            print('a cue file has been provided please ensure the iso name matches the cue contents')
+                            toc_file = get_tocname_create_cue('.mdf',file_list)
+                            fix_message = f'Navigate to {temp_dir} to convert the mdf to iso, ensure the cue contents match the new iso.'
                             manual_fix_check = True
-            elif toc_file = None:
+                        elif img_count == 1 and ccd_count == 1:
+                            toc_file = get_tocname_create_cue('.img',file_list)
+                        elif bin_count == 1:
+                            toc_file = get_tocname_create_cue('.bin',file_list)
+                        else:
+                            print('files can\'t be automatically fixed, but a cue has been added for manual resolution')
+                            toc_file = get_tocname_create_cue('.bin',['file.bin'])
+                            manual_fix_check = True
+
+                    elif toc_file.endswith('.cue'):
+                        # no-intro non redump files often use original cues but changed 
+                        # the actual filenames without updating the cue, rewrite single file cues
+                        cue_file_list = parse_cue_sheet(toc_file)
+                        # only handling renaming a single file at this time
+                        if len(cue_file_list) == 1:
+                            for file in special_info['file_list']:
+                                if file.endswith('.gdi') or file.endswith('.cue'):
+                                    continue
+                                else:
+                                    os.rename(file,cue_file_list[0])
+                        else:
+                            print('DAT & cue file contents don\'t match')
+                            manual_fix_check = True
+                if manual_fix_check:
+                    user_fix = inquirer.confirm('Do you want to manually fix the files?' , default=False)
+                    if user_fix:
+                        print(fix_message)
+                        fixed = inquirer.confirm('Confirm Here when completed' , default=False)
+                        if not fixed:
+                            return 'no fix, continuing'
+
+            elif toc_file == None:
                 user_provided_toc = inquirer.confirm('No TOC or ISO in the zip archive, do you want to provide a CUE?' , default=False)
                 if user_provided_toc:
                     user_continue = inquirer.confirm(f'Please add a TOC file to {temp_dir} and confirm when completed, or skip' , default=False)

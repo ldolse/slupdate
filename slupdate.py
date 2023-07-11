@@ -528,6 +528,9 @@ def chd_builder(platform):
         if discontinue:
             break
         for disc_data in soft_data['parts'].values():
+            if 'chd_found' in disc_data and not get_sha_from_existing_chd:
+                if disc_data['chd_found']:
+                    continue
             if 'source_rom' in disc_data:
                 # create platform directory
                 if not os.path.exists(os.path.join(settings['chd'],platform)):
@@ -566,8 +569,9 @@ def chd_builder(platform):
                             else:
                                 print(error)
                                 continue
-                        except:
+                        except Exception:
                             print('CHD Creation Failed')
+                            print(traceback.format_exc())
                             if os.path.isfile(chd_path):
                                 try:
                                     os.remove(chd_path)
@@ -771,8 +775,8 @@ def update_dats():
     for platform in consoles.values():
         if platform in settings:
             for folder in settings[platform].keys():
-                map_dats_to_romdirs(folder)
-
+                datrom_dirmap = map_dats_to_romdirs(folder)
+                settings[platform][folder] = datrom_dirmap
 
 def platform_dat_rom_function(platform):
     if platform not in settings:
