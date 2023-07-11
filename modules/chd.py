@@ -94,10 +94,6 @@ def create_chd_from_zip(zip_path, chd_path, settings, special_info=None):
             elif file_info.filename.endswith('.iso') and sum(1 for file in zip_file.infolist() if file.lower().endswith('.iso')) == 1:
                 toc_file = file_info.filename
                 break
-        if not toc_file and special_info=None:
-            user_provided_toc = inquirer.confirm('No TOC or ISO in the zip archive, do you want to provide a CUE?' , default=False)
-            if not user_provided_toc:
-                return 'No gdi, cue or iso file found in the zip archive'
     try:
         with zipfile.ZipFile(zip_path, 'r') as zip_file:
             temp_dir = tempfile.mkdtemp(dir=settings['zip_temp'])
@@ -109,13 +105,7 @@ def create_chd_from_zip(zip_path, chd_path, settings, special_info=None):
                     file_path = os.path.join(temp_dir, file_info.filename)
                     with open(file_path, 'wb') as f:
                         f.write(zip_file.read(file_info.filename))
-    
-            if user_provided_toc:
-                user_continue = inquirer.confirm(f'Please add a TOC file to {temp_dir} and confirm when completed, or skip' , default=False)
-                if user_continue:
-                    toc_file = inquirer.text(message="Please provide the name of the TOC file provided").strip()
-                else:
-                    return 'No TOC file, skipping this title'
+
             os.chdir(temp_dir)
             
             # if the final argument is populated then take action
@@ -124,7 +114,15 @@ def create_chd_from_zip(zip_path, chd_path, settings, special_info=None):
                 if special_info['dat_group'] in ['no-intro','other']:
                     manual_fix_check = False
                     while not manual_fix_check:
-                        if toc_file.endswith('.cue'):
+                        if toc_file == None:
+                            img_count = sum(1 for file in zip_file.infolist() if file.lower().endswith('.img'))
+                            ccd_count = sum(1 for file in zip_file.infolist() if file.lower().endswith('.ccd'))
+                            bin_count = sum(1 for file in zip_file.infolist() if file.lower().endswith('.bin'))
+                            if not all(1 <= x for x in [img_count,ccd_count,bin_count]):
+                                manual_fix_check = True
+                            elif img_count == 1 and ccd_count == 1:
+                                create_cue()
+                        elif toc_file.endswith('.cue'):
                             # no-intro non redump files use original cues but changed the actual filenames
                             cue_file_list = parse_cue_sheet(toc_file)
                             # only handling renaming a single file at this time
@@ -149,7 +147,14 @@ def create_chd_from_zip(zip_path, chd_path, settings, special_info=None):
                                     return 'no fix, continuing'
                         else:
                             manual_fix_check = True
-
+            elif toc_file = None:
+                user_provided_toc = inquirer.confirm('No TOC or ISO in the zip archive, do you want to provide a CUE?' , default=False)
+                if user_provided_toc:
+                    user_continue = inquirer.confirm(f'Please add a TOC file to {temp_dir} and confirm when completed, or skip' , default=False)
+                    if user_continue:
+                        toc_file = inquirer.text(message="Please provide the name of the TOC file provided").strip()
+                    else:
+                        return 'No gdi, cue or iso file found in the zip archive, skipping this file'
             command = ['chdman', 'createcd', '-i', toc_file, '-o', chd_path]
             subprocess.run(command, check=True, env=env_with_script_dir)
     finally:
