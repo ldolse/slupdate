@@ -122,8 +122,6 @@ def rom_entries_to_source_ids(soft_title,raw_rom_source_data):
     if ccd_count >= 2:
         print(f'{soft_title} contains multiple clonecd discs, this is not yet supported')
         return concatenated_hashes, source_type, sizes
-    if cue_count == 0 and iso_count == 0:
-        print(soft_title+' non-iso source has no cue or gdi toc file in source reference, may not be supported')
     first = True
     for rom,rom_data in raw_rom_source_data.items():
         toc = False

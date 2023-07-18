@@ -9,15 +9,25 @@
     <rom name="Art Camion - Geijutsuden (Japan) [SLPM-87186].bin" size="721471296" crc="5f91cc5f" sha1="14dd48e5d5f4e026f33e921df4205ae0e8e38d65"/>
     <rom name="Art Camion - Geijutsuden (Japan) [SLPM-87186].cue" size="111" crc="15108c4c" sha1="a84e5b8807ecb2413ef5bae06882e3f992aa2428"/>
   </game>
-  <game name="inuyasha - sengoku otogi gassen (japan) [slps-03504]">
+  <game name="aura battler dunbine (japan) [slps-02390]">
     <description></description>
-    <rom name="InuYasha - Sengoku Otogi Gassen (Japan) [SLPS-03504].bin" size="667448208" crc="fc837ddb" sha1="9861792c23e2a0400972bafe3350329be21c7f9c"/>
-    <rom name="InuYasha - Sengoku Otogi Gassen (Japan) [SLPS-03504].cue" size="116" crc="9f731483" sha1="405f8ed8e68af11c0369f79567c7d5d90c4f06f7"/>
+    <rom name="Aura Battler Dunbine (Japan) [SLPS-02390].bin" size="651398160" crc="9a7d4aa3" sha1="584b3d87347beb7c9edee8e93799cd78c735bf63"/>
+    <rom name="Aura Battler Dunbine (Japan) [SLPS-02390].cue" size="107" crc="3046c32e" sha1="dee63579ff9c266a8ae9ed995e02395e60ea8333"/>
+  </game>
+  <game name="eisei meijin (japan) [slps-00090]">
+    <description></description>
+    <rom name="Eisei Meijin (Japan) [SLPS-00090].bin" size="95467680" crc="d8674b58" sha1="9cb9883edd3f4d5a32576d7c7da9716424b19063"/>
+    <rom name="Eisei Meijin (Japan) [SLPS-00090].cue" size="863" crc="9daa9473" sha1="75ebaee60e472ba23cc9b464c9efd875d4355333"/>
   </game>
   <game name="princess maker - go go princess (japan) [slps-01505]">
     <description></description>
     <rom name="Princess Maker - Go! Go! Princess (Japan) [SLPS-01505].bin" size="692285328" crc="4649c99c" sha1="ec9a5997789cbfcb995157397b4163ca8f7b484c"/>
     <rom name="Princess Maker - Go! Go! Princess (Japan) [SLPS-01505].cue" size="120" crc="16f5ce87" sha1="58a914baf35ee2c695b737c4f9aa0e4f867c83e7"/>
+  </game>
+  <game name="samurai spirits - zankurou musouken (japan) [slps-91024]">
+    <description></description>
+    <rom name="Samurai Spirits - Zankurou Musouken (Japan) [SLPS-91024].pbp" size="153910754" sha1="a57354d3605def641b8e1e996ad08f9e09bd8416"/>
+    <rom name="Samurai Spirits - Zankurou Musouken (Japan) [SLPS-91024].dat" size="7840656" sha1="9977a6059ecbc13002ce11bdc46c48f738382f6e"/>
   </game>
   <game name="ddrdmp">
     <description></description>
@@ -49,7 +59,6 @@
   <game name="diablo">
     <description></description>
     <rom name="diablo.iso" size="783745200" crc="3a0268cd" sha1="c29775b8eadca5be2ba35ec2a76f956d18416edc"/>
-    <rom name="diablo.cue" size="327" crc="4ba55415" sha1="af32c37875d28eb30e6e841fe3ba35d943576e5f"/>
   </game>
   <game name="driver (beta demo 3)">
     <description></description>
@@ -109,7 +118,6 @@
   <game name="thrill kill [sles-01337]">
     <description></description>
     <rom name="thrill kill [sles-01337].bin" size="543892944" crc="ecee0c8e" sha1="b31ded0a99acc51a98c8fdbf7ef353d3d27b8aba"/>
-    <rom name="thrill kill [sles-01337].cue" size="603" crc="ab9afb6e" sha1="e8a40c6456dac23e120c2d1dd9f1b0e7c5010d6f"/>
   </game>
   <game name="thrill kill (usa) beta [slus-12345]">
     <description></description>

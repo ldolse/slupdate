@@ -1074,15 +1074,14 @@ def name_serial_auto_map(platform, sl_dict,dat_dict,script_dir,lookup_type='name
     redump_interactive_matches = {}
     redump_softlist_matches = {}
     debug_list = []
-    sl_href_lookups = href_sl_lookup_dict(sl_dict)
-    redump_dict = redump_site_dict[platform]
-    lookup_dict = nameserial_lookup_dict(redump_dict,platform,lookup_type)
-    #from modules.utils import write_data
-    #write_data(lookup_dict)
 
     print('Starting serial and name mapping')
     if platform not in redump_site_dict:
         build_redump_site_dict(platform,script_dir)
+
+    redump_dict = redump_site_dict[platform]
+    lookup_dict = nameserial_lookup_dict(redump_dict,platform,lookup_type)
+    sl_href_lookups = href_sl_lookup_dict(sl_dict)
 
     def update_match_lists(search_item,part_matches,lookup_dict):
         # Perform a case-insensitive lookup
