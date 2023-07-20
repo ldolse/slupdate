@@ -115,12 +115,12 @@ def create_chd_from_zip(zip_path, chd_path, settings, special_info=None):
     with zipfile.ZipFile(zip_path, 'r') as zip_file:
         toc_file = None
         for file_info in zip_file.infolist():
-            if file_info.filename.endswith('.gdi') or file_info.filename.endswith('.cue'):
+            if file_info.filename.lower().endswith('.gdi') or file_info.filename.lower().endswith('.cue'):
                 toc_file = file_info.filename
                 break
-            elif file_info.filename.endswith('.iso') and sum(1 for file in zip_file.infolist() if file.filename.endswith('.iso')) == 1:
-                toc_file = file_info.filename
-                break
+            #elif file_info.filename.lower().endswith('.iso') and sum(1 for file in zip_file.infolist() if file.filename.lower().endswith('.iso')) == 1:
+            #    toc_file = file_info.filename
+            #    break
     try:
         with zipfile.ZipFile(zip_path, 'r') as zip_file:
             temp_dir = tempfile.mkdtemp(dir=settings['zip_temp'])
@@ -170,7 +170,7 @@ def create_chd_from_zip(zip_path, chd_path, settings, special_info=None):
                         # only handling renaming a single file at this time
                         if len(cue_file_list) == 1:
                             for file in special_info['file_list']:
-                                if file.endswith('.gdi') or file.endswith('.cue'):
+                                if file.endswith('.gdi') or file.endswith('.cue') or file.endswith('.ccd') or file.endswith('.sub'):
                                     continue
                                 else:
                                     os.rename(file,cue_file_list[0])
