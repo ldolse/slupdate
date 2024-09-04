@@ -33,11 +33,11 @@ On first run you'll be automatically directed to configure mandatory settings:
 3. Configure whether or not RomVault is used as the DAT/ROM Manager - RomVault users need only specify source DAT files, ROM directories are calculated based on DatRoot and RomRoot.
 4. Configure first platform specific DAT & ROM directory.
     * You'll be asked to select a Software List platform, and then select a directory containing DATs for that platform
-		- If you're using ROMVault, and RomVault has already created ROM directories for the DATs then this step is complete
+        - If you're using ROMVault, and RomVault has already created ROM directories for the DATs then this step is complete
     * Otherwise you'll be queried for a ROM directory corresponding to each DAT found
     * Go to Settings after this initial configuration to add more DAT directories for this platform or others
 5. Configure CHD Destination Directory
-	* Follow the prompts to set the CHD Destination, this shouldn't be a directory that includes MAME CHDs from other sources, as this script will not overwrite existing CHDs.
+    * Follow the prompts to set the CHD Destination, this shouldn't be a directory that includes MAME CHDs from other sources, as this script will not overwrite existing CHDs.
     * Configure a directory for temporary files - if you are using an SSD hard disk you may want to choose a magnetic media or tmpfs/ramdisk destination to avoid thrashing your SSD
 
 ## Known Limitations
@@ -55,6 +55,6 @@ On first run you'll be automatically directed to configure mandatory settings:
 
 
 ### Future functions
- requests, beautifulsoup4, pykakasi
+ requests, beautifulsoup4
 
 

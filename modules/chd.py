@@ -9,7 +9,6 @@ import logging
 import builtins
 import inquirer
 import requests
-from distutils.version import LooseVersion
 
 '''
 functions for working with chds and ROM/Zip files are defined in this module
@@ -26,7 +25,9 @@ else:
 env_with_script_dir = {**os.environ, 'PATH': script_dir + ':' + os.environ['PATH']}
 
 def is_greater_than_0_176(version_string):
-    return LooseVersion(version_string) > LooseVersion('0.176')
+    v = list(map(int, version_string.split('.')))
+    v_target = [0, 176]
+    return all(x >= y for x, y in zip(v, v_target))
 
 def chdman_info(chd=None):
     '''
@@ -65,14 +66,14 @@ def parse_cue_sheet(cue_file_path):
     file_entries = re.findall(r'FILE "(.+?)"', cue_contents)
     return file_entries
 
-def create_cue(file):
+def write_cue(file):
     # Extract the base file name without the extension
     file_name = os.path.splitext(file)[0]
     # Create the cue file name by replacing the extension with ".cue"
     cue_file_name = f"{file_name}.cue"
 
     # Define the content of the cue file
-    cue_content = f'FILE "{file}" BINARY\n  TRACK 01 MODE2/2352\n    INDEX 01 00:00:00'
+    cue_content = f'FILE "{file}" BINARY\n  TRACK 01 MODE2/2352\n    INDEX 01 00:00:00\n'
 
     # Write the cue content to the cue file using UTF-8 encoding
     with open(cue_file_name, 'w', encoding='utf-8') as cue_file:
@@ -96,35 +97,48 @@ def extract_zip_to_tempdir(zip_path):
         temp_file.seek(0)
         return temp_file, temp_dir
 
-def get_tocname_create_cue(ext,file_list):
+def create_cue(ext,file_list):
+    # get the filename for the single track cue
     for file in file_list:
         if file.endswith(ext) and ext == '.mdf':
             file_name = os.path.splitext(file)[0]
-            toc_file = create_cue(file_name+'.iso')
+            toc_file = write_cue(file_name+'.iso')
             break
         elif file.endswith(ext):
-            toc_file = create_cue(file)
+            toc_file = write_cue(file)
             break
         else:
             continue
     return toc_file
 
-def create_chd_from_zip(zip_path, chd_path, settings, special_info=None):
-    original_path = os.getcwd()
-    user_provided_toc = False
+def get_toc(zip_path, toc_type='any'):
+    toc_file = None
     with zipfile.ZipFile(zip_path, 'r') as zip_file:
-        toc_file = None
         for file_info in zip_file.infolist():
-            if file_info.filename.lower().endswith('.gdi') or file_info.filename.lower().endswith('.cue'):
+            if file_info.filename.lower().endswith('.gdi') or file_info.filename.lower().endswith('.cue') and toc_type == 'any':
                 toc_file = file_info.filename
                 break
-            #elif file_info.filename.lower().endswith('.iso') and sum(1 for file in zip_file.infolist() if file.filename.lower().endswith('.iso')) == 1:
-            #    toc_file = file_info.filename
-            #    break
-    try:
-        with zipfile.ZipFile(zip_path, 'r') as zip_file:
-            temp_dir = tempfile.mkdtemp(dir=settings['zip_temp'])
+            elif file_info.filename.lower().endswith('.iso') and sum(1 for file in zip_file.infolist() if file.filename.lower().endswith('.iso')) == 1:
+                toc_file = file_info.filename
+                break
+            elif toc_type == 'ccd' and file_info.filename.lower().endswith('.ccd'):
+                toc_file = file_info.filename
+                break
+    return toc_file
 
+def setup_temp_directory(zip_path,settings):
+    temp_setup = False
+    error = None
+    while not temp_setup:
+        with zipfile.ZipFile(zip_path, 'r') as zip_file:
+            try:
+                temp_dir = tempfile.mkdtemp(dir=settings['zip_temp'])
+                temp_setup = True 
+            except:
+                fix_message = f"temp directory {settings['zip_temp']} not available, do you want to resolve this"
+                error = manual_fix_query(fix_message)
+                if error is not None:
+                    return None, None, error            
             # extract all files to temp directory
             for file_info in zip_file.infolist():
                 # handle manually zipped garbage added by osx
@@ -132,72 +146,111 @@ def create_chd_from_zip(zip_path, chd_path, settings, special_info=None):
                     file_path = os.path.join(temp_dir, file_info.filename)
                     with open(file_path, 'wb') as f:
                         f.write(zip_file.read(file_info.filename))
+            return temp_dir, zip_file, error
 
-            os.chdir(temp_dir)
-            
-            # if the final argument is populated then take action
-            if special_info:
-                # dat group will always be here
-                if special_info['dat_group'] in ['no-intro','other']:
-                    manual_fix_check = False
-                    fix_message = f'Navigate to {temp_dir} and ensure the filenames and cue contents match.'
-                    if toc_file == None:
-                        file_list = special_info['file_list']
-                        img_count = sum(1 for file in zip_file.infolist() if file.filename.endswith('.img'))
-                        ccd_count = sum(1 for file in zip_file.infolist() if file.filename.endswith('.ccd'))
-                        bin_count = sum(1 for file in zip_file.infolist() if file.filename.endswith('.bin'))
-                        mdf_count = sum(1 for file in zip_file.infolist() if file.filename.endswith('.mdf'))
+def manual_fix_query(fix_message):
+#'Do you want to manually fix the files?'
+    error = None
+    user_fix = inquirer.confirm( fix_message, default=False)
+    if user_fix:
+        fixed = inquirer.confirm('Confirm Here when completed' , default=False)
+        if not fixed:
+            return 'no fix, continuing'
+        else:
+            return None
+    else:
+        return 'no fix, continuing'
 
-                        if mdf_count > 0:
-                            print('archive contains an MDF file, this isn\'t supported by chdman, it will need to be converted to iso')
-                            print('a cue file has been provided please ensure the iso name matches the cue contents')
-                            toc_file = get_tocname_create_cue('.mdf',file_list)
-                            fix_message = f'Navigate to {temp_dir} to convert the mdf to iso, ensure the cue contents match the new iso.'
-                            manual_fix_check = True
-                        elif img_count == 1 and ccd_count == 1:
-                            toc_file = get_tocname_create_cue('.img',file_list)
-                        elif bin_count == 1:
-                            toc_file = get_tocname_create_cue('.bin',file_list)
-                        else:
-                            print('files can\'t be automatically fixed, but a cue has been added for manual resolution')
-                            toc_file = get_tocname_create_cue('.bin',['file.bin'])
-                            manual_fix_check = True
 
-                    elif toc_file.endswith('.cue'):
-                        # no-intro non redump files often use original cues but changed 
-                        # the actual filenames without updating the cue, rewrite single file cues
-                        cue_file_list = parse_cue_sheet(toc_file)
-                        # only handling renaming a single file at this time
-                        if len(cue_file_list) == 1:
-                            for file in special_info['file_list']:
-                                if file.endswith('.gdi') or file.endswith('.cue') or file.endswith('.ccd') or file.endswith('.sub'):
-                                    continue
-                                else:
-                                    os.rename(file,cue_file_list[0])
-                        else:
-                            print('DAT & cue file contents don\'t match')
-                            manual_fix_check = True
-                if manual_fix_check:
-                    user_fix = inquirer.confirm('Do you want to manually fix the files?' , default=False)
-                    if user_fix:
-                        print(fix_message)
-                        fixed = inquirer.confirm('Confirm Here when completed' , default=False)
-                        if not fixed:
-                            return 'no fix, continuing'
+def special_rom_handling(special_info, toc_file, temp_dir, zip_file, zip_path):
+    error = None
+    manual_fix_needed = False
+    # dat group will always included in this dictionary
+    if special_info['dat_group'] in ['no-intro','other']:
+        fix_message = f'Navigate to {temp_dir} and ensure the filenames and cue contents match.'
+        if toc_file == None:
+            file_list = special_info['file_list']
+            img_count = sum(1 for file in zip_file.infolist() if file.filename.endswith('.img'))
+            ccd_count = sum(1 for file in zip_file.infolist() if file.filename.endswith('.ccd'))
+            bin_count = sum(1 for file in zip_file.infolist() if file.filename.endswith('.bin'))
+            mdf_count = sum(1 for file in zip_file.infolist() if file.filename.endswith('.mdf'))
 
-            elif toc_file == None:
-                user_provided_toc = inquirer.confirm('No TOC or ISO in the zip archive, do you want to provide a CUE?' , default=False)
-                if user_provided_toc:
-                    user_continue = inquirer.confirm(f'Please add a TOC file to {temp_dir} and confirm when completed, or skip' , default=False)
-                    if user_continue:
-                        toc_file = inquirer.text(message="Please provide the name of the TOC file provided").strip()
+            if mdf_count > 0:
+                print('archive contains an MDF file, this isn\'t supported by chdman, it will need to be converted to iso')
+                print('a cue file has been provided please ensure the iso name matches the cue contents')
+                toc_file = create_cue('.mdf',file_list)
+                manual_fix_needed = True
+                fix_message = f'Navigate to {temp_dir} to convert the mdf to iso, ensure the cue contents match the new iso.'
+            elif img_count == 1 and ccd_count == 1:
+                ccd_sheet = get_toc(zip_path, 'ccd')
+                toc_file = ccd_2_cue(ccd_sheet)
+            elif bin_count == 1:
+                toc_file = create_cue('.bin',file_list)
+            else:
+                print('files can\'t be automatically fixed, but a cue has been added for manual resolution')
+                toc_file = create_cue('.bin',['file.bin'])
+                manual_fix_needed = True
+
+        elif toc_file.endswith('.cue'):
+            # no-intro non redump files often use original cues but changed 
+            # the actual filenames without updating the cue, rewrite single file cues
+            cue_file_list = parse_cue_sheet(toc_file)
+            # only handling renaming a single file at this time
+            if len(cue_file_list) == 1:
+                for file in special_info['file_list']:
+                    if file.endswith('.gdi') or file.endswith('.cue') or file.endswith('.ccd') or file.endswith('.sub'):
+                        continue
                     else:
-                        return 'No gdi, cue or iso file found in the zip archive, skipping this file'
-            command = ['chdman', 'createcd', '-i', toc_file, '-o', chd_path]
+                        os.rename(file,cue_file_list[0])
+            else:
+                print('DAT & cue file contents don\'t match')
+                manual_fix_needed = True
+    if manual_fix_needed:
+        error = manual_fix_query(fix_message)
+
+    return [toc_file, error]
+
+
+
+def create_chd_from_zip(zip_path, chd_path, settings, special_info=None):
+    error = None
+    original_path = os.getcwd()
+    user_provided_toc = False
+    toc_file = get_toc(zip_path)
+    temp_dir, zip_file, error = setup_temp_directory(zip_path,settings)
+    if error is not None:
+        return error
+    os.chdir(temp_dir)
+    # if the final argument is populated then take action
+    if special_info:
+        result = special_rom_handling(special_info, toc_file, temp_dir, zip_file, zip_path)
+        if result[1] is not None:
+            return result[1]
+        else:
+            toc_file = result[0]
+    elif toc_file == None:
+        user_provided_toc = inquirer.confirm('No TOC or ISO in the zip archive, do you want to provide a CUE?' , default=False)
+        if user_provided_toc:
+            user_continue = inquirer.confirm(f'Please add a TOC file to {temp_dir} and confirm when completed, or skip' , default=False)
+            if user_continue:
+                toc_file = inquirer.text(message="Please provide the name of the TOC file provided").strip()
+            else:
+                return 'No gdi, cue or iso file found in the zip archive, skipping this file'
+    chd_created = False
+    command = ['chdman', 'createcd', '-i', toc_file, '-o', chd_path]
+    while not chd_created:
+        try:
             subprocess.run(command, check=True, env=env_with_script_dir)
-    finally:
-        os.chdir(original_path)
-        shutil.rmtree(temp_dir)
+            chd_created = True
+        except:
+            error = manual_fix_query(f'Chdman returned an error, do you want to attempt to resolve it - temp directory is {temp_dir}')
+            if error is not None:
+                os.chdir(original_path)
+                shutil.rmtree(temp_dir)
+                return error
+
+    os.chdir(original_path)
+    shutil.rmtree(temp_dir)
 
 def convert__bincue_to_chd(chd_file_path: pathlib.Path, output_cue_file_path: pathlib.Path, show_command_output: bool):
     # Use temporary directory for the chdman output files to keep those separate from the binmerge output files:
@@ -287,6 +340,73 @@ def check_valid_zips(dat_entry,rom_folder):
             else:
                 return None
 
+def ConfigSectionMap(Config, section):
+    dict1 = {}
+    options = Config.options(section)
+    for option in options:
+        try:
+            dict1[option] = Config.get(section, option)
+            if dict1[option] == -1:
+                print("skip: %s" % option)
+        except:
+            print("exception on %s!" % option)
+            dict1[option] = None
+    return dict1
+
+def ccd_2_cue(ccd_sheet):
+    import configparser
+    filename = os.path.splitext(ccd_sheet)
+    cue_sheet = os.path.join(filename[0]+'.cue')
+    imagetype=('.img','.bin','.iso')
+    imgfile = ''
+    files = [f for f in os.listdir('.') if os.path.isfile(f)]
+    for f in files:
+        if os.path.splitext(f)[1] in imagetype:
+            imgfile = f
+
+    Config = configparser.ConfigParser()
+    Config.read(ccd_sheet)
+    cuefile = open(cue_sheet, 'wb')
+
+    track_counter = 0
+    BEGIN = False
+
+    cuefile.write(("FILE \"%s\" BINARY\r\n" % (imgfile)).encode())
+    for item in Config.sections():
+        if 'Entry' not in item:
+            continue
+
+        trackinfo = {}
+        tracktype = ConfigSectionMap(Config,item)['control']
+        trackindex = int(ConfigSectionMap(Config,item)['session'])
+        trackinfo['minute'] = int(ConfigSectionMap(Config, item)['pmin'])
+        trackinfo['second'] = int(ConfigSectionMap(Config,item)['psec'])
+        trackinfo['frame'] = int(ConfigSectionMap(Config,item)['pframe'])
+
+        if int(ConfigSectionMap(Config,item)['plba']) == 0:
+            BEGIN = True
+
+        if BEGIN is True:
+            track_counter += 1
+            if trackinfo['second'] == 0:
+                if trackinfo['minute'] >= 1:
+                    trackinfo['minute'] -= 1
+                    trackinfo['second'] = 60
+                else:
+                    trackinfo['minute'] = 0
+                    trackinfo['second'] = 0
+            trackinfo['second'] -= 2
+            cuefile.write(("  TRACK %02d %s\r\n" \
+                  "    INDEX %02d %02d:%02d:%02d\r\n" % (track_counter,
+                                               "MODE1/2352" if tracktype == '0x04' else 'AUDIO',
+                                               trackindex,
+                                               trackinfo['minute'],
+                                               trackinfo['second'],
+                                               trackinfo['frame'],)).encode())
+    print(f'cuefile is {cuefile.name}')
+    return cuefile.name
+
+
 def get_imgs_from_bin(cue):
     def get_file_name(line):
         # strip off leading 'FILE '
@@ -316,7 +436,7 @@ def get_imgs_from_bin(cue):
         lines = f.readlines()
         for line in lines:
             # FILE
-            if re.search('^\s*FILE', line):
+            if re.search(r'^\s*FILE', line):
                 f = get_file_name(line)
                 if f[0] != '/':
                     s = cue.split('/')

@@ -161,13 +161,11 @@ def update_soft_dict(sl_dict,dat_dict,new_sources_map):
         sl_dict[soft_name]['update_required'] = True
 
 def libcrypt_report(psx_dict):
-    from modules.gamedb import libcrypt
+    from modules.libcrypt import libcrypt_titles
     for soft, soft_data in psx_dict.items():
         if 'serial' in soft_data:
-            for string in soft_data['serial']:
-                check = string.replace('-','')
-                check = check.replace(' ','')
-                if check in libcrypt:
+            for serial in soft_data['serial']:
+                if serial in libcrypt_titles:
                     print(f'{soft}: {soft_data["description"]} uses libcrypt')
 
 
@@ -829,9 +827,10 @@ def redump_url_mapping(sl_dict,dat_dict,script_dir,platform):
                             retrieve_name = True
                     if retrieve_name: # get the dat name from the redump sha URL
                         print('          getting name from redump website')
-                        filename = get_filename_from_url(redump_url+'sha1/',redump_dict[redump_lookup])
-                        if filename:
+                        filename = get_filename_from_url(redump_url)
+                        if filename is not None:
                             dat_title = filename
+                            redump_dict[redump_lookup]['site_filename'] = filename
                 else: # no url match
                     print(f'{redump_url} doesn\'t appear valid for {soft} {disc}')
 
@@ -879,25 +878,33 @@ def content_header_to_filename(response):
     header = response.headers.get('Content-Disposition')
     if header:
         raw_filename = header.split('filename=')[1].strip('"\'')
-
         # In case the filename is quoted, remove the surrounding quotes
         parsed_filename = urlparse(raw_filename)
         if parsed_filename:
-            filename = re.match(f'(.*)\.sha1',parsed_filename.path)[1]
+            filename = re.match(r'(.*)\.sha1',parsed_filename.path)[1]
             return filename
         else:
             return None
     else:
         return None
 
-def get_filename_from_url(url,redump_entry):
+def get_filename_from_url(redump_url):
+    url = redump_url+'sha1/'
     response = requests.head(url)
     filename = content_header_to_filename(response)
-    if filename is not None:
-        redump_entry['site_filename'] = filename
     return filename
+
+def check_names(libcrypt_titles):
+    for title_key, title_data in libcrypt_titles.items():
+        if all(isinstance(sub_value, dict) for sub_value in title_data.values()):
+            check_names(title_data)
+        else:
+            url = title_data['url']
+            name_from_url = get_filename_from_url(url)
+            if name_from_url:  # Check if the returned name is not empty
+                if name_from_url != title_data['name']:  # Compare the names
+                    print(f"{title_data['name']} URL {url} has a different title: {name_from_url}")
                     
-                        
 
 def interactive_title_mapping(interactive_matches,sl_dict,dat_dict,platform,script_dir,match_type='redump_serial'):
     '''

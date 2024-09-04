@@ -521,6 +521,8 @@ def chd_builder(platform):
     '''
     from modules.chd import create_chd_from_zip, chdman_info
     from modules.dat import update_softlist_chd_sha1s
+    if platform == 'psx':
+        from modules.libcrypt import libcrypt_titles
     new_hashes = False
     built_sources = {}
     discontinue = False
@@ -532,7 +534,7 @@ def chd_builder(platform):
                 if disc_data['chd_found']:
                     continue
             if 'source_rom' in disc_data:
-                # create platform directory
+                # create platform directory and softlist title directory
                 if not os.path.exists(os.path.join(settings['chd'],platform)):
                     os.mkdir(os.path.join(settings['chd'],platform))
                 chd_dir = os.path.join(settings['chd'],platform,soft)
@@ -550,6 +552,7 @@ def chd_builder(platform):
                         check the dat group here for any special handling that will be needed
                         known things to handle:
                           - Redump and cdi - need to rewrite the cue file (todo)
+                          - Redump & psx - libcrypt support
                           - No-Intro - Cue file data doesn't match filenames (partial support)
                         '''
                         dat_group = get_dat_group(disc_data['source_dat'])
@@ -557,9 +560,21 @@ def chd_builder(platform):
                         if dat_group in ['no-intro','other']:
                             game_entry = all_dat_dict[platform]['hashes'][disc_data['source_dat']][disc_data['source_sha']]
                             special_logic.update(game_entry)
-                        elif dat_group == 'redump' and platform == 'cdi':
-                            # placeholder
-                            pass
+                        elif dat_group == 'redump':
+                            libcrypt = False
+                            if platform == 'psx' and 'serial' in soft_data:
+                                for serial in soft_data['serial']:
+                                    if serial in libcrypt_titles:
+                                        libcrypt = True
+                                if libcrypt:
+                                    print('This Title uses Libcrypt')
+                                    special_logic.update({'redump_url':disc_data['redump_url']})
+                                    if sys.platform != 'win32':
+                                        print('libcrypt handling requires additional windows binaries, not supported on this platform')
+                                        continue
+                            elif platform == 'cdi':
+                                # placeholder
+                                pass
                         else:
                             special_logic = None
                         try:
