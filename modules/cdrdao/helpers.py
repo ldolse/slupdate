@@ -158,7 +158,7 @@ def _get_tag_layout(self, track: CdrdaoTrack, tag: SectorTagType) -> Tuple[int, 
 
     return sector_offset, sector_size, sector_skip
 
-def _create_full_toc(self) -> None:
+def def _create_full_toc(self, create_c0_entry: bool = False) -> None:
     toc = CDFullTOC()
     session_ending_track = {}
     toc.first_complete_session = 255
@@ -210,16 +210,18 @@ def _create_full_toc(self) -> None:
                 pframe=leadout_pmsf[2]
             ))
 
-        if create_c0_entry:
-            track_descriptors.append(TrackDataDescriptor(
-                session_number=current_session,
-                point=0xC0,
-                adr=5,
-                control=0,
-                min=128,
-                pmin=97,
-                psec=25
-            ))
+            # This seems to be constant? It should not exist on CD-ROM but CloneCD creates them anyway
+            # Format seems like ATIP, but ATIP should not be as 0xC0 in TOC...
+            if self.create_c0_entry:
+                track_descriptors.append(TrackDataDescriptor(
+                    session_number=current_session,
+                    point=0xC0,
+                    adr=5,
+                    control=0,
+                    min=128,
+                    pmin=97,
+                    psec=25
+                ))
 
         # Lead-in
         if track.sequence > current_session:
