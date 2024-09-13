@@ -3,7 +3,7 @@ import re
 import os
 from datetime import datetime
 from typing import List, Dict, Optional
-import logging
+
 
 from modules.CD.atip import ATIP
 from modules.CD.sector import Sector
@@ -24,6 +24,7 @@ from .read import CdrdaoRead
 from .structs import CdrdaoTrackFile, CdrdaoTrack, CdrdaoDisc
 from .write import *
 
+import logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 

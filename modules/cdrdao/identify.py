@@ -1,6 +1,10 @@
 import re
+import io
 from .constants import *
 from modules.ifilter import IFilter
+import logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 def identify(self, image_filter: IFilter) -> bool:
 	try:
