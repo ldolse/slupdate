@@ -541,12 +541,12 @@ class Cdrdao(CdrdaoProperties):
                 )
             ]
 
-        # Create tracks
-        self.tracks = [self._cdrdao_track_to_track(ct) for ct in self._discimage.tracks]
+            # Create tracks
+            self.tracks = [self._cdrdao_track_to_track(ct) for ct in self._discimage.tracks]
 
-        # Create TOC
-        self._create_full_toc()
-        self._image_info.readable_media_tags.append(MediaTagType.CD_FullTOC)
+            # Create TOC
+            self._create_full_toc()
+            self._image_info.readable_media_tags.append(MediaTagType.CD_FullTOC)
 
             # Set image info
             self._image_info.media_type = self._determine_media_type()
