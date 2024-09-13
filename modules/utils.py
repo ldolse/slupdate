@@ -3,7 +3,6 @@ import os
 import re
 import pickle
 import pprint
-import sys
 import inquirer
 
 def save_data(data_to_save,name,directory):

@@ -1,4 +1,3 @@
-import os
 from modules.plugin_register import PluginRegister
 from modules.clonecd_filter import CloneCDFilter
 from modules.clonecd import CloneCD

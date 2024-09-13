@@ -3,7 +3,7 @@ from functools import total_ordering
 from typing import List, Optional, Dict
 
 from datetime import datetime
-from enum import IntEnum, Flag, auto
+from enum import IntEnum, Flag
 
 class TrackSubchannelType(IntEnum):
     None_ = 0

@@ -5,6 +5,11 @@ from typing import List, Optional, Tuple
 from checksums import CRC16CCITTContext
 from .cd_checksums import CdChecksums
 
+import logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
+
+
 class CdChecksums:
     MODULE_NAME = "CD checksums"
     _ecc_f_table: List[int] = []

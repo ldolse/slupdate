@@ -2,9 +2,10 @@ import re
 import requests
 from bs4 import BeautifulSoup
 from requests.adapters import HTTPAdapter
-from requests.packages.urllib3.util.retry import Retry
+from requests.adapters import Retry
 from urllib.parse import urlparse
 from modules.utils import save_data, restore_dict,list_menu
+from .dat import process_comments, get_sl_entry
 import inquirer
 import hashlib
 from difflib import get_close_matches
@@ -533,6 +534,7 @@ def update_nonmatch(answers, san_redumplst):
 
 
 def print_redump_info(redump_dict):
+    import pykakasi
     limited = re.compile(r'(Genteiban|Limited Edition|Shokai Genteiban)')
     print('')
     print('Redump.org Website details for this title:')

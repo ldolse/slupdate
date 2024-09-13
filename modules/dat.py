@@ -1,8 +1,7 @@
-import xmltodict
 import re, xmltodict, hashlib
 import xml.etree.ElementTree as ET
 import html
-from  lxml import etree
+from lxml import etree
 
 
 '''
@@ -327,8 +326,8 @@ def comment_to_sl_dict(soft,raw_comment_dict,sl_dict):
                 try:
                     comment_dest.update(rom_data)
                 except Exception as error:
-                    print(f'got an error trying to update this note {error}, {rom_dict}')
-                    except_dest_outer.update({comment_location:rom_dict})
+                    print(f'got an error trying to update this note {error}, {rom_sources}')
+                    except_dest_outer.update({comment_location:rom_sources})
         # handle notes
         if notes:
             notedict['note'+str(notenum)] = notes
@@ -445,7 +444,7 @@ def build_sl_dict(softlist, sl_dict,platform):
     process_sl_rom_sources(sl_dict)
 
 def print_sha1s(softlist):
-    for item in my_soft['software']:
+    for item in softlist['software']:
         print('mame name is '+item['@name']+' and description is '+item['description'])
         if isinstance(item['part'], list):
             discnum = 1
@@ -1087,6 +1086,8 @@ def create_dat_hash_dict(raw_dat_dict):
     nameresult = {}
     for game in raw_dat_dict['game']:
         file_list = {}
+        raw_romlist = []
+        raw_romlist = get_raw_rom_entry(game)
         name = game['@name']
         files = len(game['rom'])
         size = 0

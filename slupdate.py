@@ -12,11 +12,10 @@ import inquirer
 import builtins
 from importlib import reload
 from modules.utils import save_data,restore_dict,list_menu
-import modules.chd
-import modules.mapping
-import modules.dat
-from modules.mapping import update_soft_dict
-from modules.dat import get_dat_group
+from modules.chd import *
+from modules.mapping import *
+from modules.dat import *
+
 
 try:
     # get the script location directory to ensure settings are saved and update environment var
