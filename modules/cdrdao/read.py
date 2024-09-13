@@ -4,8 +4,8 @@ from .helpers import *
 from .constants import CDRDAO_TRACK_TYPE_AUDIO, CDRDAO_TRACK_TYPE_MODE1, CDRDAO_TRACK_TYPE_MODE2_FORM1, CDRDAO_TRACK_TYPE_MODE2_FORM2, CDRDAO_TRACK_TYPE_MODE2, CDRDAO_TRACK_TYPE_MODE2_MIX, CDRDAO_TRACK_TYPE_MODE2_RAW
 from modules.error_number import ErrorNumber
 from modules.CD.cd_types import SectorTagType, MediaTagType, Track, Session
-from modules.error_number import ErrorNumber
-from modules.CD.checksums import CdChecksums
+from modules.CD.sector import Sector
+from modules.CD.cd_checksums import CdChecksums
 
 class CdrdaoRead:
     def read_sector(self, sector_address: int) -> Tuple[ErrorNumber, Optional[bytes]]:

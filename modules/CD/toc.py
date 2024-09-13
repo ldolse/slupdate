@@ -1,8 +1,8 @@
-import logging
 from typing import Optional, List
 from enum import IntEnum
 import struct
 
+import logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 

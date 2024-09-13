@@ -308,7 +308,7 @@ def find_softlist_zips(soft_list, platform_dats,dat_rom_map):
                     goodzip = check_valid_zips(game_entry,dat_rom_map[dat])
                     if goodzip:
                         disc_info.update({'source_rom':goodzip})
-                        valid_zips.update({sha:goodzip})
+                        valid_zips.update({'sha':goodzip})
         else:
             continue
     print('found '+str(len(valid_zips))+' valid rom sources which can be coverted to CHD')

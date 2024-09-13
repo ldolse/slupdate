@@ -1,7 +1,10 @@
 import struct
+import io
+from typing import Tuple
 from .constants import *
 from .structs import CdrdaoTrack
-from modules.CD.cd_types import TrackType, Track
+from .cdrdao import Cdrdao
+from modules.CD.cd_types import TrackType, Track, SectorTagType, MediaType
 from modules.CD.fulltoc import FullTOC, TrackDataDescriptor, CDFullTOC
 
 @staticmethod

@@ -3,8 +3,8 @@ from typing import List, Dict
 import struct
 from typing import Optional
 from modules.CD.cd_types import TocControl, TocAdr, MediaTagType, SectorTagType, Track, TrackType, CdFlags
-import logging
 
+import logging
 logger = logging.getLogger(__name__)
 
 @dataclass

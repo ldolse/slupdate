@@ -1,6 +1,4 @@
 import logging
-from typing import List, Tuple
-from enum import IntEnum
 from modules.checksums import CRC16CCITTContext
 
 logging.basicConfig(level=logging.DEBUG)
