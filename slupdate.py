@@ -10,6 +10,7 @@ import re
 import sys
 import inquirer
 import builtins
+import traceback
 from importlib import reload
 from modules.utils import save_data,restore_dict,list_menu
 from modules.chd import *
