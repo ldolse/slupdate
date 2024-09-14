@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from functools import total_ordering
 from typing import List, Optional, Dict
+from modules.ifilter import IFilter
 
 from datetime import datetime
 from enum import IntEnum, Flag
