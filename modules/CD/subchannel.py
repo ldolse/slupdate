@@ -20,8 +20,16 @@ class Subchannel:
     def binary_to_bcd_q(q: bytearray) -> None:
         if (q[0] & 0xF) == 1 or (q[0] & 0xF) == 5:
             for i in range(1, 9):
-                q[i] = ((q[i] // 10) << 4) + (q[i] % 10)
-        q[9] = ((q[9] // 10) << 4) + (q[9] % 10)
+                if q[i] > 255:
+                    logging.warning(f"Invalid value {q[i]} at index {i} in Q subchannel")
+                    q[i] = 0  # or some other appropriate default value
+                else:
+                    q[i] = ((q[i] // 10) << 4) + (q[i] % 10)
+        if q[9] > 255:
+            logging.warning(f"Invalid value {q[9]} at index 9 in Q subchannel")
+            q[9] = 0  # or some other appropriate default value
+        else:
+            q[9] = ((q[9] // 10) << 4) + (q[9] % 10)
 
     @staticmethod
     def bcd_to_binary_q(q: bytearray) -> None:
@@ -59,10 +67,85 @@ class Subchannel:
 
         for in_pos in range(0, len(subchannel), 96):
             for i in range(12):
-                for j in range(8):
-                    sub_buf[out_pos + j] = 0
-                    for k in range(8):
-                        sub_buf[out_pos + j] |= ((subchannel[in_pos + i + k*12] >> (7-j)) & 0x01) << (7-k)
+                # P
+                sub_buf[out_pos + 0] += subchannel[in_pos + i + 0] & 0x80
+                sub_buf[out_pos + 1] += (subchannel[in_pos + i + 0] & 0x40) << 1
+                sub_buf[out_pos + 2] += (subchannel[in_pos + i + 0] & 0x20) << 2
+                sub_buf[out_pos + 3] += (subchannel[in_pos + i + 0] & 0x10) << 3
+                sub_buf[out_pos + 4] += (subchannel[in_pos + i + 0] & 0x08) << 4
+                sub_buf[out_pos + 5] += (subchannel[in_pos + i + 0] & 0x04) << 5
+                sub_buf[out_pos + 6] += (subchannel[in_pos + i + 0] & 0x02) << 6
+                sub_buf[out_pos + 7] += (subchannel[in_pos + i + 0] & 0x01) << 7
+
+                # Q
+                sub_buf[out_pos + 0] += (subchannel[in_pos + i + 12] & 0x80) >> 1
+                sub_buf[out_pos + 1] += subchannel[in_pos + i + 12] & 0x40
+                sub_buf[out_pos + 2] += (subchannel[in_pos + i + 12] & 0x20) << 1
+                sub_buf[out_pos + 3] += (subchannel[in_pos + i + 12] & 0x10) << 2
+                sub_buf[out_pos + 4] += (subchannel[in_pos + i + 12] & 0x08) << 3
+                sub_buf[out_pos + 5] += (subchannel[in_pos + i + 12] & 0x04) << 4
+                sub_buf[out_pos + 6] += (subchannel[in_pos + i + 12] & 0x02) << 5
+                sub_buf[out_pos + 7] += (subchannel[in_pos + i + 12] & 0x01) << 6
+
+                # R
+                sub_buf[out_pos + 0] += (subchannel[in_pos + i + 24] & 0x80) >> 2
+                sub_buf[out_pos + 1] += (subchannel[in_pos + i + 24] & 0x40) >> 1
+                sub_buf[out_pos + 2] += subchannel[in_pos + i + 24] & 0x20
+                sub_buf[out_pos + 3] += (subchannel[in_pos + i + 24] & 0x10) << 1
+                sub_buf[out_pos + 4] += (subchannel[in_pos + i + 24] & 0x08) << 2
+                sub_buf[out_pos + 5] += (subchannel[in_pos + i + 24] & 0x04) << 3
+                sub_buf[out_pos + 6] += (subchannel[in_pos + i + 24] & 0x02) << 4
+                sub_buf[out_pos + 7] += (subchannel[in_pos + i + 24] & 0x01) << 5
+
+                # S
+                sub_buf[out_pos + 0] += (subchannel[in_pos + i + 36] & 0x80) >> 3
+                sub_buf[out_pos + 1] += (subchannel[in_pos + i + 36] & 0x40) >> 2
+                sub_buf[out_pos + 2] += (subchannel[in_pos + i + 36] & 0x20) >> 1
+                sub_buf[out_pos + 3] += subchannel[in_pos + i + 36] & 0x10
+                sub_buf[out_pos + 4] += (subchannel[in_pos + i + 36] & 0x08) << 1
+                sub_buf[out_pos + 5] += (subchannel[in_pos + i + 36] & 0x04) << 2
+                sub_buf[out_pos + 6] += (subchannel[in_pos + i + 36] & 0x02) << 3
+                sub_buf[out_pos + 7] += (subchannel[in_pos + i + 36] & 0x01) << 4
+
+                # T
+                sub_buf[out_pos + 0] += (subchannel[in_pos + i + 48] & 0x80) >> 4
+                sub_buf[out_pos + 1] += (subchannel[in_pos + i + 48] & 0x40) >> 3
+                sub_buf[out_pos + 2] += (subchannel[in_pos + i + 48] & 0x20) >> 2
+                sub_buf[out_pos + 3] += (subchannel[in_pos + i + 48] & 0x10) >> 1
+                sub_buf[out_pos + 4] += subchannel[in_pos + i + 48] & 0x08
+                sub_buf[out_pos + 5] += (subchannel[in_pos + i + 48] & 0x04) << 1
+                sub_buf[out_pos + 6] += (subchannel[in_pos + i + 48] & 0x02) << 2
+                sub_buf[out_pos + 7] += (subchannel[in_pos + i + 48] & 0x01) << 3
+
+                # U
+                sub_buf[out_pos + 0] += (subchannel[in_pos + i + 60] & 0x80) >> 5
+                sub_buf[out_pos + 1] += (subchannel[in_pos + i + 60] & 0x40) >> 4
+                sub_buf[out_pos + 2] += (subchannel[in_pos + i + 60] & 0x20) >> 3
+                sub_buf[out_pos + 3] += (subchannel[in_pos + i + 60] & 0x10) >> 2
+                sub_buf[out_pos + 4] += (subchannel[in_pos + i + 60] & 0x08) >> 1
+                sub_buf[out_pos + 5] += subchannel[in_pos + i + 60] & 0x04
+                sub_buf[out_pos + 6] += (subchannel[in_pos + i + 60] & 0x02) << 1
+                sub_buf[out_pos + 7] += (subchannel[in_pos + i + 60] & 0x01) << 2
+
+                # V
+                sub_buf[out_pos + 0] += (subchannel[in_pos + i + 72] & 0x80) >> 6
+                sub_buf[out_pos + 1] += (subchannel[in_pos + i + 72] & 0x40) >> 5
+                sub_buf[out_pos + 2] += (subchannel[in_pos + i + 72] & 0x20) >> 4
+                sub_buf[out_pos + 3] += (subchannel[in_pos + i + 72] & 0x10) >> 3
+                sub_buf[out_pos + 4] += (subchannel[in_pos + i + 72] & 0x08) >> 2
+                sub_buf[out_pos + 5] += (subchannel[in_pos + i + 72] & 0x04) >> 1
+                sub_buf[out_pos + 6] += subchannel[in_pos + i + 72] & 0x02
+                sub_buf[out_pos + 7] += (subchannel[in_pos + i + 72] & 0x01) << 1
+
+                # W
+                sub_buf[out_pos + 0] += (subchannel[in_pos + i + 84] & 0x80) >> 7
+                sub_buf[out_pos + 1] += (subchannel[in_pos + i + 84] & 0x40) >> 6
+                sub_buf[out_pos + 2] += (subchannel[in_pos + i + 84] & 0x20) >> 5
+                sub_buf[out_pos + 3] += (subchannel[in_pos + i + 84] & 0x10) >> 4
+                sub_buf[out_pos + 4] += (subchannel[in_pos + i + 84] & 0x08) >> 3
+                sub_buf[out_pos + 5] += (subchannel[in_pos + i + 84] & 0x04) >> 2
+                sub_buf[out_pos + 6] += (subchannel[in_pos + i + 84] & 0x02) >> 1
+                sub_buf[out_pos + 7] += subchannel[in_pos + i + 84] & 0x01
                 out_pos += 8
 
         return bytes(sub_buf)
@@ -74,134 +157,215 @@ class Subchannel:
 
         for out_pos in range(0, len(subchannel), 96):
             for i in range(12):
-                for j in range(8):
-                    for k in range(8):
-                        sub_buf[out_pos + i + k*12] |= ((subchannel[in_pos + j] >> (7-k)) & 0x01) << (7-j)
+                # P
+                sub_buf[out_pos + i + 0] += (subchannel[in_pos + 0] & 0x80) >> 0
+                sub_buf[out_pos + i + 0] += (subchannel[in_pos + 1] & 0x80) >> 1
+                sub_buf[out_pos + i + 0] += (subchannel[in_pos + 2] & 0x80) >> 2
+                sub_buf[out_pos + i + 0] += (subchannel[in_pos + 3] & 0x80) >> 3
+                sub_buf[out_pos + i + 0] += (subchannel[in_pos + 4] & 0x80) >> 4
+                sub_buf[out_pos + i + 0] += (subchannel[in_pos + 5] & 0x80) >> 5
+                sub_buf[out_pos + i + 0] += (subchannel[in_pos + 6] & 0x80) >> 6
+                sub_buf[out_pos + i + 0] += (subchannel[in_pos + 7] & 0x80) >> 7
+
+                # Q
+                sub_buf[out_pos + i + 12] += (subchannel[in_pos + 0] & 0x40) << 1
+                sub_buf[out_pos + i + 12] += (subchannel[in_pos + 1] & 0x40) >> 0
+                sub_buf[out_pos + i + 12] += (subchannel[in_pos + 2] & 0x40) >> 1
+                sub_buf[out_pos + i + 12] += (subchannel[in_pos + 3] & 0x40) >> 2
+                sub_buf[out_pos + i + 12] += (subchannel[in_pos + 4] & 0x40) >> 3
+                sub_buf[out_pos + i + 12] += (subchannel[in_pos + 5] & 0x40) >> 4
+                sub_buf[out_pos + i + 12] += (subchannel[in_pos + 6] & 0x40) >> 5
+                sub_buf[out_pos + i + 12] += (subchannel[in_pos + 7] & 0x40) >> 6
+
+                # R
+                sub_buf[out_pos + i + 24] += (subchannel[in_pos + 0] & 0x20) << 2
+                sub_buf[out_pos + i + 24] += (subchannel[in_pos + 1] & 0x20) << 1
+                sub_buf[out_pos + i + 24] += (subchannel[in_pos + 2] & 0x20) >> 0
+                sub_buf[out_pos + i + 24] += (subchannel[in_pos + 3] & 0x20) >> 1
+                sub_buf[out_pos + i + 24] += (subchannel[in_pos + 4] & 0x20) >> 2
+                sub_buf[out_pos + i + 24] += (subchannel[in_pos + 5] & 0x20) >> 3
+                sub_buf[out_pos + i + 24] += (subchannel[in_pos + 6] & 0x20) >> 4
+                sub_buf[out_pos + i + 24] += (subchannel[in_pos + 7] & 0x20) >> 5
+
+                # S
+                sub_buf[out_pos + i + 36] += (subchannel[in_pos + 0] & 0x10) << 3
+                sub_buf[out_pos + i + 36] += (subchannel[in_pos + 1] & 0x10) << 2
+                sub_buf[out_pos + i + 36] += (subchannel[in_pos + 2] & 0x10) << 1
+                sub_buf[out_pos + i + 36] += (subchannel[in_pos + 3] & 0x10) >> 0
+                sub_buf[out_pos + i + 36] += (subchannel[in_pos + 4] & 0x10) >> 1
+                sub_buf[out_pos + i + 36] += (subchannel[in_pos + 5] & 0x10) >> 2
+                sub_buf[out_pos + i + 36] += (subchannel[in_pos + 6] & 0x10) >> 3
+                sub_buf[out_pos + i + 36] += (subchannel[in_pos + 7] & 0x10) >> 4
+
+                # T
+                sub_buf[out_pos + i + 48] += (subchannel[in_pos + 0] & 0x8) << 4
+                sub_buf[out_pos + i + 48] += (subchannel[in_pos + 1] & 0x8) << 3
+                sub_buf[out_pos + i + 48] += (subchannel[in_pos + 2] & 0x8) << 2
+                sub_buf[out_pos + i + 48] += (subchannel[in_pos + 3] & 0x8) << 1
+                sub_buf[out_pos + i + 48] += (subchannel[in_pos + 4] & 0x8) >> 0
+                sub_buf[out_pos + i + 48] += (subchannel[in_pos + 5] & 0x8) >> 1
+                sub_buf[out_pos + i + 48] += (subchannel[in_pos + 6] & 0x8) >> 2
+                sub_buf[out_pos + i + 48] += (subchannel[in_pos + 7] & 0x8) >> 3
+
+                # U
+                sub_buf[out_pos + i + 60] += (subchannel[in_pos + 0] & 0x4) << 5
+                sub_buf[out_pos + i + 60] += (subchannel[in_pos + 1] & 0x4) << 4
+                sub_buf[out_pos + i + 60] += (subchannel[in_pos + 2] & 0x4) << 3
+                sub_buf[out_pos + i + 60] += (subchannel[in_pos + 3] & 0x4) << 2
+                sub_buf[out_pos + i + 60] += (subchannel[in_pos + 4] & 0x4) << 1
+                sub_buf[out_pos + i + 60] += (subchannel[in_pos + 5] & 0x4) >> 0
+                sub_buf[out_pos + i + 60] += (subchannel[in_pos + 6] & 0x4) >> 1
+                sub_buf[out_pos + i + 60] += (subchannel[in_pos + 7] & 0x4) >> 2
+
+                # V
+                sub_buf[out_pos + i + 72] += (subchannel[in_pos + 0] & 0x2) << 6
+                sub_buf[out_pos + i + 72] += (subchannel[in_pos + 1] & 0x2) << 5
+                sub_buf[out_pos + i + 72] += (subchannel[in_pos + 2] & 0x2) << 4
+                sub_buf[out_pos + i + 72] += (subchannel[in_pos + 3] & 0x2) << 3
+                sub_buf[out_pos + i + 72] += (subchannel[in_pos + 4] & 0x2) << 2
+                sub_buf[out_pos + i + 72] += (subchannel[in_pos + 5] & 0x2) << 1
+                sub_buf[out_pos + i + 72] += (subchannel[in_pos + 6] & 0x2) >> 0
+                sub_buf[out_pos + i + 72] += (subchannel[in_pos + 7] & 0x2) >> 1
+
+                # W
+                sub_buf[out_pos + i + 84] += (subchannel[in_pos + 0] & 0x1) << 7
+                sub_buf[out_pos + i + 84] += (subchannel[in_pos + 1] & 0x1) << 6
+                sub_buf[out_pos + i + 84] += (subchannel[in_pos + 2] & 0x1) << 5
+                sub_buf[out_pos + i + 84] += (subchannel[in_pos + 3] & 0x1) << 4
+                sub_buf[out_pos + i + 84] += (subchannel[in_pos + 4] & 0x1) << 3
+                sub_buf[out_pos + i + 84] += (subchannel[in_pos + 5] & 0x1) << 2
+                sub_buf[out_pos + i + 84] += (subchannel[in_pos + 6] & 0x1) << 1
+                sub_buf[out_pos + i + 84] += (subchannel[in_pos + 7] & 0x1) >> 0
+
                 in_pos += 8
 
         return bytes(sub_buf)
 
     @staticmethod
     def prettify_q(sub_buf: bytes, bcd: bool, lba: int, corrupted_pause: bool, pause: bool, rw_empty: bool) -> str:
-        crc = CRC16CCITTContext.calculate(sub_buf[:10])
-        crc_ok = crc.to_bytes(2, 'big') == sub_buf[10:12]
+        try:
+            crc = CRC16CCITTContext.calculate_static(sub_buf[:10])
+            crc_ok = crc.to_bytes(2, 'big') == sub_buf[10:12]
 
-        minute = (lba + 150) // 4500
-        second = ((lba + 150) % 4500) // 75
-        frame = (lba + 150) % 75
+            minute = (lba + 150) // 4500
+            second = ((lba + 150) % 4500) // 75
+            frame = (lba + 150) % 75
 
-        area = "Lead-In" if lba < 0 else ("Lead-out" if sub_buf[1] == 0xAA else "Program")
-        control = (sub_buf[0] & 0xF0) // 16
-        adr = sub_buf[0] & 0x0F
+            area = "Lead-In" if lba < 0 else ("Lead-out" if sub_buf[1] == 0xAA else "Program")
+            control = (sub_buf[0] & 0xF0) // 16
+            adr = sub_buf[0] & 0x0F
 
-        control_info = {
-            0: "Stereo audio without pre-emphasis",
-            1: "Stereo audio with pre-emphasis",
-            4: "Data track, recorded uninterrupted",
-            5: "Data track, recorded incrementally",
-            8: "Quadraphonic audio without pre-emphasis",
-            9: "Quadraphonic audio with pre-emphasis"
-        }.get(control & 0x0D, f"Reserved control value: {control & 0x01}")
+            control_info = {
+                0: "Stereo audio without pre-emphasis",
+                1: "Stereo audio with pre-emphasis",
+                4: "Data track, recorded uninterrupted",
+                5: "Data track, recorded incrementally",
+                8: "Quadraphonic audio without pre-emphasis",
+                9: "Quadraphonic audio with pre-emphasis"
+            }.get(control & 0x0D, f"Reserved control value: {control & 0x01}")
 
-        copy = "Copy permitted" if (control & 0x02) else "Copy prohibited"
+            copy = "Copy permitted" if (control & 0x02) else "Copy prohibited"
 
-        if bcd:
-            Subchannel.bcd_to_binary_q(bytearray(sub_buf))
+            if bcd:
+                Subchannel.bcd_to_binary_q(bytearray(sub_buf))
 
-        q_pos = sub_buf[3] * 60 * 75 + sub_buf[4] * 75 + sub_buf[5] - 150
-        pmin, psec = sub_buf[7], sub_buf[8]
+            q_pos = sub_buf[3] * 60 * 75 + sub_buf[4] * 75 + sub_buf[5] - 150
+            pmin, psec = sub_buf[7], sub_buf[8]
 
-        q_start = sub_buf[7] * 60 * 75 + sub_buf[8] * 75 + sub_buf[9] - 150
-        next_pos = sub_buf[3] * 60 * 75 + sub_buf[4] * 75 + sub_buf[5] - 150
-        zero = sub_buf[6]
-        max_out = sub_buf[7] * 60 * 75 + sub_buf[8] * 75 + sub_buf[9] - 150
-        final = sub_buf[3] == 0xFF and sub_buf[4] == 0xFF and sub_buf[5] == 0xFF
+            q_start = sub_buf[7] * 60 * 75 + sub_buf[8] * 75 + sub_buf[9] - 150
+            next_pos = sub_buf[3] * 60 * 75 + sub_buf[4] * 75 + sub_buf[5] - 150
+            zero = sub_buf[6]
+            max_out = sub_buf[7] * 60 * 75 + sub_buf[8] * 75 + sub_buf[9] - 150
+            final = sub_buf[3] == 0xFF and sub_buf[4] == 0xFF and sub_buf[5] == 0xFF
 
-        Subchannel.binary_to_bcd_q(bytearray(sub_buf))
+            Subchannel.binary_to_bcd_q(bytearray(sub_buf))
 
-        result = []
-        result.append(f"{minute:02d}:{second:02d}:{frame:02d} (LBA: {lba})")
-        result.append(f"Area: {area}")
-        result.append("Corrupted pause" if corrupted_pause else ("Pause" if pause else "Not pause"))
-        result.append(control_info)
-        result.append(copy)
+            result = []
+            result.append(f"{minute:02d}:{second:02d}:{frame:02d} (LBA: {lba})")
+            result.append(f"Area: {area}")
+            result.append("Corrupted pause" if corrupted_pause else ("Pause" if pause else "Not pause"))
+            result.append(control_info)
+            result.append(copy)
 
-        if lba < 0:
-            if adr in [1, 4]:
-                if sub_buf[2] < 0xA0:
-                    result.append(f"Q mode {adr}")
-                    result.append(f"Position: {sub_buf[3]:02X}:{sub_buf[4]:02X}:{sub_buf[5]:02X} (LBA: {q_pos})")
-                    result.append(f"Track {sub_buf[2]} starts at {sub_buf[7]:02X}:{sub_buf[8]:02X}:{sub_buf[9]:02X} (LBA: {q_start})")
-                elif sub_buf[2] == 0xA0:
-                    result.append(f"Q mode {adr}")
-                    result.append(f"Position: {sub_buf[3]:02X}:{sub_buf[4]:02X}:{sub_buf[5]:02X} (LBA: {q_pos})")
-                    result.append(f"Track {sub_buf[2]} is first program area track")
-                    disc_type = {
-                        0x00: "CD-DA or CD-ROM",
-                        0x10: "CD-I",
-                        0x20: "CD-ROM XA"
-                    }.get(sub_buf[8], f"Unknown: {sub_buf[8]:02X}")
-                    result.append(f"Disc type: {disc_type}")
-                elif sub_buf[2] == 0xA1:
-                    result.append(f"Q mode {adr}")
-                    result.append(f"Position: {sub_buf[3]:02X}:{sub_buf[4]:02X}:{sub_buf[5]:02X} (LBA: {q_pos})")
-                    result.append(f"Track {sub_buf[2]} is last program area track")
-                elif sub_buf[2] == 0xA2:
-                    result.append(f"Q mode {adr}")
-                    result.append(f"Position: {sub_buf[3]:02X}:{sub_buf[4]:02X}:{sub_buf[5]:02X} (LBA: {q_pos})")
-                    result.append(f"Lead-out starts at {sub_buf[7]:02X}:{sub_buf[8]:02X}:{sub_buf[9]:02X} (LBA: {q_start})")
-            elif adr == 2:
-                result.append(f"Q mode {adr}")
-                result.append(f"MCN: {Subchannel.decode_mcn(sub_buf)}")
-                result.append(f"Frame: {sub_buf[9]:02X}")
-            elif adr == 5:
-                if sub_buf[2] == 0xB0:
-                    if final:
+            if lba < 0:
+                if adr in [1, 4]:
+                    if sub_buf[2] < 0xA0:
                         result.append(f"Q mode {adr}")
-                        result.append(f"Next possible program area can start at {sub_buf[3]:02X}:{sub_buf[4]:02X}:{sub_buf[5]:02X} (LBA: {next_pos})")
-                        result.append(f"Last session {zero} mode 5 pointers")
+                        result.append(f"Position: {sub_buf[3]:02X}:{sub_buf[4]:02X}:{sub_buf[5]:02X} (LBA: {q_pos})")
+                        result.append(f"Track {sub_buf[2]} starts at {sub_buf[7]:02X}:{sub_buf[8]:02X}:{sub_buf[9]:02X} (LBA: {q_start})")
+                    elif sub_buf[2] == 0xA0:
+                        result.append(f"Q mode {adr}")
+                        result.append(f"Position: {sub_buf[3]:02X}:{sub_buf[4]:02X}:{sub_buf[5]:02X} (LBA: {q_pos})")
+                        result.append(f"Track {sub_buf[2]} is first program area track")
+                        disc_type = {
+                            0x00: "CD-DA or CD-ROM",
+                            0x10: "CD-I",
+                            0x20: "CD-ROM XA"
+                        }.get(sub_buf[8], f"Unknown: {sub_buf[8]:02X}")
+                        result.append(f"Disc type: {disc_type}")
+                    elif sub_buf[2] == 0xA1:
+                        result.append(f"Q mode {adr}")
+                        result.append(f"Position: {sub_buf[3]:02X}:{sub_buf[4]:02X}:{sub_buf[5]:02X} (LBA: {q_pos})")
+                        result.append(f"Track {sub_buf[2]} is last program area track")
+                    elif sub_buf[2] == 0xA2:
+                        result.append(f"Q mode {adr}")
+                        result.append(f"Position: {sub_buf[3]:02X}:{sub_buf[4]:02X}:{sub_buf[5]:02X} (LBA: {q_pos})")
+                        result.append(f"Lead-out starts at {sub_buf[7]:02X}:{sub_buf[8]:02X}:{sub_buf[9]:02X} (LBA: {q_start})")
+                elif adr == 2:
+                    result.append(f"Q mode {adr}")
+                    result.append(f"MCN: {Subchannel.decode_mcn(sub_buf)}")
+                    result.append(f"Frame: {sub_buf[9]:02X}")
+                elif adr == 5:
+                    if sub_buf[2] == 0xB0:
+                        if final:
+                            result.append(f"Q mode {adr}")
+                            result.append(f"Next possible program area can start at {sub_buf[3]:02X}:{sub_buf[4]:02X}:{sub_buf[5]:02X} (LBA: {next_pos})")
+                            result.append(f"Last session {zero} mode 5 pointers")
+                        else:
+                            result.append(f"Q mode {adr}")
+                            result.append(f"Next possible program area can start at {sub_buf[3]:02X}:{sub_buf[4]:02X}:{sub_buf[5]:02X} (LBA: {next_pos})")
+                            result.append(f"Maximum Lead-out at {sub_buf[7]:02X}:{sub_buf[8]:02X}:{sub_buf[9]:02X} (LBA: {max_out})")
+                            result.append(f"{zero} mode 5 pointers")
+                    elif sub_buf[2] == 0xB1:
+                        result.append(f"Q mode {adr}")
+                        result.append(f"{pmin} skip interval pointers")
+                        result.append(f"{psec} skip track assignments")
+                    elif sub_buf[2] == 0xB2 or sub_buf[2] == 0xB3 or sub_buf[2] == 0xB4:
+                        skip_tracks = ", ".join([f"{x:02X}" for x in [sub_buf[3], sub_buf[4], sub_buf[5], sub_buf[7], sub_buf[8], sub_buf[9]] if x > 0])
+                        result.append(f"Q mode {adr}")
+                        result.append(f"Tracks {skip_tracks} to be skipped")
+                    elif sub_buf[2] == 0xC0:
+                        result.append(f"Q mode {adr}")
+                        result.append(f"ATIP values: {sub_buf[3]:02X}:{sub_buf[4]:02X}:{sub_buf[5]:02X}")
+                        result.append(f"First disc Lead-in starts at {sub_buf[7]:02X}:{sub_buf[8]:02X}:{sub_buf[9]:02X} (LBA: {q_start})")
                     else:
-                        result.append(f"Q mode {adr}")
-                        result.append(f"Next possible program area can start at {sub_buf[3]:02X}:{sub_buf[4]:02X}:{sub_buf[5]:02X} (LBA: {next_pos})")
-                        result.append(f"Maximum Lead-out at {sub_buf[7]:02X}:{sub_buf[8]:02X}:{sub_buf[9]:02X} (LBA: {max_out})")
-                        result.append(f"{zero} mode 5 pointers")
-                elif sub_buf[2] == 0xB1:
-                    result.append(f"Q mode {adr}")
-                    result.append(f"{pmin} skip interval pointers")
-                    result.append(f"{psec} skip track assignments")
-                elif sub_buf[2] == 0xB2 or sub_buf[2] == 0xB3 or sub_buf[2] == 0xB4:
-                    skip_tracks = ", ".join([f"{x:02X}" for x in [sub_buf[3], sub_buf[4], sub_buf[5], sub_buf[7], sub_buf[8], sub_buf[9]] if x > 0])
-                    result.append(f"Q mode {adr}")
-                    result.append(f"Tracks {skip_tracks} to be skipped")
-                elif sub_buf[2] == 0xC0:
-                    result.append(f"Q mode {adr}")
-                    result.append(f"ATIP values: {sub_buf[3]:02X}:{sub_buf[4]:02X}:{sub_buf[5]:02X}")
-                    result.append(f"First disc Lead-in starts at {sub_buf[7]:02X}:{sub_buf[8]:02X}:{sub_buf[9]:02X} (LBA: {q_start})")
+                        result.append(f"Unknown Q sub-channel data: {sub_buf.hex().upper()}")
                 else:
                     result.append(f"Unknown Q sub-channel data: {sub_buf.hex().upper()}")
             else:
-                result.append(f"Unknown Q sub-channel data: {sub_buf.hex().upper()}")
-        else:
-            if adr == 1:
-                result.append(f"Q mode {adr}")
-                result.append(f"Track {sub_buf[1]}, Index {sub_buf[2]}")
-                result.append(f"Relative position: {sub_buf[3]:02X}:{sub_buf[4]:02X}:{sub_buf[5]:02X} (LBA: {q_pos + 150})")
-                result.append(f"Absolute position: {sub_buf[7]:02X}:{sub_buf[8]:02X}:{sub_buf[9]:02X} (LBA: {q_start})")
-            elif adr == 2:
-                result.append(f"Q mode {adr}")
-                result.append(f"MCN: {Subchannel.decode_mcn(sub_buf)}")
-                result.append(f"Frame: {sub_buf[9]:02X}")
-            elif adr == 3:
-                result.append(f"Q mode {adr}")
-                result.append(f"ISRC: {Subchannel.decode_isrc(sub_buf)}")
-                result.append(f"Frame: {sub_buf[9]:02X}")
-            else:
-                result.append(f"Unknown Q sub-channel data: {sub_buf.hex().upper()}")
+                if adr == 1:
+                    result.append(f"Q mode {adr}")
+                    result.append(f"Track {sub_buf[1]}, Index {sub_buf[2]}")
+                    result.append(f"Relative position: {sub_buf[3]:02X}:{sub_buf[4]:02X}:{sub_buf[5]:02X} (LBA: {q_pos + 150})")
+                    result.append(f"Absolute position: {sub_buf[7]:02X}:{sub_buf[8]:02X}:{sub_buf[9]:02X} (LBA: {q_start})")
+                elif adr == 2:
+                    result.append(f"Q mode {adr}")
+                    result.append(f"MCN: {Subchannel.decode_mcn(sub_buf)}")
+                    result.append(f"Frame: {sub_buf[9]:02X}")
+                elif adr == 3:
+                    result.append(f"Q mode {adr}")
+                    result.append(f"ISRC: {Subchannel.decode_isrc(sub_buf)}")
+                    result.append(f"Frame: {sub_buf[9]:02X}")
+                else:
+                    result.append(f"Unknown Q sub-channel data: {sub_buf.hex().upper()}")
 
-        result.append(f"Q CRC: {sub_buf[10]:02X}{sub_buf[11]:02X} ({'OK' if crc_ok else 'BAD'})")
-        result.append("R-W empty" if rw_empty else "R-W not empty")
+            result.append(f"Q CRC: {sub_buf[10]:02X}{sub_buf[11]:02X} ({'OK' if crc_ok else 'BAD'})")
+            result.append("R-W empty" if rw_empty else "R-W not empty")
 
-        return "\n".join(result)
+            return "\n".join(result)
+        except Exception as e:
+            logging.error(f"Error in prettify_q: {str(e)}")
+            return f"Error processing Q subchannel: {str(e)}"
 
     @staticmethod
     def decode_isrc(q: bytes) -> str:

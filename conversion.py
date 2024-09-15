@@ -25,6 +25,8 @@ def validate_subchannel(clonecd: CloneCD):
         print(f"Failed to read subchannel data. Error: {error}")
         return
     
+    print(f"Raw subchannel data: {subchannel_data.hex()}")
+    
     if len(subchannel_data) != 96:
         print(f"Invalid subchannel data length. Expected 96 bytes, got {len(subchannel_data)} bytes.")
         return

@@ -2,8 +2,7 @@
 
 import struct
 from typing import List, Optional, Tuple
-from checksums import CRC16CCITTContext
-from .cd_checksums import CdChecksums
+from modules.checksums import CRC16CCITTContext
 
 import logging
 logging.basicConfig(level=logging.DEBUG)

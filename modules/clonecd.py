@@ -489,7 +489,10 @@ class CloneCD:
             self._sub_filter = image_filter
 
             self._data_stream = self._data_filter.get_img_stream()
-            self._sub_stream = self._sub_filter.get_sub_stream()
+            if self._sub_filter:
+                self._sub_stream = self._sub_filter.get_sub_stream()
+            else:
+                self._sub_stream = None
 
             cur_session_no = 0
             current_track = Track()
@@ -498,9 +501,6 @@ class CloneCD:
             lead_out_start = 0
 
             self._data_stream = self._data_filter.get_data_fork_stream()
-
-            if self._sub_filter:
-                self._sub_stream = self._sub_filter.get_data_fork_stream()
 
             self._track_flags = {}
 
@@ -795,27 +795,16 @@ class CloneCD:
 
     def read_sector(self, sector_address: int, track: Optional[int] = None) -> tuple[ErrorNumber, Optional[bytes]]:
         return self.read_sectors(sector_address, 1, track)
-    
-#    def read_sector_tag(self, sector_address: int, tag: SectorTagType, track: Optional[int] = None) -> tuple[ErrorNumber, Optional[bytes]]:
-#        return self.read_sectors_tag(sector_address, 1, tag, track)
 
     def read_sector_tag(self, sector_address: int, tag: SectorTagType, track: Optional[int] = None) -> tuple[ErrorNumber, Optional[bytes]]:
-        if track is None:
-            for track_sequence, start_sector in self._offset_map.items():
-                if sector_address >= start_sector:
-                    track = next((t for t in self.tracks if t.sequence == track_sequence), None)
-                    if track and sector_address - start_sector < track.end_sector - track.start_sector + 1:
-                        return self.read_sector_tag(sector_address - start_sector, tag, track_sequence)
-            return ErrorNumber.SectorNotFound, None
-    
         if tag == SectorTagType.CdTrackFlags:
             track = sector_address
     
         aaruTrack = next((t for t in self.tracks if t.sequence == track), None)
         if aaruTrack is None:
             return ErrorNumber.SectorNotFound, None
-    
-        if sector_address > aaruTrack.end_sector - aaruTrack.start_sector:
+
+        if sector_address > aaruTrack.end_sector:
             return ErrorNumber.OutOfRange, None
     
         if aaruTrack.type == TrackType.Audio:
@@ -832,8 +821,17 @@ class CloneCD:
             if bytes_read != 96:
                 return ErrorNumber.ReadError, None
             
-            return ErrorNumber.NoError, bytes(buffer)
+            # Interleave the subchannel data
+            interleaved = Subchannel.interleave(buffer)
+            return ErrorNumber.NoError, bytes(interleaved)
 
+        if tag == SectorTagType.CdTrackFlags:
+            if track not in self._track_flags:
+                return ErrorNumber.NoData, None
+            return ErrorNumber.NoError, bytes([self._track_flags[track]])
+
+        return ErrorNumber.NotSupported, None
+    
 
     def read_sectors_tag(self, sector_address: int, length: int, tag: SectorTagType, track: Optional[int] = None) -> tuple[ErrorNumber, Optional[bytes]]:
         if track is None:
@@ -931,6 +929,7 @@ class CloneCD:
 
         buffer = bytearray(sector_size * length)
         self._data_stream.seek(aaruTrack.file_offset + sector_address * 2352)
+        self._sub_stream = self._sub_filter.get_sub_stream()
 
         if sector_offset == 0 and sector_skip == 0:
             self._data_stream.readinto(buffer)
