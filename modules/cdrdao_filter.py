@@ -5,12 +5,16 @@ from modules.error_number import ErrorNumber
 class CDRDAOFilter(IFilter):
     def __init__(self, path: str):
         super().__init__(path)
+        self._data_stream = None
 
     @property
     def name(self) -> str:
         return "CDRDAO"
 
     def identify(self, path: str) -> bool:
+        if isinstance(path, CDRDAOFilter):
+            path = path.path  # Use the path attribute if it's a CDRDAOFilter instance
+        
         if not os.path.isfile(path):
             return False
         
@@ -27,7 +31,21 @@ class CDRDAOFilter(IFilter):
             return False
 
     def open(self, path: str) -> ErrorNumber:
+        if isinstance(path, CDRDAOFilter):
+            path = path.path  # Use the path attribute if it's a CDRDAOFilter instance
         if not self.identify(path):
             return ErrorNumber.InvalidArgument
         
-        return super().open(path)
+        try:
+            self._data_stream = open(path, 'rb')
+            return ErrorNumber.NoError
+        except IOError:
+            return ErrorNumber.CannotOpenFile
+
+    def get_data_fork_stream(self):
+        return self._data_stream
+
+    def close(self):
+        if self._data_stream:
+            self._data_stream.close()
+            self._data_stream = None

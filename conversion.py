@@ -1,3 +1,4 @@
+import os
 from modules.plugin_register import PluginRegister
 from modules.clonecd_filter import CloneCDFilter
 from modules.clonecd import CloneCD
@@ -134,7 +135,10 @@ def main():
     register = PluginRegister.get_instance()
 
     # Path to your test file
-    input_path = "Space Debris (Europe).ccd"
+    input_path = "~/scratch_projects/tests/Space Debris (Europe).ccd"
+    input_path = os.path.expanduser(input_path)
+
+    print(f"File exists: {os.path.exists(os.path.expanduser(input_path))}")
 
     # Get the filter for CloneCD
     input_filter = register.get_filter(input_path)

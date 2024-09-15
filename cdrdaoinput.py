@@ -1,6 +1,7 @@
 import os
 from modules.plugin_register import PluginRegister
-from modules.cdrdao.cdrdao import Cdrdao
+from modules.cdrdao_filter import CDRDAOFilter
+from modules.cdrdao import Cdrdao
 from modules.error_number import ErrorNumber
 from modules.CD.subchannel import Subchannel
 from modules.CD.fulltoc import FullTOC
@@ -9,7 +10,8 @@ from modules.checksums import CRC16CCITTContext
 
 def initialize_plugins():
     register = PluginRegister.get_instance()
-    register.register_media_image("CDRDAO", Cdrdao)
+    register.register_media_image("CDRDAO", CDRDAOFilter)
+    print(f"Registered CDRDAO plugin. Available filters: {', '.join(register.media_images.keys())}")  # Debug print
 
 def validate_subchannel(cdrdao: Cdrdao):
     print("Validating subchannel data...")
@@ -123,7 +125,14 @@ def main():
     register = PluginRegister.get_instance()
 
     # Path to your test file
-    input_path = "path/to/your/cdrdao/file.toc"
+    input_path = "~/scratch_projects/tests/Ape Escape (Europe).toc"
+    input_path = os.path.expanduser(input_path)
+
+    # Debug prints
+    print(f"File exists: {os.path.exists(os.path.expanduser(input_path))}")
+
+    # Expand the user path
+    input_path = os.path.expanduser(input_path)
 
     # Get the filter for CDRDAO
     input_filter = register.get_filter(input_path)
@@ -131,7 +140,7 @@ def main():
     if input_filter:
         print(f"Input format: {input_filter.name}")
         
-        cdrdao = Cdrdao()
+        cdrdao = Cdrdao(input_path)
 
         try:
             if cdrdao.identify(input_filter):
@@ -169,6 +178,8 @@ def main():
             cdrdao.close()
     else:
         print("Unsupported input format")
+        print(f"Available filters: {', '.join(f.name for f in register.plugins)}")  # Debug print
+
 
 if __name__ == "__main__":
     main()

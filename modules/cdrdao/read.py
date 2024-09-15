@@ -1,9 +1,9 @@
 import re
 import os
+import io
 import datetime
 from typing import Tuple, Optional, List, Union
 from .structs import CdrdaoTrack
-from .helpers import *
 from .constants import CDRDAO_TRACK_TYPE_AUDIO, CDRDAO_TRACK_TYPE_MODE1, CDRDAO_TRACK_TYPE_MODE2_FORM1, CDRDAO_TRACK_TYPE_MODE2_FORM2, CDRDAO_TRACK_TYPE_MODE2, CDRDAO_TRACK_TYPE_MODE2_MIX, CDRDAO_TRACK_TYPE_MODE2_RAW
 from .structs import CdrdaoTrackFile, CdrdaoTrack, CdrdaoDisc
 from modules.error_number import ErrorNumber
@@ -22,9 +22,9 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 class CdrdaoRead:
-    def read_sector(self, sector_address: int) -> Tuple[ErrorNumber, Optional[bytes]]:
-        return self.read_sectors(sector_address, 1)
-    
+    def read_sector(self, sector_address: int, track: Optional[int] = None) -> Tuple[ErrorNumber, Optional[bytes]]:
+        return self.read_sectors(sector_address, 1, track)
+
     def read_sectors(self, sector_address: int, length: int, track: Optional[int] = None) -> Tuple[ErrorNumber, Optional[bytes]]:
         if track is None:
             for track_sequence, start_sector in self._offset_map.items():
@@ -47,31 +47,19 @@ class CdrdaoRead:
         mode2 = False
     
         if cdrdao_track.tracktype in [self.CDRDAO_TRACK_TYPE_MODE1, self.CDRDAO_TRACK_TYPE_MODE2_FORM1]:
-            sector_offset = 0
-            sector_size = 2048
-            sector_skip = 0
+            sector_offset, sector_size, sector_skip = 0, 2048, 0
         elif cdrdao_track.tracktype == self.CDRDAO_TRACK_TYPE_MODE2_FORM2:
-            sector_offset = 0
-            sector_size = 2324
-            sector_skip = 0
+            sector_offset, sector_size, sector_skip = 0, 2324, 0
         elif cdrdao_track.tracktype in [self.CDRDAO_TRACK_TYPE_MODE2, self.CDRDAO_TRACK_TYPE_MODE2_MIX]:
             mode2 = True
-            sector_offset = 0
-            sector_size = 2336
-            sector_skip = 0
+            sector_offset, sector_size, sector_skip = 0, 2336, 0
         elif cdrdao_track.tracktype == self.CDRDAO_TRACK_TYPE_AUDIO:
-            sector_offset = 0
-            sector_size = 2352
-            sector_skip = 0
+            sector_offset, sector_size, sector_skip = 0, 2352, 0
         elif cdrdao_track.tracktype == self.CDRDAO_TRACK_TYPE_MODE1_RAW:
-            sector_offset = 16
-            sector_size = 2048
-            sector_skip = 288
+            sector_offset, sector_size, sector_skip = 16, 2048, 288
         elif cdrdao_track.tracktype == self.CDRDAO_TRACK_TYPE_MODE2_RAW:
             mode2 = True
-            sector_offset = 0
-            sector_size = 2352
-            sector_skip = 0
+            sector_offset, sector_size, sector_skip = 0, 2352, 0
         else:
             return ErrorNumber.NotSupported, None
     
@@ -146,9 +134,8 @@ class CdrdaoRead:
         return ErrorNumber.NoError, bytes(buffer[:sector_size * length])
     
     def read_sector_tag(self, sector_address: int, tag: SectorTagType, track: Optional[int] = None) -> Tuple[ErrorNumber, Optional[bytes]]:
-        error, buffer = self.read_sectors_tag(sector_address, 1, tag, track)
-        return error, buffer
-    
+        return self.read_sectors_tag(sector_address, 1, tag, track)
+
     def read_sectors_tag(self, sector_address: int, length: int, tag: SectorTagType, track: Optional[int] = None) -> Tuple[ErrorNumber, Optional[bytes]]:
         if track is None:
             for track_sequence, start_sector in self._offset_map.items():
@@ -200,7 +187,7 @@ class CdrdaoRead:
     
         return ErrorNumber.NoError, bytes(buffer)
     
-    def _read_track_flags(self, track: CdrdaoTrack) -> Tuple[ErrorNumber, Optional[bytes]]:
+    def _read_track_flags(self, track: 'CdrdaoTrack') -> Tuple[ErrorNumber, Optional[bytes]]:
         flags = 0
         if track.tracktype != self.CDRDAO_TRACK_TYPE_AUDIO:
             flags |= 0x04  # Data track
@@ -212,12 +199,12 @@ class CdrdaoRead:
             flags |= 0x01  # Pre-emphasis
         return ErrorNumber.NoError, bytes([flags])
     
-    def _read_track_isrc(self, track: CdrdaoTrack) -> Tuple[ErrorNumber, Optional[bytes]]:
+    def _read_track_isrc(self, track: 'CdrdaoTrack') -> Tuple[ErrorNumber, Optional[bytes]]:
         if track.isrc:
             return ErrorNumber.NoError, track.isrc.encode('ascii')
         return ErrorNumber.NoData, None
     
-    def _read_subchannel(self, track: CdrdaoTrack, sector_address: int, length: int) -> Tuple[ErrorNumber, Optional[bytes]]:
+    def _read_subchannel(self, track: 'CdrdaoTrack', sector_address: int, length: int) -> Tuple[ErrorNumber, Optional[bytes]]:
         if not track.subchannel:
             return ErrorNumber.NotSupported, None
         
