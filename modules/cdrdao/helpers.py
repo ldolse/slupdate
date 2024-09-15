@@ -161,7 +161,7 @@ def _get_tag_layout(self, track: CdrdaoTrack, tag: SectorTagType) -> Tuple[int, 
 
     return sector_offset, sector_size, sector_skip
 
-def def _create_full_toc(self, create_c0_entry: bool = False) -> None:
+def _create_full_toc(self, create_c0_entry: bool = False) -> None:
     toc = CDFullTOC()
     session_ending_track = {}
     toc.first_complete_session = 255

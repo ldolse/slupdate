@@ -156,3 +156,4 @@ cython_debug/
 *.txt
 chdman
 *.cfg
+.aider*

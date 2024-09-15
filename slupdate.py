@@ -180,6 +180,9 @@ def list_missing_function(platform):
     return 'map-2'
 
 def first_run():
+    """
+    Configures the softlist, root ROM & DAT directories
+    """
     print('Please Configure the MAME Softlist hash directory location.\n')
     slist_dir_function()
     print('\nPlease Confgure the root directory locations for your DAT and ROM files')

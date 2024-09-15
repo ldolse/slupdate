@@ -306,7 +306,7 @@ class Cdrdao(CdrdaoProperties):
                         tracktype=match_track.group("type"),
                         bps=2352 if match_track.group("type") == "AUDIO" else 2048,
                         subchannel=bool(match_track.group("subchan")),
-                        packedsubchannel=match_track.group("subchan") == "RW"
+                        packedsubchannel=match_track.group("subchan") == "RW",
                         indexes={},
                         pregap=0
                     )
