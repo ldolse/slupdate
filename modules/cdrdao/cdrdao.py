@@ -4,7 +4,7 @@ import re
 import os
 from datetime import datetime
 from typing import List, Dict, Optional
-
+from modules.ifilter import IFilter
 
 from modules.CD.atip import ATIP
 from modules.CD.sector import Sector
@@ -16,7 +16,6 @@ from modules.CD.cd_types import (
 )
 from modules.CD.fulltoc import FullTOC, TrackDataDescriptor, CDFullTOC
 from modules.error_number import ErrorNumber
-from modules.ifilter import IFilter
 
 from .constants import *
 from .properties import *
@@ -32,12 +31,12 @@ class Cdrdao(CdrdaoProperties):
     MODULE_NAME = "CDRDAO plugin"
 
     def __init__(self, path: str):
-        super().__init__(path)
-        self.reader = CdrdaoRead(self)
-        self._catalog: Optional[str] = None
         self._cdrdao_filter: Optional[IFilter] = None
+        self._toc_stream = None
+        self._path = path  # Store the path as an instance variable
+        self.reader = CdrdaoRead()
+        self._catalog: Optional[str] = None
         self._cdtext: Optional[bytes] = None
-        self._cue_stream = None
         self._data_filter: Optional[IFilter] = None
         self._data_stream = None
         self._descriptor_stream = None
@@ -107,115 +106,10 @@ class Cdrdao(CdrdaoProperties):
         return self.reader.get_session_tracks(*args, **kwargs)
 
     def open(self, image_filter: IFilter) -> ErrorNumber:
-
-        def _process_track_gaps(self, current_track: CdrdaoTrack, next_track: Optional[CdrdaoTrack]):
-            if current_track.pregap > 0:
-                current_track.start_sector -= current_track.pregap
-                current_track.sectors += current_track.pregap
-            
-            if next_track and next_track.start_sector > current_track.start_sector + current_track.sectors:
-                current_track.postgap = next_track.start_sector - (current_track.start_sector + current_track.sectors)
-                current_track.sectors += current_track.postgap
-
-        def _process_track_indexes(self, current_track: CdrdaoTrack, current_sector: int):
-            if 0 not in current_track.indexes:
-                current_track.indexes[0] = current_track.start_sector
-            
-            if 1 not in current_track.indexes and current_track.pregap != current_track.sectors:
-                current_track.indexes[1] = current_track.start_sector + current_track.pregap
-            
-            for index, sector in current_track.indexes.items():
-                if index > 1:
-                    current_track.indexes[index] = sector + current_track.start_sector
+        if image_filter is None:
+            return ErrorNumber.NoSuchFile
         
-            # Ensure indexes are properly ordered
-            current_track.indexes = dict(sorted(current_track.indexes.items()))
-
-        def _detect_track_type(self, track: CdrdaoTrack) -> TrackType:
-            for s in range(225, min(750, track.sectors)):
-                sync_test = bytearray(12)
-                sect_test = bytearray(2352)
-        
-                pos = track.trackfile.offset + s * 2352
-        
-                with track.trackfile.datafilter.get_data_fork_stream() as stream:
-                    if pos >= stream.seek(0, io.SEEK_END):
-                        break
-        
-                    stream.seek(pos)
-                    stream.readinto(sect_test)
-                    sync_test[:] = sect_test[:12]
-        
-                if sync_test != Sector.SYNC_MARK:
-                    continue
-        
-                if self._scrambled:
-                    sect_test = Sector.scramble(sect_test)
-        
-                if sect_test[15] == 1:
-                    track.bps = 2048
-                    self._update_readable_sector_tags([
-                        SectorTagType.CdSectorSync, SectorTagType.CdSectorHeader,
-                        SectorTagType.CdSectorEcc, SectorTagType.CdSectorEccP,
-                        SectorTagType.CdSectorEccQ, SectorTagType.CdSectorEdc
-                    ])
-                    return TrackType.CdMode1
-        
-                if sect_test[15] == 2:
-                    sub_hdr1 = sect_test[16:20]
-                    sub_hdr2 = sect_test[20:24]
-                    emp_hdr = bytes(4)
-        
-                    if sub_hdr1 == sub_hdr2 and sub_hdr1 != emp_hdr:
-                        if sub_hdr1[2] & 0x20:
-                            track.bps = 2324
-                            self._update_readable_sector_tags([
-                                SectorTagType.CdSectorSync, SectorTagType.CdSectorHeader,
-                                SectorTagType.CdSectorSubHeader, SectorTagType.CdSectorEdc
-                            ])
-                            return TrackType.CdMode2Form2
-                        else:
-                            track.bps = 2048
-                            self._update_readable_sector_tags([
-                                SectorTagType.CdSectorSync, SectorTagType.CdSectorHeader,
-                                SectorTagType.CdSectorSubHeader, SectorTagType.CdSectorEcc,
-                                SectorTagType.CdSectorEccP, SectorTagType.CdSectorEccQ,
-                                SectorTagType.CdSectorEdc
-                            ])
-                            return TrackType.CdMode2Form1
-        
-                    track.bps = 2336
-                    self._update_readable_sector_tags([
-                        SectorTagType.CdSectorSync, SectorTagType.CdSectorHeader
-                    ])
-                    return TrackType.CdMode2Formless
-        
-            return TrackType.Data  # Default to Data if no specific type is detected
-
-        def _cdrdao_track_to_track(self, cdrdao_track: CdrdaoTrack) -> Track:
-            return Track(
-                sequence=cdrdao_track.sequence,
-                start_sector=cdrdao_track.start_sector,
-                end_sector=cdrdao_track.start_sector + cdrdao_track.sectors - 1,
-                type=self.cdrdao_track_type_to_track_type(cdrdao_track.tracktype),
-                file=cdrdao_track.trackfile.datafile,
-                file_offset=cdrdao_track.trackfile.offset,
-                file_type=cdrdao_track.trackfile.filetype,
-                filter=cdrdao_track.trackfile.datafilter,
-                indexes=cdrdao_track.indexes,
-                pregap=cdrdao_track.pregap,
-                session=1,  # Assuming single session for now
-                raw_bytes_per_sector=cdrdao_track.bps,
-                bytes_per_sector=self.cdrdao_track_type_to_cooked_bytes_per_sector(cdrdao_track.tracktype),
-                subchannel_file=cdrdao_track.trackfile.datafile if cdrdao_track.subchannel else None,
-                subchannel_filter=cdrdao_track.trackfile.datafilter if cdrdao_track.subchannel else None,
-                subchannel_type=TrackSubchannelType.PackedInterleaved if cdrdao_track.packedsubchannel else TrackSubchannelType.RawInterleaved if cdrdao_track.subchannel else TrackSubchannelType.None_
-            )
-        
-        def _update_readable_sector_tags(self, tags):
-            for tag in tags:
-                if tag not in self._image_info.readable_sector_tags:
-                    self._image_info.readable_sector_tags.append(tag)
+        self._cdrdao_filter = image_filter
 
         if image_filter is None:
             return ErrorNumber.NoSuchFile
@@ -223,8 +117,8 @@ class Cdrdao(CdrdaoProperties):
         self._cdrdao_filter = image_filter
 
         try:
-            image_filter.get_data_fork_stream().seek(0)
-            self._cue_stream = io.TextIOWrapper(image_filter.get_data_fork_stream(), encoding='utf-8')
+            image_filter.get_data_fork_stream().seek(0, io.SEEK_SET)  # Equivalent to Seek(0, SeekOrigin.Begin)
+            self._toc_stream = io.TextIOWrapper(image_filter.get_data_fork_stream(), encoding='utf-8')
             in_track = False
             current_track = None
             current_track_number = 0
@@ -608,6 +502,116 @@ class Cdrdao(CdrdaoProperties):
             logger.error(f"Exception trying to open image file: {image_filter.filename}")
             logger.exception(ex)
             return ErrorNumber.UnexpectedException
+
+        def _process_track_gaps(self, current_track: CdrdaoTrack, next_track: Optional[CdrdaoTrack]):
+            if current_track.pregap > 0:
+                current_track.start_sector -= current_track.pregap
+                current_track.sectors += current_track.pregap
+            
+            if next_track and next_track.start_sector > current_track.start_sector + current_track.sectors:
+                current_track.postgap = next_track.start_sector - (current_track.start_sector + current_track.sectors)
+                current_track.sectors += current_track.postgap
+
+        def _process_track_indexes(self, current_track: CdrdaoTrack, current_sector: int):
+            if 0 not in current_track.indexes:
+                current_track.indexes[0] = current_track.start_sector
+            
+            if 1 not in current_track.indexes and current_track.pregap != current_track.sectors:
+                current_track.indexes[1] = current_track.start_sector + current_track.pregap
+            
+            for index, sector in current_track.indexes.items():
+                if index > 1:
+                    current_track.indexes[index] = sector + current_track.start_sector
+        
+            # Ensure indexes are properly ordered
+            current_track.indexes = dict(sorted(current_track.indexes.items()))
+
+        def _detect_track_type(self, track: CdrdaoTrack) -> TrackType:
+            for s in range(225, min(750, track.sectors)):
+                sync_test = bytearray(12)
+                sect_test = bytearray(2352)
+        
+                pos = track.trackfile.offset + s * 2352
+        
+                with track.trackfile.datafilter.get_data_fork_stream() as stream:
+                    if pos >= stream.seek(0, io.SEEK_END):
+                        break
+        
+                    stream.seek(pos)
+                    stream.readinto(sect_test)
+                    sync_test[:] = sect_test[:12]
+        
+                if sync_test != Sector.SYNC_MARK:
+                    continue
+        
+                if self._scrambled:
+                    sect_test = Sector.scramble(sect_test)
+        
+                if sect_test[15] == 1:
+                    track.bps = 2048
+                    self._update_readable_sector_tags([
+                        SectorTagType.CdSectorSync, SectorTagType.CdSectorHeader,
+                        SectorTagType.CdSectorEcc, SectorTagType.CdSectorEccP,
+                        SectorTagType.CdSectorEccQ, SectorTagType.CdSectorEdc
+                    ])
+                    return TrackType.CdMode1
+        
+                if sect_test[15] == 2:
+                    sub_hdr1 = sect_test[16:20]
+                    sub_hdr2 = sect_test[20:24]
+                    emp_hdr = bytes(4)
+        
+                    if sub_hdr1 == sub_hdr2 and sub_hdr1 != emp_hdr:
+                        if sub_hdr1[2] & 0x20:
+                            track.bps = 2324
+                            self._update_readable_sector_tags([
+                                SectorTagType.CdSectorSync, SectorTagType.CdSectorHeader,
+                                SectorTagType.CdSectorSubHeader, SectorTagType.CdSectorEdc
+                            ])
+                            return TrackType.CdMode2Form2
+                        else:
+                            track.bps = 2048
+                            self._update_readable_sector_tags([
+                                SectorTagType.CdSectorSync, SectorTagType.CdSectorHeader,
+                                SectorTagType.CdSectorSubHeader, SectorTagType.CdSectorEcc,
+                                SectorTagType.CdSectorEccP, SectorTagType.CdSectorEccQ,
+                                SectorTagType.CdSectorEdc
+                            ])
+                            return TrackType.CdMode2Form1
+        
+                    track.bps = 2336
+                    self._update_readable_sector_tags([
+                        SectorTagType.CdSectorSync, SectorTagType.CdSectorHeader
+                    ])
+                    return TrackType.CdMode2Formless
+        
+            return TrackType.Data  # Default to Data if no specific type is detected
+
+        def _cdrdao_track_to_track(self, cdrdao_track: CdrdaoTrack) -> Track:
+            return Track(
+                sequence=cdrdao_track.sequence,
+                start_sector=cdrdao_track.start_sector,
+                end_sector=cdrdao_track.start_sector + cdrdao_track.sectors - 1,
+                type=self.cdrdao_track_type_to_track_type(cdrdao_track.tracktype),
+                file=cdrdao_track.trackfile.datafile,
+                file_offset=cdrdao_track.trackfile.offset,
+                file_type=cdrdao_track.trackfile.filetype,
+                filter=cdrdao_track.trackfile.datafilter,
+                indexes=cdrdao_track.indexes,
+                pregap=cdrdao_track.pregap,
+                session=1,  # Assuming single session for now
+                raw_bytes_per_sector=cdrdao_track.bps,
+                bytes_per_sector=self.cdrdao_track_type_to_cooked_bytes_per_sector(cdrdao_track.tracktype),
+                subchannel_file=cdrdao_track.trackfile.datafile if cdrdao_track.subchannel else None,
+                subchannel_filter=cdrdao_track.trackfile.datafilter if cdrdao_track.subchannel else None,
+                subchannel_type=TrackSubchannelType.PackedInterleaved if cdrdao_track.packedsubchannel else TrackSubchannelType.RawInterleaved if cdrdao_track.subchannel else TrackSubchannelType.None_
+            )
+        
+        def _update_readable_sector_tags(self, tags):
+            for tag in tags:
+                if tag not in self._image_info.readable_sector_tags:
+                    self._image_info.readable_sector_tags.append(tag)
+
 
     @staticmethod
     def cdrdao_track_type_to_cooked_bytes_per_sector(track_type: str) -> int:

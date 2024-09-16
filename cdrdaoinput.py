@@ -125,61 +125,42 @@ def main():
     register = PluginRegister.get_instance()
 
     # Path to your test file
-    input_path = "~/scratch_projects/tests/Ape Escape (Europe).toc"
-    input_path = os.path.expanduser(input_path)
+    input_path = os.path.expanduser("~/scratch_projects/tests/Ape Escape (Europe).toc")
+    cdrdao_filter = CDRDAOFilter(input_path)
+    cdrdao = Cdrdao(input_path)
 
-    # Debug prints
-    print(f"File exists: {os.path.exists(os.path.expanduser(input_path))}")
 
-    # Expand the user path
-    input_path = os.path.expanduser(input_path)
+    if cdrdao_filter.identify(input_path):
+        print("CDRDAO image identified successfully.")
 
-    # Get the filter for CDRDAO
-    input_filter = register.get_filter(input_path)
+        error = cdrdao.open(cdrdao_filter)
+        if error == ErrorNumber.NoError:
+            print("CDRDAO image opened successfully.")
+            
+            # Print some basic information about the image
+            print(f"Number of tracks: {len(cdrdao.tracks)}")
+            print(f"Number of sessions: {len(cdrdao.sessions)}")
+            print(f"Media type: {cdrdao.info.media_type}")
 
-    if input_filter:
-        print(f"Input format: {input_filter.name}")
-        
-        cdrdao = Cdrdao(input_path)
-
-        try:
-            if cdrdao.identify(input_filter):
-                print("CDRDAO image identified successfully.")
-
-                error = cdrdao.open(input_filter)
+            # Try to read the first sector of the first track
+            if cdrdao.tracks:
+                first_track = cdrdao.tracks[0]
+                error, sector_data = cdrdao.read_sector(first_track.start_sector, first_track.sequence)
                 if error == ErrorNumber.NoError:
-                    print("CDRDAO image opened successfully.")
-                    
-                    # Print some basic information about the image
-                    print(f"Number of tracks: {len(cdrdao.tracks)}")
-                    print(f"Number of sessions: {len(cdrdao.sessions)}")
-                    print(f"Media type: {cdrdao.info.media_type}")
-
-                    # Try to read the first sector of the first track
-                    if cdrdao.tracks:
-                        first_track = cdrdao.tracks[0]
-                        error, sector_data = cdrdao.read_sector(first_track.start_sector, first_track.sequence)
-                        if error == ErrorNumber.NoError:
-                            print(f"Successfully read first sector of track 1. First 16 bytes: {sector_data[:16].hex()}")
-                        else:
-                            print(f"Failed to read first sector of track 1. Error: {error}")
-
-                    # Validate subchannel data
-                    validate_subchannel(cdrdao)
-                    
-                    # Print image information
-                    print_image_info(cdrdao)
-
+                    print(f"Successfully read first sector of track 1. First 16 bytes: {sector_data[:16].hex()}")
                 else:
-                    print(f"Failed to open CDRDAO image. Error: {error}")
-            else:
-                print("Failed to identify CDRDAO image.")
-        finally:
-            cdrdao.close()
-    else:
-        print("Unsupported input format")
-        print(f"Available filters: {', '.join(f.name for f in register.plugins)}")  # Debug print
+                    print(f"Failed to read first sector of track 1. Error: {error}")
 
+            # Validate subchannel data
+            validate_subchannel(cdrdao)
+            
+            # Print image information
+            print_image_info(cdrdao)
+
+        else:
+            print(f"Failed to open CDRDAO image. Error: {error}")
+    else:
+        print("Failed to identify CDRDAO image.")
 
 if __name__ == "__main__":
     main()
