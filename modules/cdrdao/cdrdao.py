@@ -1,5 +1,4 @@
 import io
-import re
 import os
 from datetime import datetime
 from typing import List, Dict, Optional, BinaryIO
@@ -88,38 +87,11 @@ class Cdrdao(CdrdaoProperties):
     def open(self, image_filter: IFilter) -> ErrorNumber:
         if image_filter is None:
             return ErrorNumber.NoSuchFile
-        
-        self._cdrdao_filter = image_filter
-
-        if image_filter is None:
-            return ErrorNumber.NoSuchFile
-
-        self._cdrdao_filter = image_filter
-        toc_path = self._cdrdao_filter.path
+        error, self._discimage = parse_toc_file(image_filter)
+        if error != ErrorNumber.NoError:
+            return error
 
         try:
-            with open(toc_path, 'r', encoding='utf-8') as toc_file:
-                bin_file = None
-                for line in toc_file:
-                    if line.strip().startswith("DATAFILE"):
-                        bin_file = line.split('"')[1]
-                        break
-                
-                if not bin_file:
-                    logger.error("No DATAFILE found in TOC")
-                    return ErrorNumber.FileNotFound
-
-                bin_path = os.path.join(os.path.dirname(self._cdrdao_filter.path), bin_file)
-                self._cdrdao_filter.get_filter(bin_path)
-                self._bin_stream = self._cdrdao_filter.get_bin_stream()
-
-                if not self._bin_stream:
-                    logger.error(f"Binary file not found: {bin_path}")
-                    return ErrorNumber.FileNotFound
-
-            # Open the binary .bin file
-            self._data_stream = open(bin_path, 'rb')
-
             # Process tracks and build offset map
             self.partitions = []
             self._offset_map = {}
@@ -292,7 +264,7 @@ class Cdrdao(CdrdaoProperties):
                 sect_test = Sector.scramble(sect_test)
 
             if sect_test[15] == 1:
-                track.bps = 2048
+                track.bytes_per_sector = 2048
                 self._update_readable_sector_tags([
                     SectorTagType.CdSectorSync, SectorTagType.CdSectorHeader,
                     SectorTagType.CdSectorEcc, SectorTagType.CdSectorEccP,
@@ -307,14 +279,14 @@ class Cdrdao(CdrdaoProperties):
 
                 if sub_hdr1 == sub_hdr2 and sub_hdr1 != emp_hdr:
                     if sub_hdr1[2] & 0x20:
-                        track.bps = 2324
+                        track.bytes_per_sector = 2324
                         self._update_readable_sector_tags([
                             SectorTagType.CdSectorSync, SectorTagType.CdSectorHeader,
                             SectorTagType.CdSectorSubHeader, SectorTagType.CdSectorEdc
                         ])
                         return TrackType.CdMode2Form2
                     else:
-                        track.bps = 2048
+                        track.bytes_per_sector = 2048
                         self._update_readable_sector_tags([
                             SectorTagType.CdSectorSync, SectorTagType.CdSectorHeader,
                             SectorTagType.CdSectorSubHeader, SectorTagType.CdSectorEcc,
@@ -323,7 +295,7 @@ class Cdrdao(CdrdaoProperties):
                         ])
                         return TrackType.CdMode2Form1
 
-                track.bps = 2336
+                track.bytes_per_sector = 2336
                 self._update_readable_sector_tags([
                     SectorTagType.CdSectorSync, SectorTagType.CdSectorHeader
                 ])
