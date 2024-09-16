@@ -4,7 +4,7 @@ import io
 import datetime
 from typing import Tuple, Optional, List, Union
 from .structs import CdrdaoTrack
-from .constants import CDRDAO_TRACK_TYPE_AUDIO, CDRDAO_TRACK_TYPE_MODE1, CDRDAO_TRACK_TYPE_MODE2_FORM1, CDRDAO_TRACK_TYPE_MODE2_FORM2, CDRDAO_TRACK_TYPE_MODE2, CDRDAO_TRACK_TYPE_MODE2_MIX, CDRDAO_TRACK_TYPE_MODE2_RAW
+from .constants import *
 from .structs import CdrdaoTrackFile, CdrdaoTrack, CdrdaoDisc
 from modules.error_number import ErrorNumber
 from modules.CD.cd_types import SectorTagType, MediaTagType, Track, Session, TrackSubchannelType
@@ -22,6 +22,19 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 class CdrdaoRead:
+    def __init__(self, cdrdao):
+        self.cdrdao = cdrdao
+        self._discimage = None
+        self._offset_map = None
+        self._data_stream = None
+        self._scrambled = False
+
+    def update(self, discimage, offset_map, data_stream, scrambled):
+        self._discimage = discimage
+        self._offset_map = offset_map
+        self._data_stream = data_stream
+        self._scrambled = scrambled
+
     def read_sector(self, sector_address: int, track: Optional[int] = None) -> Tuple[ErrorNumber, Optional[bytes]]:
         return self.read_sectors(sector_address, 1, track)
 
@@ -32,6 +45,10 @@ class CdrdaoRead:
                     track = next((t for t in self._discimage.tracks if t.sequence == track_sequence), None)
                     if track and sector_address - start_sector < track.sectors:
                         return self.read_sectors(sector_address - start_sector, length, track_sequence)
+            return ErrorNumber.SectorNotFound, None
+
+        cdrdao_track = next((t for t in self._discimage.tracks if t.sequence == track), None)
+        if cdrdao_track is None:
             return ErrorNumber.SectorNotFound, None
     
         cdrdao_track = next((t for t in self._discimage.tracks if t.sequence == track), None)
@@ -46,18 +63,18 @@ class CdrdaoRead:
         sector_skip = 0
         mode2 = False
     
-        if cdrdao_track.tracktype in [self.CDRDAO_TRACK_TYPE_MODE1, self.CDRDAO_TRACK_TYPE_MODE2_FORM1]:
+        if cdrdao_track.tracktype in [CDRDAO_TRACK_TYPE_MODE1, CDRDAO_TRACK_TYPE_MODE2_FORM1]:
             sector_offset, sector_size, sector_skip = 0, 2048, 0
-        elif cdrdao_track.tracktype == self.CDRDAO_TRACK_TYPE_MODE2_FORM2:
+        elif cdrdao_track.tracktype == CDRDAO_TRACK_TYPE_MODE2_FORM2:
             sector_offset, sector_size, sector_skip = 0, 2324, 0
-        elif cdrdao_track.tracktype in [self.CDRDAO_TRACK_TYPE_MODE2, self.CDRDAO_TRACK_TYPE_MODE2_MIX]:
+        elif cdrdao_track.tracktype in [CDRDAO_TRACK_TYPE_MODE2, CDRDAO_TRACK_TYPE_MODE2_MIX]:
             mode2 = True
             sector_offset, sector_size, sector_skip = 0, 2336, 0
-        elif cdrdao_track.tracktype == self.CDRDAO_TRACK_TYPE_AUDIO:
+        elif cdrdao_track.tracktype == CDRDAO_TRACK_TYPE_AUDIO:
             sector_offset, sector_size, sector_skip = 0, 2352, 0
-        elif cdrdao_track.tracktype == self.CDRDAO_TRACK_TYPE_MODE1_RAW:
+        elif cdrdao_track.tracktype == CDRDAO_TRACK_TYPE_MODE1_RAW:
             sector_offset, sector_size, sector_skip = 16, 2048, 288
-        elif cdrdao_track.tracktype == self.CDRDAO_TRACK_TYPE_MODE2_RAW:
+        elif cdrdao_track.tracktype == CDRDAO_TRACK_TYPE_MODE2_RAW:
             mode2 = True
             sector_offset, sector_size, sector_skip = 0, 2352, 0
         else:
@@ -77,24 +94,24 @@ class CdrdaoRead:
                 buffer = bytearray()
                 for i in range(length):
                     sector = mode2_buffer[i*(sector_size + sector_skip):i*(sector_size + sector_skip) + sector_size]
-                    if self._scrambled:
+                    if self.cdrdao._scrambled:
                         sector = Sector.scramble(sector)
                     buffer.extend(Sector.get_user_data_from_mode2(sector))
             elif sector_offset == 0 and sector_skip == 0:
                 stream.readinto(buffer)
-                if self._scrambled:
+                if self.cdrdao._scrambled:
                     buffer = Sector.scramble(buffer)
             else:
                 for i in range(length):
                     stream.seek(sector_offset, io.SEEK_CUR)
                     sector = bytearray(sector_size)
                     stream.readinto(sector)
-                    if self._scrambled:
+                    if self.cdrdao._scrambled:
                         sector = Sector.scramble(sector)
                     buffer[i*sector_size:(i+1)*sector_size] = sector
                     stream.seek(sector_skip, io.SEEK_CUR)
     
-        if cdrdao_track.tracktype == self.CDRDAO_TRACK_TYPE_AUDIO:
+        if cdrdao_track.tracktype == CDRDAO_TRACK_TYPE_AUDIO:
             buffer = self._swap_audio_endianness(buffer)
     
         return ErrorNumber.NoError, bytes(buffer)
@@ -127,7 +144,7 @@ class CdrdaoRead:
             stream.seek(cdrdao_track.trackfile.offset + (sector_address * (sector_size + sector_skip)))
             stream.readinto(buffer)
     
-        if cdrdao_track.tracktype == self.CDRDAO_TRACK_TYPE_AUDIO:
+        if cdrdao_track.tracktype == CDRDAO_TRACK_TYPE_AUDIO:
             # Swap endianness for audio tracks
             buffer = self._swap_audio_endianness(buffer)
     
@@ -155,7 +172,7 @@ class CdrdaoRead:
         if length > cdrdao_track.sectors:
             return ErrorNumber.OutOfRange, None
     
-        if cdrdao_track.tracktype == self.CDRDAO_TRACK_TYPE_AUDIO:
+        if cdrdao_track.tracktype == CDRDAO_TRACK_TYPE_AUDIO:
             return ErrorNumber.NotSupported, None
     
         if tag == SectorTagType.CdTrackFlags:
@@ -189,7 +206,7 @@ class CdrdaoRead:
     
     def _read_track_flags(self, track: 'CdrdaoTrack') -> Tuple[ErrorNumber, Optional[bytes]]:
         flags = 0
-        if track.tracktype != self.CDRDAO_TRACK_TYPE_AUDIO:
+        if track.tracktype != CDRDAO_TRACK_TYPE_AUDIO:
             flags |= 0x04  # Data track
         if track.flag_dcp:
             flags |= 0x02  # Digital copy permitted
@@ -321,7 +338,7 @@ class CdrdaoRead:
                 if sync_test != Sector.SYNC_MARK:
                     continue
         
-                if self._scrambled:
+                if self.cdrdao._scrambled:
                     sect_test = Sector.scramble(sect_test)
         
                 if sect_test[15] == 1:
@@ -404,30 +421,30 @@ class CdrdaoRead:
             line_number = 0
 
             # Initialize all RegExs
-            regex_comment = re.compile(self.REGEX_COMMENT)
-            regex_disk_type = re.compile(self.REGEX_DISCTYPE)
-            regex_mcn = re.compile(self.REGEX_MCN)
-            regex_track = re.compile(self.REGEX_TRACK)
-            regex_copy = re.compile(self.REGEX_COPY)
-            regex_emphasis = re.compile(self.REGEX_EMPHASIS)
-            regex_stereo = re.compile(self.REGEX_STEREO)
-            regex_isrc = re.compile(self.REGEX_ISRC)
-            regex_index = re.compile(self.REGEX_INDEX)
-            regex_pregap = re.compile(self.REGEX_PREGAP)
-            regex_zero_pregap = re.compile(self.REGEX_ZERO_PREGAP)
-            regex_zero_data = re.compile(self.REGEX_ZERO_DATA)
-            regex_zero_audio = re.compile(self.REGEX_ZERO_AUDIO)
-            regex_audio_file = re.compile(self.REGEX_FILE_AUDIO)
-            regex_file = re.compile(self.REGEX_FILE_DATA)
-            regex_title = re.compile(self.REGEX_TITLE)
-            regex_performer = re.compile(self.REGEX_PERFORMER)
-            regex_songwriter = re.compile(self.REGEX_SONGWRITER)
-            regex_composer = re.compile(self.REGEX_COMPOSER)
-            regex_arranger = re.compile(self.REGEX_ARRANGER)
-            regex_message = re.compile(self.REGEX_MESSAGE)
-            regex_disc_id = re.compile(self.REGEX_DISC_ID)
-            regex_upc = re.compile(self.REGEX_UPC)
-            regex_disc_scrambled = re.compile(self.REGEX_DISC_SCRAMBLED)
+            regex_comment = re.compile(REGEX_COMMENT)
+            regex_disk_type = re.compile(REGEX_DISCTYPE)
+            regex_mcn = re.compile(REGEX_MCN)
+            regex_track = re.compile(REGEX_TRACK)
+            regex_copy = re.compile(REGEX_COPY)
+            regex_emphasis = re.compile(REGEX_EMPHASIS)
+            regex_stereo = re.compile(REGEX_STEREO)
+            regex_isrc = re.compile(REGEX_ISRC)
+            regex_index = re.compile(REGEX_INDEX)
+            regex_pregap = re.compile(REGEX_PREGAP)
+            regex_zero_pregap = re.compile(REGEX_ZERO_PREGAP)
+            regex_zero_data = re.compile(REGEX_ZERO_DATA)
+            regex_zero_audio = re.compile(REGEX_ZERO_AUDIO)
+            regex_audio_file = re.compile(REGEX_FILE_AUDIO)
+            regex_file = re.compile(REGEX_FILE_DATA)
+            regex_title = re.compile(REGEX_TITLE)
+            regex_performer = re.compile(REGEX_PERFORMER)
+            regex_songwriter = re.compile(REGEX_SONGWRITER)
+            regex_composer = re.compile(REGEX_COMPOSER)
+            regex_arranger = re.compile(REGEX_ARRANGER)
+            regex_message = re.compile(REGEX_MESSAGE)
+            regex_disc_id = re.compile(REGEX_DISC_ID)
+            regex_upc = re.compile(REGEX_UPC)
+            regex_disc_scrambled = re.compile(REGEX_DISC_SCRAMBLED)
 
             # Initialize disc
             self._discimage = CdrdaoDisc(tracks=[], comment="")
@@ -698,9 +715,9 @@ class CdrdaoRead:
             data_tracks = sum(1 for track in self._discimage.tracks if track.tracktype != self.CDRDAO_TRACK_TYPE_AUDIO)
             audio_tracks = len(self._discimage.tracks) - data_tracks
             mode2_tracks = sum(1 for track in self._discimage.tracks if track.tracktype in [
-                self.CDRDAO_TRACK_TYPE_MODE2, self.CDRDAO_TRACK_TYPE_MODE2_FORM1, 
-                self.CDRDAO_TRACK_TYPE_MODE2_FORM2, self.CDRDAO_TRACK_TYPE_MODE2_MIX, 
-                self.CDRDAO_TRACK_TYPE_MODE2_RAW
+                CDRDAO_TRACK_TYPE_MODE2, CDRDAO_TRACK_TYPE_MODE2_FORM1, 
+                CDRDAO_TRACK_TYPE_MODE2_FORM2, CDRDAO_TRACK_TYPE_MODE2_MIX, 
+                CDRDAO_TRACK_TYPE_MODE2_RAW
             ])
             
             # Create sessions

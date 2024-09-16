@@ -1,5 +1,5 @@
 import os
-from typing import BinaryIO
+from typing import BinaryIO, Optional
 from modules.ifilter import IFilter
 from modules.error_number import ErrorNumber
 import logging
@@ -9,7 +9,8 @@ logger = logging.getLogger(__name__)
 class CDRDAOFilter(IFilter):
     def __init__(self, path: str):
         super().__init__(path)
-        self._data_stream: BinaryIO = None
+        self._data_stream: Optional[BinaryIO] = None
+        self._bin_path: Optional[str] = None
 
     @property
     def name(self) -> str:
@@ -51,6 +52,15 @@ class CDRDAOFilter(IFilter):
             except IOError:
                 return None
         return self._data_stream
+
+    def get_filter(self, bin_path: str) -> 'CDRDAOFilter':
+        self._bin_path = bin_path
+        return self
+
+    def get_bin_stream(self) -> Optional[BinaryIO]:
+        if self._bin_path and os.path.exists(self._bin_path):
+            return open(self._bin_path, 'rb')
+        return None
 
     def close(self):
         if self._data_stream:

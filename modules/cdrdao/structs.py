@@ -29,7 +29,7 @@ class CdrdaoTrack:
     flag_dcp: bool = False
     flag_4ch: bool = False
     flag_pre: bool = False
-    bps: int = 0
+    bytes_per_sector: int = 0
     sectors: int = 0
     start_sector: int = 0
     tracktype: str = ""
