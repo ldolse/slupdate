@@ -125,7 +125,7 @@ def main():
     register = PluginRegister.get_instance()
 
     # Path to your test file
-    input_path = os.path.expanduser("~/scratch_projects/tests/Ape Escape (Europe).toc")
+    input_path = os.path.expanduser("~/scratch_projects/tests/Space Debris (Europe).toc")
     cdrdao_filter = CDRDAOFilter(input_path)
     cdrdao = Cdrdao(input_path)
 

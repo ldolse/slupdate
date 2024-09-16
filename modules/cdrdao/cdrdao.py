@@ -8,16 +8,17 @@ from modules.ifilter import IFilter
 from modules.cdrdao_filter import CDRDAOFilter
 
 from modules.CD.atip import ATIP
-from modules.CD.sector import Sector
+
 from modules.CD.subchannel import Subchannel
 from modules.CD.cd_types import (
     TrackType, TrackSubchannelType, SectorTagType, MediaType, 
     MediaTagType, MetadataMediaType, TocControl,
-    Track, Session, Partition, ImageInfo
+    Track, Session, Partition, ImageInfo, enum_name
 )
 from modules.CD.fulltoc import FullTOC, TrackDataDescriptor, CDFullTOC
 from modules.error_number import ErrorNumber
 
+from .utilities import *
 from .constants import *
 from .properties import *
 from .read import CdrdaoRead
@@ -80,32 +81,8 @@ class Cdrdao(CdrdaoProperties):
     def read_sector(self, *args, **kwargs):
         return self.reader.read_sector(*args, **kwargs)
 
-    def read_sectors(self, *args, **kwargs):
-        return self.reader.read_sectors(*args, **kwargs)
-
-    def read_sector_long(self, *args, **kwargs):
-        return self.reader.read_sector_long(*args, **kwargs)
-
-    def read_sectors_long(self, *args, **kwargs):
-        return self.reader.read_sectors_long(*args, **kwargs)
-
     def read_sector_tag(self, *args, **kwargs):
         return self.reader.read_sector_tag(*args, **kwargs)
-
-    def read_sectors_tag(self, *args, **kwargs):
-        return self.reader.read_sectors_tag(*args, **kwargs)
-
-    def read_media_tag(self, *args, **kwargs):
-        return self.reader.read_media_tag(*args, **kwargs)
-
-    def verify_sector(self, *args, **kwargs):
-        return self.reader.verify_sector(*args, **kwargs)
-
-    def verify_sectors(self, *args, **kwargs):
-        return self.reader.verify_sectors(*args, **kwargs)
-
-    def get_session_tracks(self, *args, **kwargs):
-        return self.reader.get_session_tracks(*args, **kwargs)
 
     def update_reader(self):
         self.reader.update(self._discimage, self._offset_map, self._data_stream, self._scrambled)
@@ -213,8 +190,8 @@ class Cdrdao(CdrdaoProperties):
 
                     if match_track:
                         if in_track:
-                            self._process_track_gaps(current_track, None)  # Process gaps for the previous track
-                            self._process_track_indexes(current_track, current_sector)
+                            process_track_gaps(current_track, None)  # Process gaps for the previous track
+                            process_track_indexes(current_track, current_sector)
                             current_sector += current_track.sectors
                             self._discimage.tracks.append(current_track)
         
@@ -388,8 +365,8 @@ class Cdrdao(CdrdaoProperties):
 
                 # Add the last track if we were processing one
                 if in_track:
-                    self._process_track_gaps(current_track, None)
-                    self._process_track_indexes(current_track, current_sector)
+                    process_track_gaps(current_track, None)
+                    process_track_indexes(current_track, current_sector)
                     self._discimage.tracks.append(current_track)
             
                 self._discimage.comment = "\n".join(comment_builder)
@@ -466,14 +443,14 @@ class Cdrdao(CdrdaoProperties):
             ]
 
             # Create tracks
-            self.tracks = [self._cdrdao_track_to_track(ct) for ct in self._discimage.tracks]
+            self.tracks = [cdrdao_track_to_track(ct) for ct in self._discimage.tracks]
 
             # Create TOC
             self._create_full_toc()
             self._image_info.readable_media_tags.append(MediaTagType.CD_FullTOC)
 
             # Set image info
-            self._image_info.media_type = self._determine_media_type()
+            self._image_info.media_type = determine_media_type(self._discimage.tracks,self.sessions)
             self._image_info.sectors = sum(track.sectors for track in self._discimage.tracks)
             self._image_info.sector_size = max(track.bytes_per_sector for track in self._discimage.tracks)
             self._image_info.image_size = sum(track.sectors * track.bytes_per_sector for track in self._discimage.tracks)
@@ -498,7 +475,7 @@ class Cdrdao(CdrdaoProperties):
 
             # Log debug information
             logger.debug("Disc image parsing results:")
-            logger.debug(f"Disc type: {self._discimage.disktype}")
+            logger.debug(f"Disc type: {enum_name(MediaType, self._discimage.disktype)}")
             logger.debug(f"MCN: {self._discimage.mcn}")
             logger.debug(f"Barcode: {self._discimage.barcode}")
             logger.debug(f"Disc ID: {self._discimage.disk_id}")
@@ -510,7 +487,7 @@ class Cdrdao(CdrdaoProperties):
                 logger.debug(f"  Bytes per sector: {track.bytes_per_sector}")
                 logger.debug(f"  Pregap: {track.pregap} sectors")
                 logger.debug(f"  Data: {track.sectors} sectors starting at sector {track.start_sector}")
-                logger.debug(f"  Type: {track.tracktype}")
+                logger.debug(f"  Type: {enum_name(TrackType, track.type)}")
                 logger.debug(f"  File: {track.trackfile.datafile}")
                 logger.debug(f"  File offset: {track.trackfile.offset}")
                 logger.debug(f"  Subchannel: {'Yes' if track.subchannel else 'No'}")
@@ -537,60 +514,51 @@ class Cdrdao(CdrdaoProperties):
             if hasattr(self, '_data_stream') and self._data_stream:
                 self._data_stream.close()
 
-    def _process_track_gaps(self, current_track: CdrdaoTrack, next_track: Optional[CdrdaoTrack]):
-        if current_track.pregap > 0:
-            current_track.start_sector -= current_track.pregap
-            current_track.sectors += current_track.pregap
+    def _update_readable_sector_tags(self, tags):
+        """
+        Update the list of readable sector tags in the image info.
         
-        if next_track and next_track.start_sector > current_track.start_sector + current_track.sectors:
-            current_track.postgap = next_track.start_sector - (current_track.start_sector + current_track.sectors)
-            current_track.sectors += current_track.postgap
-
-    def _process_track_indexes(self, current_track: CdrdaoTrack, current_sector: int):
-        if 0 not in current_track.indexes:
-            current_track.indexes[0] = current_track.start_sector
-        
-        if 1 not in current_track.indexes and current_track.pregap != current_track.sectors:
-            current_track.indexes[1] = current_track.start_sector + current_track.pregap
-        
-        for index, sector in current_track.indexes.items():
-            if index > 1:
-                current_track.indexes[index] = sector + current_track.start_sector
-    
-        # Ensure indexes are properly ordered
-        current_track.indexes = dict(sorted(current_track.indexes.items()))
+        :param tags: List of SectorTagType to be added
+        """
+        for tag in tags:
+            if tag not in self._image_info.readable_sector_tags:
+                self._image_info.readable_sector_tags.append(tag)
 
     def _detect_track_type(self, track: CdrdaoTrack) -> TrackType:
         for s in range(225, min(750, track.sectors)):
             sync_test = bytearray(12)
             sect_test = bytearray(2352)
 
-            pos = track.start_sector * 2352 + s * 2352
+            pos = track.trackfile.offset + s * 2352
 
-            self._data_stream.seek(pos)
-            self._data_stream.readinto(sect_test)
+            stream = track.trackfile.datafilter.get_data_fork_stream()
+            if pos >= stream.seek(0, io.SEEK_END):
+                break
+
+            stream.seek(pos)
+            stream.readinto(sect_test)
             sync_test[:] = sect_test[:12]
 
             if sync_test != Sector.SYNC_MARK:
                 continue
-    
-            if self._scrambled:
+
+            if self.cdrdao._scrambled:
                 sect_test = Sector.scramble(sect_test)
-    
+
             if sect_test[15] == 1:
-                track.bytes_per_sector = 2048
+                track.bps = 2048
                 self._update_readable_sector_tags([
                     SectorTagType.CdSectorSync, SectorTagType.CdSectorHeader,
                     SectorTagType.CdSectorEcc, SectorTagType.CdSectorEccP,
                     SectorTagType.CdSectorEccQ, SectorTagType.CdSectorEdc
                 ])
                 return TrackType.CdMode1
-    
+
             if sect_test[15] == 2:
                 sub_hdr1 = sect_test[16:20]
                 sub_hdr2 = sect_test[20:24]
                 emp_hdr = bytes(4)
-    
+
                 if sub_hdr1 == sub_hdr2 and sub_hdr1 != emp_hdr:
                     if sub_hdr1[2] & 0x20:
                         track.bps = 2324
@@ -608,98 +576,18 @@ class Cdrdao(CdrdaoProperties):
                             SectorTagType.CdSectorEdc
                         ])
                         return TrackType.CdMode2Form1
-    
+
                 track.bps = 2336
                 self._update_readable_sector_tags([
                     SectorTagType.CdSectorSync, SectorTagType.CdSectorHeader
                 ])
                 return TrackType.CdMode2Formless
-    
+
         return TrackType.Data  # Default to Data if no specific type is detected
-
-    def _cdrdao_track_to_track(self, cdrdao_track: CdrdaoTrack) -> Track:
-        return Track(
-            sequence=cdrdao_track.sequence,
-            start_sector=cdrdao_track.start_sector,
-            end_sector=cdrdao_track.start_sector + cdrdao_track.sectors - 1,
-            type=self.cdrdao_track_type_to_track_type(cdrdao_track.tracktype),
-            file=cdrdao_track.trackfile.datafile,
-            file_offset=cdrdao_track.trackfile.offset,
-            file_type=cdrdao_track.trackfile.filetype,
-            filter=cdrdao_track.trackfile.datafilter,
-            indexes=cdrdao_track.indexes,
-            pregap=cdrdao_track.pregap,
-            session=1,  # Assuming single session for now
-            raw_bytes_per_sector=cdrdao_track.bytes_per_sector,
-            bytes_per_sector=self.cdrdao_track_type_to_cooked_bytes_per_sector(cdrdao_track.tracktype),
-            subchannel_file=cdrdao_track.trackfile.datafile if cdrdao_track.subchannel else None,
-            subchannel_filter=cdrdao_track.trackfile.datafilter if cdrdao_track.subchannel else None,
-            subchannel_type=TrackSubchannelType.PackedInterleaved if cdrdao_track.packedsubchannel else TrackSubchannelType.RawInterleaved if cdrdao_track.subchannel else TrackSubchannelType.None_
-        )
-    
-    def _update_readable_sector_tags(self, tags):
-        for tag in tags:
-            if tag not in self._image_info.readable_sector_tags:
-                self._image_info.readable_sector_tags.append(tag)
-
-
-    @staticmethod
-    def cdrdao_track_type_to_cooked_bytes_per_sector(track_type: str) -> int:
-        if track_type in [CDRDAO_TRACK_TYPE_MODE1, CDRDAO_TRACK_TYPE_MODE2_FORM1, CDRDAO_TRACK_TYPE_MODE1_RAW]:
-            return 2048
-        elif track_type == CDRDAO_TRACK_TYPE_MODE2_FORM2:
-            return 2324
-        elif track_type in [CDRDAO_TRACK_TYPE_MODE2, CDRDAO_TRACK_TYPE_MODE2_MIX, CDRDAO_TRACK_TYPE_MODE2_RAW]:
-            return 2336
-        elif track_type == CDRDAO_TRACK_TYPE_AUDIO:
-            return 2352
-        else:
-            return 0
-
-    @staticmethod
-    def cdrdao_track_type_to_track_type(track_type: str) -> TrackType:
-        if track_type in [CDRDAO_TRACK_TYPE_MODE1, CDRDAO_TRACK_TYPE_MODE1_RAW]:
-            return TrackType.CdMode1
-        elif track_type == CDRDAO_TRACK_TYPE_MODE2_FORM1:
-            return TrackType.CdMode2Form1
-        elif track_type == CDRDAO_TRACK_TYPE_MODE2_FORM2:
-            return TrackType.CdMode2Form2
-        elif track_type in [CDRDAO_TRACK_TYPE_MODE2, CDRDAO_TRACK_TYPE_MODE2_MIX, CDRDAO_TRACK_TYPE_MODE2_RAW]:
-            return TrackType.CdMode2Formless
-        elif track_type == CDRDAO_TRACK_TYPE_AUDIO:
-            return TrackType.Audio
-        else:
-            return TrackType.Data
-
-    @staticmethod
-    def lba_to_msf(sector: int) -> Tuple[int, int, int]:
-        return (sector // 75 // 60, (sector // 75) % 60, sector % 75)
-
-    @staticmethod
-    def get_track_mode(track: 'Track') -> str:
-        if track.type == TrackType.Audio and track.raw_bytes_per_sector == 2352:
-            return CDRDAO_TRACK_TYPE_AUDIO
-        elif track.type == TrackType.Data:
-            return CDRDAO_TRACK_TYPE_MODE1
-        elif track.type == TrackType.CdMode1 and track.raw_bytes_per_sector == 2352:
-            return CDRDAO_TRACK_TYPE_MODE1_RAW
-        elif track.type == TrackType.CdMode2Formless and track.raw_bytes_per_sector != 2352:
-            return CDRDAO_TRACK_TYPE_MODE2
-        elif track.type == TrackType.CdMode2Form1 and track.raw_bytes_per_sector != 2352:
-            return CDRDAO_TRACK_TYPE_MODE2_FORM1
-        elif track.type == TrackType.CdMode2Form2 and track.raw_bytes_per_sector != 2352:
-            return CDRDAO_TRACK_TYPE_MODE2_FORM2
-        elif track.type in [TrackType.CdMode2Formless, TrackType.CdMode2Form1, TrackType.CdMode2Form2] and track.raw_bytes_per_sector == 2352:
-            return CDRDAO_TRACK_TYPE_MODE2_RAW
-        else:
-            return CDRDAO_TRACK_TYPE_MODE1
-
-    def _swap_audio_endianness(self, buffer: bytearray) -> bytearray:
-        return bytearray(buffer[i+1] + buffer[i] for i in range(0, len(buffer), 2))
 
     def _get_sector_layout(self, track: 'CdrdaoTrack') -> Tuple[int, int, int, bool]:
         sector_offset = 0
-        sector_size = self.cdrdao_track_type_to_cooked_bytes_per_sector(track.tracktype)
+        sector_size = cdrdao_track_type_to_cooked_bytes_per_sector(track.tracktype)
         sector_skip = 0
         mode2 = False
 
@@ -731,71 +619,6 @@ class Cdrdao(CdrdaoProperties):
 
         return sector_offset, sector_size, sector_skip, mode2
 
-    def _get_tag_layout(self, track: CdrdaoTrack, tag: SectorTagType) -> Tuple[int, int, int]:
-        sector_offset = 0
-        sector_size = 0
-        sector_skip = 0
-
-        if track.tracktype == CDRDAO_TRACK_TYPE_MODE1:
-            if tag == SectorTagType.CdSectorSync:
-                sector_offset, sector_size, sector_skip = 0, 12, 2340
-            elif tag == SectorTagType.CdSectorHeader:
-                sector_offset, sector_size, sector_skip = 12, 4, 2336
-            elif tag == SectorTagType.CdSectorSubHeader:
-                raise ValueError("Unsupported tag type for Mode 1")
-            elif tag == SectorTagType.CdSectorEcc:
-                sector_offset, sector_size, sector_skip = 2076, 276, 0
-            elif tag == SectorTagType.CdSectorEccP:
-                sector_offset, sector_size, sector_skip = 2076, 172, 104
-            elif tag == SectorTagType.CdSectorEccQ:
-                sector_offset, sector_size, sector_skip = 2248, 104, 0
-            elif tag == SectorTagType.CdSectorEdc:
-                sector_offset, sector_size, sector_skip = 2064, 4, 284
-            else:
-                raise ValueError("Unsupported tag type for Mode 1")
-        elif track.tracktype == CDRDAO_TRACK_TYPE_MODE2:
-            if tag in [SectorTagType.CdSectorSync, SectorTagType.CdSectorHeader, 
-                    SectorTagType.CdSectorEcc, SectorTagType.CdSectorEccP, SectorTagType.CdSectorEccQ]:
-                raise ValueError("Unsupported tag type for Mode 2 Formless")
-            elif tag == SectorTagType.CdSectorSubHeader:
-                sector_offset, sector_size, sector_skip = 0, 8, 2328
-            elif tag == SectorTagType.CdSectorEdc:
-                sector_offset, sector_size, sector_skip = 2332, 4, 0
-            else:
-                raise ValueError("Unsupported tag type for Mode 2 Formless")
-        elif track.tracktype == CDRDAO_TRACK_TYPE_MODE2_FORM1:
-            if tag == SectorTagType.CdSectorSync:
-                sector_offset, sector_size, sector_skip = 0, 12, 2340
-            elif tag == SectorTagType.CdSectorHeader:
-                sector_offset, sector_size, sector_skip = 12, 4, 2336
-            elif tag == SectorTagType.CdSectorSubHeader:
-                sector_offset, sector_size, sector_skip = 16, 8, 2328
-            elif tag == SectorTagType.CdSectorEcc:
-                sector_offset, sector_size, sector_skip = 2076, 276, 0
-            elif tag == SectorTagType.CdSectorEccP:
-                sector_offset, sector_size, sector_skip = 2076, 172, 104
-            elif tag == SectorTagType.CdSectorEccQ:
-                sector_offset, sector_size, sector_skip = 2248, 104, 0
-            elif tag == SectorTagType.CdSectorEdc:
-                sector_offset, sector_size, sector_skip = 2072, 4, 276
-            else:
-                raise ValueError("Unsupported tag type for Mode 2 Form 1")
-        elif track.tracktype == CDRDAO_TRACK_TYPE_MODE2_FORM2:
-            if tag == SectorTagType.CdSectorSync:
-                sector_offset, sector_size, sector_skip = 0, 12, 2340
-            elif tag == SectorTagType.CdSectorHeader:
-                sector_offset, sector_size, sector_skip = 12, 4, 2336
-            elif tag == SectorTagType.CdSectorSubHeader:
-                sector_offset, sector_size, sector_skip = 16, 8, 2328
-            elif tag == SectorTagType.CdSectorEdc:
-                sector_offset, sector_size, sector_skip = 2348, 4, 0
-            else:
-                raise ValueError("Unsupported tag type for Mode 2 Form 2")
-
-        if sector_size == 0:
-            raise ValueError(f"Unsupported tag type {tag} for track type {track.tracktype}")
-
-        return sector_offset, sector_size, sector_skip
 
     def _create_full_toc(self, create_c0_entry: bool = False) -> None:
         toc = CDFullTOC()
@@ -830,8 +653,8 @@ class Cdrdao(CdrdaoProperties):
 
             # Lead-Out
             if track.sequence > current_session and current_session != 0:
-                leadout_amsf = self.lba_to_msf(track.start_sector - 150) # subtract 150 for lead-in
-                leadout_pmsf = self.lba_to_msf(max(t.start_sector for t in self._discimage.tracks))
+                leadout_amsf = lba_to_msf(track.start_sector - 150) # subtract 150 for lead-in
+                leadout_pmsf = lba_to_msf(max(t.start_sector for t in self._discimage.tracks))
 
                 # Lead-out
                 track_descriptors.append(TrackDataDescriptor(
@@ -851,7 +674,7 @@ class Cdrdao(CdrdaoProperties):
 
                 # This seems to be constant? It should not exist on CD-ROM but CloneCD creates them anyway
                 # Format seems like ATIP, but ATIP should not be as 0xC0 in TOC...
-                if self.create_c0_entry:
+                if create_c0_entry:
                     track_descriptors.append(TrackDataDescriptor(
                         session_number=current_session,
                         point=0xC0,
@@ -867,7 +690,7 @@ class Cdrdao(CdrdaoProperties):
                 current_session = track.sequence
                 ending_track_number = session_ending_track.get(current_session, 0)
 
-                leadin_pmsf = self.lba_to_msf(next((t.start_sector + t.sectors for t in self._discimage.tracks if t.sequence == ending_track_number), 0))
+                leadin_pmsf = lba_to_msf(next((t.start_sector + t.sectors for t in self._discimage.tracks if t.sequence == ending_track_number), 0))
 
                 # Starting track
                 track_descriptors.append(TrackDataDescriptor(
@@ -899,7 +722,7 @@ class Cdrdao(CdrdaoProperties):
                     pframe=leadin_pmsf[2]
                 ))
 
-            pmsf = self.lba_to_msf(track.indexes.get(1, track.start_sector))
+            pmsf = lba_to_msf(track.indexes.get(1, track.start_sector))
 
             # Track
             track_descriptors.append(TrackDataDescriptor(
@@ -936,26 +759,6 @@ class Cdrdao(CdrdaoProperties):
             ]))
 
         self._full_toc = toc_ms.getvalue()
-
-    def _determine_media_type(self):
-        data_tracks = sum(1 for track in self._discimage.tracks if track.tracktype != CDRDAO_TRACK_TYPE_AUDIO)
-        audio_tracks = len(self._discimage.tracks) - data_tracks
-        mode2_tracks = sum(1 for track in self._discimage.tracks if track.tracktype in [
-            CDRDAO_TRACK_TYPE_MODE2, CDRDAO_TRACK_TYPE_MODE2_FORM1, 
-            CDRDAO_TRACK_TYPE_MODE2_FORM2, CDRDAO_TRACK_TYPE_MODE2_MIX, 
-            CDRDAO_TRACK_TYPE_MODE2_RAW
-        ])
-        
-        if data_tracks == 0:
-            return MediaType.CDDA
-        elif self._discimage.tracks[0].tracktype == CDRDAO_TRACK_TYPE_AUDIO and data_tracks > 0 and len(self.sessions) > 1 and mode2_tracks > 0:
-            return MediaType.CDPLUS
-        elif (self._discimage.tracks[0].tracktype != CDRDAO_TRACK_TYPE_AUDIO and audio_tracks > 0) or mode2_tracks > 0:
-            return MediaType.CDROMXA
-        elif audio_tracks == 0:
-            return MediaType.CDROM
-        else:
-            return MediaType.CD
 
     def _parse_cd_text(self, cd_text_data: bytes) -> None:
         if not cd_text_data:
