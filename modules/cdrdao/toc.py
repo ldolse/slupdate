@@ -1,11 +1,18 @@
+import re
+import os
 import io
 import struct
-from typing import List, Dict
-from .structs import CdrdaoDisc, CdrdaoTrack
+from typing import List, Dict, Optional
+from .structs import CdrdaoDisc, CdrdaoTrack, CdrdaoTrackFile
 from .constants import *
 from .utilities import *
 from modules.CD.fulltoc import FullTOC, TrackDataDescriptor, CDFullTOC
 from modules.ifilter import IFilter
+
+from modules.error_number import ErrorNumber
+from modules.CD.cd_types import MediaType, TrackType
+from .constants import *
+from .utilities import process_track_gaps, process_track_indexes, lba_to_msf
 
 
 def create_full_toc(tracks: List[CdrdaoTrack], track_flags: Dict[int, int], create_c0_entry: bool = False) -> bytes:
@@ -147,3 +154,197 @@ def create_full_toc(tracks: List[CdrdaoTrack], track_flags: Dict[int, int], crea
         ]))
 
     return toc_ms.getvalue()
+
+def parse_toc_file(image_filter: IFilter) -> Tuple[ErrorNumber, Optional[CdrdaoDisc]]:
+    try:
+        with image_filter.get_data_fork_stream() as toc_stream:
+            toc_content = toc_stream.read().decode('utf-8')
+
+        lines = toc_content.split('\n')
+        discimage = CdrdaoDisc(tracks=[], comment="")
+        current_track = None
+        current_track_number = 0
+        current_sector = 0
+        in_track = False
+        comment_builder = []
+
+        # Initialize all RegExs
+        regex_comment = re.compile(REGEX_COMMENT)
+        regex_disk_type = re.compile(REGEX_DISCTYPE)
+        regex_mcn = re.compile(REGEX_MCN)
+        regex_track = re.compile(REGEX_TRACK)
+        regex_copy = re.compile(REGEX_COPY)
+        regex_emphasis = re.compile(REGEX_EMPHASIS)
+        regex_stereo = re.compile(REGEX_STEREO)
+        regex_isrc = re.compile(REGEX_ISRC)
+        regex_index = re.compile(REGEX_INDEX)
+        regex_pregap = re.compile(REGEX_PREGAP)
+        regex_zero_pregap = re.compile(REGEX_ZERO_PREGAP)
+        regex_zero_data = re.compile(REGEX_ZERO_DATA)
+        regex_zero_audio = re.compile(REGEX_ZERO_AUDIO)
+        regex_audio_file = re.compile(REGEX_FILE_AUDIO)
+        regex_file = re.compile(REGEX_FILE_DATA)
+        regex_title = re.compile(REGEX_TITLE)
+        regex_performer = re.compile(REGEX_PERFORMER)
+        regex_songwriter = re.compile(REGEX_SONGWRITER)
+        regex_composer = re.compile(REGEX_COMPOSER)
+        regex_arranger = re.compile(REGEX_ARRANGER)
+        regex_message = re.compile(REGEX_MESSAGE)
+        regex_disc_id = re.compile(REGEX_DISC_ID)
+        regex_upc = re.compile(REGEX_UPC)
+
+        for line_number, line in enumerate(lines, 1):
+            line = line.strip()
+            
+            match_comment = regex_comment.match(line)
+            match_disk_type = regex_disk_type.match(line)
+            match_mcn = regex_mcn.match(line)
+            match_track = regex_track.match(line)
+            match_copy = regex_copy.match(line)
+            match_emphasis = regex_emphasis.match(line)
+            match_stereo = regex_stereo.match(line)
+            match_isrc = regex_isrc.match(line)
+            match_index = regex_index.match(line)
+            match_pregap = regex_pregap.match(line)
+            match_zero_pregap = regex_zero_pregap.match(line)
+            match_zero_data = regex_zero_data.match(line)
+            match_zero_audio = regex_zero_audio.match(line)
+            match_audio_file = regex_audio_file.match(line)
+            match_file = regex_file.match(line)
+            match_title = regex_title.match(line)
+            match_performer = regex_performer.match(line)
+            match_songwriter = regex_songwriter.match(line)
+            match_composer = regex_composer.match(line)
+            match_arranger = regex_arranger.match(line)
+            match_message = regex_message.match(line)
+            match_disc_id = regex_disc_id.match(line)
+            match_upc = regex_upc.match(line)
+
+            if match_comment:
+                if not match_comment.group("comment").startswith(" Track "):
+                    comment_builder.append(match_comment.group("comment").strip())
+            elif match_disk_type:
+                discimage.disktypestr = match_disk_type.group("type")
+                discimage.disktype = {
+                    "CD_DA": MediaType.CDDA,
+                    "CD_ROM": MediaType.CDROM,
+                    "CD_ROM_XA": MediaType.CDROMXA,
+                    "CD_I": MediaType.CDI
+                }.get(match_disk_type.group("type"), MediaType.CD)
+            elif match_mcn:
+                discimage.mcn = match_mcn.group("catalog")
+            elif match_track:
+                if in_track:
+                    process_track_gaps(current_track, None)
+                    process_track_indexes(current_track, current_sector)
+                    current_sector += current_track.sectors
+                    discimage.tracks.append(current_track)
+
+                current_track_number += 1
+                current_track = CdrdaoTrack(
+                    sequence=current_track_number,
+                    start_sector=current_sector,
+                    tracktype=match_track.group("type"),
+                    bytes_per_sector=2352 if match_track.group("type") == "AUDIO" else 2048,
+                    subchannel=bool(match_track.group("subchan")),
+                    packedsubchannel=match_track.group("subchan") == "RW",
+                    indexes={},
+                    pregap=0
+                )
+                in_track = True
+            elif match_copy and current_track:
+                current_track.flag_dcp = not bool(match_copy.group("no"))
+            elif match_emphasis and current_track:
+                current_track.flag_pre = not bool(match_emphasis.group("no"))
+            elif match_stereo and current_track:
+                current_track.flag_4ch = match_stereo.group("num") == "FOUR"
+            elif match_isrc and current_track:
+                current_track.isrc = match_isrc.group("isrc")
+            elif match_index and current_track:
+                minutes, seconds, frames = map(int, match_index.group("address").split(":"))
+                index_sector = minutes * 60 * 75 + seconds * 75 + frames
+                current_track.indexes[len(current_track.indexes) + 1] = index_sector + current_track.pregap + current_track.start_sector
+            elif match_pregap and current_track:
+                current_track.indexes[0] = current_track.start_sector
+                if match_pregap.group("address"):
+                    minutes, seconds, frames = map(int, match_pregap.group("address").split(":"))
+                    current_track.pregap = minutes * 60 * 75 + seconds * 75 + frames
+                else:
+                    current_track.pregap = current_track.sectors
+            elif match_zero_pregap and current_track:
+                current_track.indexes[0] = current_track.start_sector
+                minutes, seconds, frames = map(int, match_zero_pregap.group("length").split(":"))
+                current_track.pregap = minutes * 60 * 75 + seconds * 75 + frames
+            elif (match_audio_file or match_file) and current_track:
+                match = match_audio_file or match_file
+                current_track.trackfile = CdrdaoTrackFile(
+                    datafilter=image_filter.get_filter(os.path.join(image_filter.parent_folder, match.group("filename"))),
+                    datafile=match.group("filename"),
+                    offset=int(match.group("base_offset") or 0),
+                    filetype="BINARY",
+                    sequence=current_track_number
+                )
+                start_sectors = 0
+                if match_audio_file and match.groupdict().get("start"):
+                    minutes, seconds, frames = map(int, match.group("start").split(":"))
+                    start_sectors = minutes * 60 * 75 + seconds * 75 + frames
+                    current_track.trackfile.offset += start_sectors * current_track.bytes_per_sector
+
+                if match.groupdict().get("length"):
+                    minutes, seconds, frames = map(int, match.group("length").split(":"))
+                    current_track.sectors = minutes * 60 * 75 + seconds * 75 + frames
+                else:
+                    current_track.sectors = (current_track.trackfile.datafilter.data_fork_length - current_track.trackfile.offset) // current_track.bytes_per_sector
+                
+                current_sector += start_sectors + current_track.sectors
+            elif match_title:
+                if in_track:
+                    current_track.title = match_title.group("title")
+                else:
+                    discimage.title = match_title.group("title")
+            elif match_performer:
+                if in_track:
+                    current_track.performer = match_performer.group("performer")
+                else:
+                    discimage.performer = match_performer.group("performer")
+            elif match_songwriter:
+                if in_track:
+                    current_track.songwriter = match_songwriter.group("songwriter")
+                else:
+                    discimage.songwriter = match_songwriter.group("songwriter")
+            elif match_composer:
+                if in_track:
+                    current_track.composer = match_composer.group("composer")
+                else:
+                    discimage.composer = match_composer.group("composer")
+            elif match_arranger:
+                if in_track:
+                    current_track.arranger = match_arranger.group("arranger")
+                else:
+                    discimage.arranger = match_arranger.group("arranger")
+            elif match_message:
+                if in_track:
+                    current_track.message = match_message.group("message")
+                else:
+                    discimage.message = match_message.group("message")
+            elif match_disc_id:
+                if not in_track:
+                    discimage.disk_id = match_disc_id.group("discid")
+            elif match_upc:
+                if not in_track:
+                    discimage.barcode = match_upc.group("catalog")
+
+        if in_track:
+            process_track_gaps(current_track, None)
+            process_track_indexes(current_track, current_sector)
+            discimage.tracks.append(current_track)
+
+        discimage.comment = "\n".join(comment_builder)
+
+        return ErrorNumber.NoError, discimage
+    except Exception as ex:
+        print(f"Exception trying to parse TOC file: {str(ex)}")
+        return ErrorNumber.UnexpectedException, None
+
+
+
