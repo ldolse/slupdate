@@ -2,22 +2,28 @@ import os
 from typing import BinaryIO
 from modules.ifilter import IFilter
 from modules.error_number import ErrorNumber
+import logging
+
+logger = logging.getLogger(__name__)
 
 class CDRDAOFilter(IFilter):
     def __init__(self, path: str):
         super().__init__(path)
-        self._stream: BinaryIO = None
+        self._data_stream: BinaryIO = None
 
     @property
     def name(self) -> str:
         return "CDRDAO"
 
     def identify(self, path: str) -> bool:
+        logger.debug(f"Attempting to identify file: {path}")
         if not os.path.isfile(path):
+            logger.debug(f"File does not exist: {path}")
             return False
         
         _, ext = os.path.splitext(path)
         if ext.lower() != '.toc':
+            logger.debug(f"File extension is not .toc: {ext}")
             return False
 
         # Check the first few lines of the file for CDRDAO-specific content
@@ -33,7 +39,7 @@ class CDRDAOFilter(IFilter):
             return ErrorNumber.InvalidArgument
         
         try:
-            self._stream = open(path, 'rb')
+            self._data_stream = open(path, 'rb')
             return ErrorNumber.NoError
         except IOError:
             return ErrorNumber.CannotOpenFile
@@ -47,6 +53,6 @@ class CDRDAOFilter(IFilter):
         return self._data_stream
 
     def close(self):
-        if self._stream:
-            self._stream.close()
-            self._stream = None
+        if self._data_stream:
+            self._data_stream.close()
+            self._data_stream = None
