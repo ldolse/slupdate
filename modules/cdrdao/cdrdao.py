@@ -8,6 +8,7 @@ from modules.cdrdao_filter import CDRDAOFilter
 from modules.CD.atip import ATIP
 
 from modules.CD.subchannel import Subchannel
+from modules.CD.sector_builder import SectorBuilder
 from modules.CD.cd_types import (
     TrackType, TrackSubchannelType, SectorTagType, MediaType, 
     MediaTagType, MetadataMediaType, TocControl,
@@ -36,10 +37,10 @@ class Cdrdao(CdrdaoProperties):
         self._toc_stream = None
         self._path = path  # Store the path as an instance variable
         self.reader = CdrdaoRead(self)
+        self._data_stream = None
         self._catalog: Optional[str] = None
         self._cdtext: Optional[bytes] = None
         self._data_filter: Optional[IFilter] = None
-        self._data_stream = None
         self._descriptor_stream = None
         self._image_info = ImageInfo(
             readable_sector_tags=[],
@@ -87,11 +88,15 @@ class Cdrdao(CdrdaoProperties):
     def open(self, image_filter: IFilter) -> ErrorNumber:
         if image_filter is None:
             return ErrorNumber.NoSuchFile
-        error, self._discimage = parse_toc_file(image_filter)
-        if error != ErrorNumber.NoError:
-            return error
+        
+        self._cdrdao_filter = image_filter
 
         try:
+            # parse the toc file
+            error, self._discimage = parse_toc_file(image_filter)
+            if error != ErrorNumber.NoError:
+                return error
+            
             # Process tracks and build offset map
             self.partitions = []
             self._offset_map = {}
@@ -101,7 +106,7 @@ class Cdrdao(CdrdaoProperties):
             for track in self._discimage.tracks:
                 partition = Partition(
                     description=f"Track {track.sequence}",
-                    size=track.sectors * track.bytes_per_sector,
+                    size=track.sectors * track.bps,
                     length=track.sectors,
                     sequence=track.sequence,
                     offset=current_offset,
@@ -114,31 +119,59 @@ class Cdrdao(CdrdaoProperties):
                 total_sectors += track.sectors
                 track.type = self._detect_track_type(track)
 
-            # Handle readable sector tags
-            self._image_info.readable_sector_tags.append(SectorTagType.CdTrackFlags)
-        
+            # Set up track flags
+            self._track_flags[track.sequence] = calculate_track_flags(track)
+
+            # Create TOC
+            self._full_toc = create_full_toc(self._discimage.tracks, self._track_flags, create_c0_entry=False)
+            self._image_info.readable_media_tags.append(MediaTagType.CD_FullTOC)
+
+            # Handle CD-Text
+            if hasattr(self._discimage, 'cdtext') and self._discimage.cdtext:
+                self._cdtext = self._discimage.cdtext
+                self._image_info.readable_media_tags.append(MediaTagType.CD_TEXT)
+
+            # Set up readable sector tags
+            self._setup_readable_sector_tags()
+
+            # Create sessions
+            self.sessions = []
+            current_session = Session(
+                sequence=1,
+                start_track=float('inf'),
+                end_track=float('-inf'),
+                start_sector=0,
+                end_sector=0
+            )
+
             for track in self._discimage.tracks:
-                if track.subchannel:
-                    if SectorTagType.CdSectorSubchannel not in self._image_info.readable_sector_tags:
-                        self._image_info.readable_sector_tags.append(SectorTagType.CdSectorSubchannel)
-            
-                if track.tracktype != CDRDAO_TRACK_TYPE_AUDIO:
-                    tags_to_add = [
-                        SectorTagType.CdSectorSync,
-                        SectorTagType.CdSectorHeader,
-                        SectorTagType.CdSectorSubHeader,
-                        SectorTagType.CdSectorEdc
-                    ]
-                    if track.tracktype in [CDRDAO_TRACK_TYPE_MODE1, CDRDAO_TRACK_TYPE_MODE1_RAW]:
-                        tags_to_add.extend([
-                            SectorTagType.CdSectorEcc,
-                            SectorTagType.CdSectorEccP,
-                            SectorTagType.CdSectorEccQ
-                        ])
-                    self._image_info.readable_sector_tags.extend([tag for tag in tags_to_add if tag not in self._image_info.readable_sector_tags])
-                else:
-                    if SectorTagType.CdTrackIsrc not in self._image_info.readable_sector_tags:
-                        self._image_info.readable_sector_tags.append(SectorTagType.CdTrackIsrc)
+                if track.start_sector + track.sectors > self._image_info.sectors:
+                    self._image_info.sectors = track.start_sector + track.sectors
+
+                if track.sequence < current_session.start_track:
+                    current_session.start_track = track.sequence
+                    current_session.start_sector = track.start_sector
+                if track.sequence > current_session.end_track:
+                    current_session.end_track = track.sequence
+                    current_session.end_sector = track.start_sector + track.sectors - 1
+
+            self.sessions.append(current_session)
+            logger.debug(f"Session info: Start sector: {self.sessions[0].start_sector}, End sector: {self.sessions[0].end_sector}")
+
+            # Create tracks
+            self.tracks = [cdrdao_track_to_track(ct) for ct in self._discimage.tracks]
+
+            # Set image info
+            self._set_image_info(image_filter)
+
+            # Initialize sector builder
+            self._sector_builder = SectorBuilder()
+
+            # Open the data stream
+            self._data_stream = image_filter.get_data_fork_stream()
+
+            # Update reader
+            self.reader.update(self._discimage, self._offset_map, self._data_stream, self._scrambled)
 
             # Determine media type
             data_tracks = sum(1 for track in self._discimage.tracks if track.tracktype != CDRDAO_TRACK_TYPE_AUDIO)
@@ -148,47 +181,11 @@ class Cdrdao(CdrdaoProperties):
                 CDRDAO_TRACK_TYPE_MODE2_FORM2, CDRDAO_TRACK_TYPE_MODE2_MIX, 
                 CDRDAO_TRACK_TYPE_MODE2_RAW
             ])
-        
-            # Create sessions
-            self.sessions = [
-                Session(
-                    sequence=1,
-                    start_track=min(track.sequence for track in self._discimage.tracks),
-                    end_track=max(track.sequence for track in self._discimage.tracks),
-                    start_sector=min(track.start_sector for track in self._discimage.tracks),
-                    end_sector=max(track.start_sector + track.sectors - 1 for track in self._discimage.tracks)
-                )
-            ]
 
-            # Create tracks
-            self.tracks = [cdrdao_track_to_track(ct) for ct in self._discimage.tracks]
-
-            # Create TOC
-            self._full_toc = create_full_toc(self._discimage.tracks, self._track_flags, create_c0_entry=False)
-            self._image_info.readable_media_tags.append(MediaTagType.CD_FullTOC)
-
-            # Set image info
-            self._image_info.media_type = determine_media_type(self._discimage.tracks,self.sessions)
-            self._image_info.sectors = sum(track.sectors for track in self._discimage.tracks)
-            self._image_info.sector_size = max(track.bytes_per_sector for track in self._discimage.tracks)
-            self._image_info.image_size = sum(track.sectors * track.bytes_per_sector for track in self._discimage.tracks)
-            self._image_info.creation_time = datetime.fromtimestamp(os.path.getctime(image_filter.base_path))
-            self._image_info.last_modification_time = datetime.fromtimestamp(os.path.getmtime(image_filter.base_path))
-            self._image_info.media_title = self._discimage.title
-            self._image_info.comments = self._discimage.comment
-            self._image_info.media_serial_number = self._discimage.mcn
-            self._image_info.media_barcode = self._discimage.barcode
-            self._image_info.metadata_media_type = MetadataMediaType.OpticalDisc
-            self._image_info.application = "CDRDAO"
-
-            # Handle readable media tags
-            if self._discimage.mcn:
-                self._image_info.readable_media_tags.append(MediaTagType.CD_MCN)
-            if self._full_toc:
-                self._image_info.readable_media_tags.append(MediaTagType.CD_FullTOC)
-
-            # handle CD-Text
-            if self._cdtext:
+            # Handle CD-Text
+            if hasattr(self._discimage, 'cdtext') and self._discimage.cdtext:
+                self._cdtext = self._discimage.cdtext
+                self._image_info.readable_media_tags.append(MediaTagType.CD_TEXT)
                 self._parse_cd_text(self._cdtext)
 
             # Log debug information
@@ -202,7 +199,7 @@ class Cdrdao(CdrdaoProperties):
         
             for i, track in enumerate(self._discimage.tracks):
                 logger.debug(f"Track {track.sequence} information:")
-                logger.debug(f"  Bytes per sector: {track.bytes_per_sector}")
+                logger.debug(f"  Bytes per sector: {track.bps}")
                 logger.debug(f"  Pregap: {track.pregap} sectors")
                 logger.debug(f"  Data: {track.sectors} sectors starting at sector {track.start_sector}")
                 logger.debug(f"  Type: {enum_name(TrackType, track.type)}")
@@ -220,7 +217,6 @@ class Cdrdao(CdrdaoProperties):
                 logger.debug(f"  Start offset: {partition.offset}")
                 logger.debug(f"  Size in bytes: {partition.size}")
             
-            self.update_reader()
             return ErrorNumber.NoError
 
         except Exception as ex:
@@ -264,7 +260,7 @@ class Cdrdao(CdrdaoProperties):
                 sect_test = Sector.scramble(sect_test)
 
             if sect_test[15] == 1:
-                track.bytes_per_sector = 2048
+                track.bps = 2048
                 self._update_readable_sector_tags([
                     SectorTagType.CdSectorSync, SectorTagType.CdSectorHeader,
                     SectorTagType.CdSectorEcc, SectorTagType.CdSectorEccP,
@@ -279,14 +275,14 @@ class Cdrdao(CdrdaoProperties):
 
                 if sub_hdr1 == sub_hdr2 and sub_hdr1 != emp_hdr:
                     if sub_hdr1[2] & 0x20:
-                        track.bytes_per_sector = 2324
+                        track.bps = 2324
                         self._update_readable_sector_tags([
                             SectorTagType.CdSectorSync, SectorTagType.CdSectorHeader,
                             SectorTagType.CdSectorSubHeader, SectorTagType.CdSectorEdc
                         ])
                         return TrackType.CdMode2Form2
                     else:
-                        track.bytes_per_sector = 2048
+                        track.bps = 2048
                         self._update_readable_sector_tags([
                             SectorTagType.CdSectorSync, SectorTagType.CdSectorHeader,
                             SectorTagType.CdSectorSubHeader, SectorTagType.CdSectorEcc,
@@ -295,13 +291,64 @@ class Cdrdao(CdrdaoProperties):
                         ])
                         return TrackType.CdMode2Form1
 
-                track.bytes_per_sector = 2336
+                track.bps = 2336
                 self._update_readable_sector_tags([
                     SectorTagType.CdSectorSync, SectorTagType.CdSectorHeader
                 ])
                 return TrackType.CdMode2Formless
 
         return TrackType.Data  # Default to Data if no specific type is detected
+
+    def _setup_readable_sector_tags(self):
+        self._image_info.readable_sector_tags.append(SectorTagType.CdTrackFlags)
+        for track in self._discimage.tracks:
+            if track.subchannel:
+                if SectorTagType.CdSectorSubchannel not in self._image_info.readable_sector_tags:
+                    self._image_info.readable_sector_tags.append(SectorTagType.CdSectorSubchannel)
+            
+            if track.tracktype != CDRDAO_TRACK_TYPE_AUDIO:
+                tags_to_add = [
+                    SectorTagType.CdSectorSync,
+                    SectorTagType.CdSectorHeader,
+                    SectorTagType.CdSectorSubHeader,
+                    SectorTagType.CdSectorEdc
+                ]
+                if track.tracktype in [CDRDAO_TRACK_TYPE_MODE1, CDRDAO_TRACK_TYPE_MODE1_RAW]:
+                    tags_to_add.extend([
+                        SectorTagType.CdSectorEcc,
+                        SectorTagType.CdSectorEccP,
+                        SectorTagType.CdSectorEccQ
+                    ])
+                self._image_info.readable_sector_tags.extend([tag for tag in tags_to_add if tag not in self._image_info.readable_sector_tags])
+            else:
+                if SectorTagType.CdTrackIsrc not in self._image_info.readable_sector_tags:
+                    self._image_info.readable_sector_tags.append(SectorTagType.CdTrackIsrc)
+
+    def _set_image_info(self, image_filter):
+        # Set image info
+        self._image_info.media_type = determine_media_type(self._discimage.tracks, self.sessions)
+        self._image_info.sectors = sum(track.sectors for track in self._discimage.tracks)
+        if self._discimage.disktype not in [MediaType.CDG, MediaType.CDEG, MediaType.CDMIDI,
+                                            MediaType.CDROMXA, MediaType.CDDA, MediaType.CDI,
+                                            MediaType.CDPLUS]:
+            self._image_info.sector_size = 2048  # Only data tracks
+        else:
+            self._image_info.sector_size = 2352  # All others
+        self._image_info.image_size = sum(track.sectors * track.bps for track in self._discimage.tracks)
+        self._image_info.creation_time = datetime.fromtimestamp(os.path.getctime(image_filter.base_path))
+        self._image_info.last_modification_time = datetime.fromtimestamp(os.path.getmtime(image_filter.base_path))
+        self._image_info.media_title = self._discimage.title
+        self._image_info.comments = self._discimage.comment
+        self._image_info.media_serial_number = self._discimage.mcn
+        self._image_info.media_barcode = self._discimage.barcode
+        self._image_info.metadata_media_type = MetadataMediaType.OpticalDisc
+        self._image_info.application = "CDRDAO"
+
+        # Handle readable media tags
+        if self._discimage.mcn:
+            self._image_info.readable_media_tags.append(MediaTagType.CD_MCN)
+        if self._full_toc:
+            self._image_info.readable_media_tags.append(MediaTagType.CD_FullTOC)
 
     def _get_sector_layout(self, track: 'CdrdaoTrack') -> Tuple[int, int, int, bool]:
         sector_offset = 0
@@ -353,18 +400,18 @@ class Cdrdao(CdrdaoProperties):
             block_number = pack[2]
             text = pack[4:16]
 
-            if pack_type == 0x80:
+            if pack_type == 0x80:  # Album/Track Title
                 text_buffer.extend(text)
-                if pack[3] & 0x80:
+                if pack[3] & 0x80:  # Last pack in sequence
                     self._process_cd_text(pack_type, track_number, text_buffer.decode('ascii', errors='ignore'))
                     text_buffer.clear()
             else:
                 self._process_cd_text(pack_type, track_number, text.decode('ascii', errors='ignore'))
 
     def _process_cd_text(self, pack_type: int, track_number: int, text: str) -> None:
-        if track_number == 0:
+        if track_number == 0:  # Disc-related information
             self._process_disc_cd_text(pack_type, text)
-        else:
+        else:  # Track-related information
             self._process_track_cd_text(pack_type, track_number, text)
 
     def _process_disc_cd_text(self, pack_type: int, text: str) -> None:
@@ -406,3 +453,6 @@ class Cdrdao(CdrdaoProperties):
                 track.isrc = text
             elif pack_type == 0x87:
                 track.genre = text
+
+
+

@@ -36,10 +36,16 @@ class CdrdaoRead:
         self._data_stream = data_stream
         self._scrambled = scrambled
 
+    def _check_initialization(self):
+        if not all([self._discimage, self._offset_map, self._data_stream]):
+            raise ValueError("CdrdaoRead not properly initialized. Call update() first.")
+
     def read_sector(self, sector_address: int, track: Optional[int] = None) -> Tuple[ErrorNumber, Optional[bytes]]:
+        self._check_initialization()
         return self.read_sectors(sector_address, 1, track)
 
     def read_sectors(self, sector_address: int, length: int, track: Optional[int] = None) -> Tuple[ErrorNumber, Optional[bytes]]:
+        self._check_initialization()
         if track is None:
             for track_sequence, start_sector in self._offset_map.items():
                 if sector_address >= start_sector:
@@ -118,9 +124,11 @@ class CdrdaoRead:
         return ErrorNumber.NoError, bytes(buffer)
     
     def read_sector_long(self, sector_address: int, track: Optional[int] = None) -> Tuple[ErrorNumber, Optional[bytes]]:
+        self._check_initialization()
         return self.read_sectors_long(sector_address, 1, track)
     
     def read_sectors_long(self, sector_address: int, length: int, track: Optional[int] = None) -> Tuple[ErrorNumber, Optional[bytes]]:
+        self._check_initialization()
         if track is None:
             for track_sequence, start_sector in self._offset_map.items():
                 if sector_address >= start_sector:
@@ -152,9 +160,11 @@ class CdrdaoRead:
         return ErrorNumber.NoError, bytes(buffer[:sector_size * length])
     
     def read_sector_tag(self, sector_address: int, tag: SectorTagType, track: Optional[int] = None) -> Tuple[ErrorNumber, Optional[bytes]]:
+        self._check_initialization()
         return self.read_sectors_tag(sector_address, 1, tag, track)
 
     def read_sectors_tag(self, sector_address: int, length: int, tag: SectorTagType, track: Optional[int] = None) -> Tuple[ErrorNumber, Optional[bytes]]:
+        self._check_initialization()
         if track is None:
             for track_sequence, start_sector in self._offset_map.items():
                 if sector_address >= start_sector:
@@ -206,15 +216,7 @@ class CdrdaoRead:
         return ErrorNumber.NoError, bytes(buffer)
     
     def _read_track_flags(self, track: 'CdrdaoTrack') -> Tuple[ErrorNumber, Optional[bytes]]:
-        flags = 0
-        if track.tracktype != CDRDAO_TRACK_TYPE_AUDIO:
-            flags |= 0x04  # Data track
-        if track.flag_dcp:
-            flags |= 0x02  # Digital copy permitted
-        if track.flag_4ch:
-            flags |= 0x08  # Four channel audio
-        if track.flag_pre:
-            flags |= 0x01  # Pre-emphasis
+        flags = calculate_track_flags(track)
         return ErrorNumber.NoError, bytes([flags])
     
     def _read_track_isrc(self, track: 'CdrdaoTrack') -> Tuple[ErrorNumber, Optional[bytes]]:
@@ -294,146 +296,3 @@ class CdrdaoRead:
                 return ErrorNumber.NoData, None
         else:
             return ErrorNumber.NotSupported, None
-
-    def open(self, image_filter: IFilter) -> ErrorNumber:
-        
-        if image_filter is None:
-            return ErrorNumber.NoSuchFile
-
-        self._cdrdao_filter = image_filter
-
-        try:
-            # Process tracks and build offset map
-            self.partitions = []
-            self._offset_map = {}
-            current_offset = 0
-            total_sectors = 0
-
-            for track in self._discimage.tracks:
-                partition = Partition(
-                    description=f"Track {track.sequence}",
-                    size=track.sectors * track.bytes_per_sector,
-                    length=track.sectors,
-                    sequence=track.sequence,
-                    offset=current_offset,
-                    start=track.start_sector,
-                    type=track.tracktype
-                )
-                self.partitions.append(partition)
-                self._offset_map[track.sequence] = track.start_sector
-                current_offset += partition.size
-                total_sectors += track.sectors
-                track.type = self._detect_track_type(track)
-
-            # Handle readable sector tags
-            self._image_info.readable_sector_tags.append(SectorTagType.CdTrackFlags)
-            
-            for track in self._discimage.tracks:
-                if track.subchannel:
-                    if SectorTagType.CdSectorSubchannel not in self._image_info.readable_sector_tags:
-                        self._image_info.readable_sector_tags.append(SectorTagType.CdSectorSubchannel)
-                
-                if track.tracktype != self.CDRDAO_TRACK_TYPE_AUDIO:
-                    tags_to_add = [
-                        SectorTagType.CdSectorSync,
-                        SectorTagType.CdSectorHeader,
-                        SectorTagType.CdSectorSubHeader,
-                        SectorTagType.CdSectorEdc
-                    ]
-                    if track.tracktype in [self.CDRDAO_TRACK_TYPE_MODE1, self.CDRDAO_TRACK_TYPE_MODE1_RAW]:
-                        tags_to_add.extend([
-                            SectorTagType.CdSectorEcc,
-                            SectorTagType.CdSectorEccP,
-                            SectorTagType.CdSectorEccQ
-                        ])
-                    self._image_info.readable_sector_tags.extend([tag for tag in tags_to_add if tag not in self._image_info.readable_sector_tags])
-                else:
-                    if SectorTagType.CdTrackIsrc not in self._image_info.readable_sector_tags:
-                        self._image_info.readable_sector_tags.append(SectorTagType.CdTrackIsrc)
-
-            # Determine media type
-            data_tracks = sum(1 for track in self._discimage.tracks if track.tracktype != self.CDRDAO_TRACK_TYPE_AUDIO)
-            audio_tracks = len(self._discimage.tracks) - data_tracks
-            mode2_tracks = sum(1 for track in self._discimage.tracks if track.tracktype in [
-                CDRDAO_TRACK_TYPE_MODE2, CDRDAO_TRACK_TYPE_MODE2_FORM1, 
-                CDRDAO_TRACK_TYPE_MODE2_FORM2, CDRDAO_TRACK_TYPE_MODE2_MIX, 
-                CDRDAO_TRACK_TYPE_MODE2_RAW
-            ])
-            
-            # Create sessions
-            self.sessions = [
-                Session(
-                    sequence=1,
-                    start_track=min(track.sequence for track in self._discimage.tracks),
-                    end_track=max(track.sequence for track in self._discimage.tracks),
-                    start_sector=min(track.start_sector for track in self._discimage.tracks),
-                    end_sector=max(track.start_sector + track.sectors - 1 for track in self._discimage.tracks)
-                )
-            ]
-
-            # Create tracks
-            self.tracks = [cdrdao_track_to_track(ct) for ct in self._discimage.tracks]
-
-            # Create TOC
-            self._create_full_toc()
-            self._image_info.readable_media_tags.append(MediaTagType.CD_FullTOC)
-
-            # Set image info
-            self._image_info.media_type = determine_media_type()
-            self._image_info.sectors = sum(track.sectors for track in self._discimage.tracks)
-            self._image_info.sector_size = max(track.bytes_per_sector for track in self._discimage.tracks)
-            self._image_info.image_size = sum(track.sectors * track.bytes_per_sector for track in self._discimage.tracks)
-            self._image_info.creation_time = datetime.fromtimestamp(os.path.getctime(image_filter.base_path))
-            self._image_info.last_modification_time = datetime.fromtimestamp(os.path.getmtime(image_filter.base_path))
-            self._image_info.media_title = self._discimage.title
-            self._image_info.comments = self._discimage.comment
-            self._image_info.media_serial_number = self._discimage.mcn
-            self._image_info.media_barcode = self._discimage.barcode
-            self._image_info.metadata_media_type = MetadataMediaType.OpticalDisc
-            self._image_info.application = "CDRDAO"
-
-            # Handle readable media tags
-            if self._discimage.mcn:
-                self._image_info.readable_media_tags.append(MediaTagType.CD_MCN)
-            if self._full_toc:
-                self._image_info.readable_media_tags.append(MediaTagType.CD_FullTOC)
-
-            # handle CD-Text
-            if self._cdtext:
-                self._parse_cd_text(self._cdtext)
-
-            # Log debug information
-            logger.debug("Disc image parsing results:")
-            logger.debug(f"Disc type: {enum_name(MediaType, self._discimage.disktype)}")
-            logger.debug(f"MCN: {self._discimage.mcn}")
-            logger.debug(f"Barcode: {self._discimage.barcode}")
-            logger.debug(f"Disc ID: {self._discimage.disk_id}")
-            logger.debug(f"Comment: {self._discimage.comment}")
-            logger.debug(f"Number of tracks: {len(self._discimage.tracks)}")
-            
-            for i, track in enumerate(self._discimage.tracks):
-                logger.debug(f"Track {track.sequence} information:")
-                logger.debug(f"  Bytes per sector: {track.bytes_per_sector}")
-                logger.debug(f"  Pregap: {track.pregap} sectors")
-                logger.debug(f"  Data: {track.sectors} sectors starting at sector {track.start_sector}")
-                logger.debug(f"  Type: {track.tracktype}")
-                logger.debug(f"  File: {track.trackfile.datafile}")
-                logger.debug(f"  File offset: {track.trackfile.offset}")
-                logger.debug(f"  Subchannel: {'Yes' if track.subchannel else 'No'}")
-                logger.debug(f"  Indexes: {track.indexes}")
-
-            logger.debug("Partition map:")
-            for partition in self.partitions:
-                logger.debug(f"  Sequence: {partition.sequence}")
-                logger.debug(f"  Type: {partition.type}")
-                logger.debug(f"  Start sector: {partition.start}")
-                logger.debug(f"  Sectors: {partition.length}")
-                logger.debug(f"  Start offset: {partition.offset}")
-                logger.debug(f"  Size in bytes: {partition.size}")
-
-            return ErrorNumber.NoError
-
-        except Exception as ex:
-            logger.error(f"Exception trying to open image file: {image_filter.filename}")
-            logger.exception(ex)
-            return ErrorNumber.UnexpectedException

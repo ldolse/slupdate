@@ -93,7 +93,6 @@ def cdrdao_track_to_track(cdrdao_track: CdrdaoTrack) -> Track:
         indexes=cdrdao_track.indexes,
         pregap=cdrdao_track.pregap,
         session=1,  # Assuming single session for now
-        raw_bytes_per_sector=cdrdao_track.bytes_per_sector,
         bytes_per_sector=cdrdao_track_type_to_cooked_bytes_per_sector(cdrdao_track.tracktype),
         subchannel_file=cdrdao_track.trackfile.datafile if cdrdao_track.subchannel else None,
         subchannel_filter=cdrdao_track.trackfile.datafilter if cdrdao_track.subchannel else None,
@@ -190,3 +189,15 @@ def determine_media_type(discimagetracks,sessions):
         return MediaType.CDROM
     else:
         return MediaType.CD
+
+def calculate_track_flags(track: CdrdaoTrack) -> int:
+    flags = 0
+    if track.tracktype != CDRDAO_TRACK_TYPE_AUDIO:
+        flags |= 0x04  # Data track
+    if track.flag_dcp:
+        flags |= 0x02  # Digital copy permitted
+    if track.flag_4ch:
+        flags |= 0x08  # Four channel audio
+    if track.flag_pre:
+        flags |= 0x01  # Pre-emphasis
+    return flags

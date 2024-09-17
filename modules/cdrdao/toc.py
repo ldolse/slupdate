@@ -171,6 +171,7 @@ def parse_toc_file(image_filter: IFilter) -> Tuple[ErrorNumber, Optional[CdrdaoD
         in_track = False
         next_index = 2  # Initialize next_index before the loop
         comment_builder = []
+        last_end_sector = 0
 
         # Initialize all RegExs
         regex_comment = re.compile(REGEX_COMMENT)
@@ -256,7 +257,7 @@ def parse_toc_file(image_filter: IFilter) -> Tuple[ErrorNumber, Optional[CdrdaoD
                     sequence=current_track_number,
                     start_sector=current_sector,
                     tracktype=match_track.group("type"),
-                    bytes_per_sector=2352 if match_track.group("type") == "AUDIO" else 2048,
+                    bps=2352 if match_track.group("type") == "AUDIO" else 2048,
                     subchannel=bool(match_track.group("subchan")),
                     packedsubchannel=match_track.group("subchan") == "RW",
                     indexes={},
@@ -270,15 +271,15 @@ def parse_toc_file(image_filter: IFilter) -> Tuple[ErrorNumber, Optional[CdrdaoD
                 current_track.start_sector = current_sector
                 current_track.tracktype = match_track.group("type")
                 
-                # Adjust bytes_per_sector based on track type
+                # Adjust bps bytes per sector based on track type
                 if current_track.tracktype == "AUDIO":
-                    current_track.bytes_per_sector = 2352
+                    current_track.bps = 2352
                 elif current_track.tracktype in ["MODE1", "MODE2_FORM1"]:
-                    current_track.bytes_per_sector = 2048
+                    current_track.bps = 2048
                 elif current_track.tracktype == "MODE2_FORM2":
-                    current_track.bytes_per_sector = 2324
+                    current_track.bps = 2324
                 elif current_track.tracktype in ["MODE2", "MODE2_FORM_MIX", "MODE2_RAW"]:
-                    current_track.bytes_per_sector = 2336
+                    current_track.bps = 2336
                 else:
                     logger.warning(f"Unknown track mode: {current_track.tracktype}, defaulting to 2352 bytes per sector")
 
@@ -331,19 +332,17 @@ def parse_toc_file(image_filter: IFilter) -> Tuple[ErrorNumber, Optional[CdrdaoD
                     filetype="BINARY",
                     sequence=current_track_number
                 )
-                start_sectors = 0
-                if match_audio_file and match.groupdict().get("start"):
-                    minutes, seconds, frames = map(int, match.group("start").split(":"))
-                    start_sectors = minutes * 60 * 75 + seconds * 75 + frames
-                    current_track.trackfile.offset += start_sectors * current_track.bytes_per_sector
-
                 if match.groupdict().get("length"):
                     minutes, seconds, frames = map(int, match.group("length").split(":"))
                     current_track.sectors = minutes * 60 * 75 + seconds * 75 + frames
                 else:
-                    current_track.sectors = (current_track.trackfile.datafilter.data_fork_length - current_track.trackfile.offset) // current_track.bytes_per_sector
+                    current_track.sectors = (current_track.trackfile.datafilter.data_fork_length - current_track.trackfile.offset) // current_track.bps
+
+                current_track.start_sector = last_end_sector  # Set start_sector to the end of the previous track
+                last_end_sector = current_track.start_sector + current_track.sectors  # Update last_end_sector for the next track
                 
-                current_sector += start_sectors + current_track.sectors
+                # Add this debug log
+                logger.debug(f"Calculated track {current_track.sequence}: start_sector={current_track.start_sector}, sectors={current_track.sectors}, end_sector={last_end_sector - 1}")
             elif match_audio_file or match_file:
                 if not in_track:
                     return ErrorNumber.InvalidData  # File declaration outside of track
@@ -429,7 +428,7 @@ def parse_toc_file(image_filter: IFilter) -> Tuple[ErrorNumber, Optional[CdrdaoD
                     sequence=current_track_number,
                     start_sector=current_sector,
                     tracktype=match_track.group("type"),
-                    bytes_per_sector=2352 if match_track.group("type") == "AUDIO" else 2048,
+                    bps=2352 if match_track.group("type") == "AUDIO" else 2048,
                     subchannel=bool(match_track.group("subchan")),
                     packedsubchannel=match_track.group("subchan") == "RW",
                     indexes={},
@@ -444,13 +443,13 @@ def parse_toc_file(image_filter: IFilter) -> Tuple[ErrorNumber, Optional[CdrdaoD
                 current_track.tracktype = match_track.group("type")
                 
                 if match_track.group("type") == "AUDIO":
-                    current_track.bytes_per_sector = 2352
+                    current_track.bps = 2352
                 elif match_track.group("type") in ["MODE1", "MODE2_FORM1"]:
-                    current_track.bytes_per_sector = 2048
+                    current_track.bps = 2048
                 elif match_track.group("type") == "MODE2_FORM2":
-                    current_track.bytes_per_sector = 2324
+                    current_track.bps = 2324
                 elif match_track.group("type") in ["MODE2", "MODE2_FORM_MIX"]:
-                    current_track.bytes_per_sector = 2336
+                    current_track.bps = 2336
                 else:
                     logger.error(f"Unsupported track mode: {match_track.group('type')}")
                     return ErrorNumber.NotSupported
