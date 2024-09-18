@@ -1,5 +1,4 @@
 from .structs import CdrdaoTrack
-from modules.CD.sector import Sector
 from modules.CD.cd_types import (
     TrackType, TrackSubchannelType, SectorTagType, 
     Track, MediaType
@@ -94,6 +93,7 @@ def cdrdao_track_to_track(cdrdao_track: CdrdaoTrack) -> Track:
         pregap=cdrdao_track.pregap,
         session=1,  # Assuming single session for now
         bytes_per_sector=cdrdao_track_type_to_cooked_bytes_per_sector(cdrdao_track.tracktype),
+        raw_bytes_per_sector=2352,
         subchannel_file=cdrdao_track.trackfile.datafile if cdrdao_track.subchannel else None,
         subchannel_filter=cdrdao_track.trackfile.datafilter if cdrdao_track.subchannel else None,
         subchannel_type=TrackSubchannelType.PackedInterleaved if cdrdao_track.packedsubchannel else TrackSubchannelType.RawInterleaved if cdrdao_track.subchannel else TrackSubchannelType.None_
@@ -137,19 +137,15 @@ def process_track_gaps(current_track: CdrdaoTrack, next_track: Optional[CdrdaoTr
         current_track.postgap = next_track.start_sector - (current_track.start_sector + current_track.sectors)
         current_track.sectors += current_track.postgap
 
-def process_track_indexes(current_track: CdrdaoTrack, current_sector: int):
-    if 0 not in current_track.indexes:
-        current_track.indexes[0] = current_track.start_sector
-    
-    if 1 not in current_track.indexes and current_track.pregap != current_track.sectors:
-        current_track.indexes[1] = current_track.start_sector + current_track.pregap
-    
-    for index, sector in current_track.indexes.items():
-        if index > 1:
-            current_track.indexes[index] = sector + current_track.start_sector
+def process_track_indexes(track: CdrdaoTrack):
+    if track.sequence == 1 and track.pregap > 0:
+        track.indexes[0] = -track.pregap
+        track.indexes[1] = 0
+    else:
+        track.indexes[1] = track.start_sector
 
     # Ensure indexes are properly ordered
-    current_track.indexes = dict(sorted(current_track.indexes.items()))
+    track.indexes = dict(sorted(track.indexes.items()))
 
 @staticmethod
 def get_track_mode(track: 'Track') -> str:

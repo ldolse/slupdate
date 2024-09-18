@@ -245,23 +245,21 @@ def parse_toc_file(image_filter: IFilter) -> Tuple[ErrorNumber, Optional[CdrdaoD
             elif match_mcn:
                 logger.debug(f"Found CATALOG '{match_mcn.group('catalog')}' at line {line_number}")
                 discimage.mcn = match_mcn.group("catalog")
-            elif match_track:
-                if in_track:
-                    process_track_gaps(current_track, None)  # Process gaps for the previous track
-                    process_track_indexes(current_track, current_sector)
-                    current_sector += current_track.sectors
+            elif match_track := regex_track.match(line):
+                if current_track:
                     discimage.tracks.append(current_track)
 
                 current_track_number += 1
+                track_type = match_track.group("type")
                 current_track = CdrdaoTrack(
                     sequence=current_track_number,
                     start_sector=current_sector,
-                    tracktype=match_track.group("type"),
-                    bps=2352 if match_track.group("type") == "AUDIO" else 2048,
+                    tracktype=track_type,
+                    bps=cdrdao_track_type_to_cooked_bytes_per_sector(track_type),
                     subchannel=bool(match_track.group("subchan")),
                     packedsubchannel=match_track.group("subchan") == "RW",
                     indexes={},
-                    pregap=0
+                    pregap=0  # We'll calculate this later
                 )
                 in_track = True
                 subchan = match_track.group("subchan")
@@ -338,11 +336,16 @@ def parse_toc_file(image_filter: IFilter) -> Tuple[ErrorNumber, Optional[CdrdaoD
                 else:
                     current_track.sectors = (current_track.trackfile.datafilter.data_fork_length - current_track.trackfile.offset) // current_track.bps
 
-                current_track.start_sector = last_end_sector  # Set start_sector to the end of the previous track
+                # Handle pregap for the first track
+                if current_track.sequence == 1:
+                    current_track.pregap = 150  # Assume 150-sector pregap for the first track
+                    current_track.start_sector = 0
+                else:
+                    current_track.start_sector = last_end_sector  # Set start_sector to the end of the previous track
+
                 last_end_sector = current_track.start_sector + current_track.sectors  # Update last_end_sector for the next track
-                
-                # Add this debug log
-                logger.debug(f"Calculated track {current_track.sequence}: start_sector={current_track.start_sector}, sectors={current_track.sectors}, end_sector={last_end_sector - 1}")
+
+                logger.debug(f"Calculated track {current_track.sequence}: start_sector={current_track.start_sector}, sectors={current_track.sectors}, end_sector={last_end_sector - 1}, pregap={current_track.pregap}")
             elif match_audio_file or match_file:
                 if not in_track:
                     return ErrorNumber.InvalidData  # File declaration outside of track
@@ -402,10 +405,13 @@ def parse_toc_file(image_filter: IFilter) -> Tuple[ErrorNumber, Optional[CdrdaoD
         # Add the last track if we were processing one
         if in_track:
             process_track_gaps(current_track, None)
-            process_track_indexes(current_track, current_sector)
+            process_track_indexes(current_track)
             discimage.tracks.append(current_track)
 
         discimage.comment = "\n".join(comment_builder)
+
+        for track in discimage.tracks:
+            process_track_indexes(track)
 
         return ErrorNumber.NoError, discimage
     except Exception as ex:

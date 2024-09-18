@@ -173,6 +173,17 @@ class Cdrdao(CdrdaoProperties):
             # Update reader
             self.reader.update(self._discimage, self._offset_map, self._data_stream, self._scrambled)
 
+            # Validate subchannel data for the first track
+            if self._discimage.tracks:
+                first_track = self._discimage.tracks[0]
+                logger.debug(f"First track info: start_sector={first_track.start_sector}, sequence={first_track.sequence}, subchannel={first_track.subchannel}, file_offset={first_track.trackfile.offset}, sectors={first_track.sectors}")
+                if first_track.subchannel:
+                    is_valid = self.reader.validate_subchannel(first_track.start_sector, first_track.sequence)
+                    if not is_valid:
+                        logger.warning("Subchannel validation failed for the first track")
+                else:
+                    logger.warning("First track does not have subchannel data")
+
             # Determine media type
             data_tracks = sum(1 for track in self._discimage.tracks if track.tracktype != CDRDAO_TRACK_TYPE_AUDIO)
             audio_tracks = len(self._discimage.tracks) - data_tracks
