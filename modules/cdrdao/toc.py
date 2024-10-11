@@ -231,10 +231,10 @@ def parse_toc_file(image_filter: IFilter) -> Tuple[ErrorNumber, Optional[CdrdaoD
 
             if match_comment:
                 if not match_comment.group("comment").startswith(" Track "):
-                    logger.debug(f"Found comment '{match_comment.group('comment').strip()}' at line {line_number}")
+                    logger.debug(f" Found comment '{match_comment.group('comment').strip()}' at line {line_number}")
                     comment_builder.append(match_comment.group("comment").strip())
             elif match_disk_type:
-                logger.debug(f"Found '{match_disk_type.group('type')}' at line {line_number}")
+                logger.debug(f" Found {match_disk_type.group('type')} at line {line_number}")
                 discimage.disktypestr = match_disk_type.group("type")
                 discimage.disktype = {
                     "CD_DA": MediaType.CDDA,
@@ -243,7 +243,7 @@ def parse_toc_file(image_filter: IFilter) -> Tuple[ErrorNumber, Optional[CdrdaoD
                     "CD_I": MediaType.CDI
                 }.get(match_disk_type.group("type"), MediaType.CD)
             elif match_mcn:
-                logger.debug(f"Found CATALOG '{match_mcn.group('catalog')}' at line {line_number}")
+                logger.debug(f" Found CATALOG '{match_mcn.group('catalog')}' at line {line_number}")
                 discimage.mcn = match_mcn.group("catalog")
             elif match_track := regex_track.match(line):
                 if current_track:
@@ -263,20 +263,20 @@ def parse_toc_file(image_filter: IFilter) -> Tuple[ErrorNumber, Optional[CdrdaoD
                 )
                 in_track = True
                 subchan = match_track.group("subchan")
-                logger.debug(f"Found TRACK type '{match_track.group('type')}' {'with no subchannel' if not subchan else f'subchannel {subchan}'} at line {line_number}")
+                logger.debug(f' Found TRACK type "{match_track.group('type')}" {'with no subchannel' if not subchan else f'subchannel {subchan}'} at line {line_number}')
 
                 current_track.sequence = current_track_number
                 current_track.start_sector = current_sector
                 current_track.tracktype = match_track.group("type")
                 
                 # Adjust bps bytes per sector based on track type
-                if current_track.tracktype == "AUDIO":
+                if current_track.tracktype in ["AUDIO", "MODE1_RAW", "MODE2_RAW"]:
                     current_track.bps = 2352
                 elif current_track.tracktype in ["MODE1", "MODE2_FORM1"]:
                     current_track.bps = 2048
                 elif current_track.tracktype == "MODE2_FORM2":
                     current_track.bps = 2324
-                elif current_track.tracktype in ["MODE2", "MODE2_FORM_MIX", "MODE2_RAW"]:
+                elif current_track.tracktype in ["MODE2", "MODE2_FORM_MIX"]:
                     current_track.bps = 2336
                 else:
                     logger.warning(f"Unknown track mode: {current_track.tracktype}, defaulting to 2352 bytes per sector")
@@ -286,25 +286,25 @@ def parse_toc_file(image_filter: IFilter) -> Tuple[ErrorNumber, Optional[CdrdaoD
                         current_track.packedsubchannel = True
                     current_track.subchannel = True
             elif match_copy and current_track:
-                logger.debug(f"Found {'NO ' if match_copy.group('no') else ''}COPY at line {line_number}")
+                logger.debug(f" Found {'NO ' if match_copy.group('no') else ''}COPY at line {line_number}")
                 current_track.flag_dcp = not bool(match_copy.group("no"))
             elif match_emphasis and current_track:
-                logger.debug(f"Found {'NO ' if match_emphasis.group('no') else ''}PRE_EMPHASIS at line {line_number}")
+                logger.debug(f" Found {'NO ' if match_emphasis.group('no') else ''}PRE_EMPHASIS at line {line_number}")
                 current_track.flag_pre = not bool(match_emphasis.group("no"))
             elif match_stereo and current_track:
-                logger.debug(f"Found {match_stereo.group('num')}_CHANNEL_AUDIO at line {line_number}")
+                logger.debug(f" Found {match_stereo.group('num')}_CHANNEL_AUDIO at line {line_number}")
                 current_track.flag_4ch = match_stereo.group("num") == "FOUR"
             elif match_isrc and current_track:
-                logger.debug(f"Found ISRC '{match_isrc.group('isrc')}' at line {line_number}")
+                logger.debug(f" Found ISRC '{match_isrc.group('isrc')}' at line {line_number}")
                 current_track.isrc = match_isrc.group("isrc")
             elif match_index and current_track:
-                logger.debug(f"Found INDEX {match_index.group('address')} at line {line_number}")
+                logger.debug(f" Found INDEX {match_index.group('address')} at line {line_number}")
                 minutes, seconds, frames = map(int, match_index.group("address").split(":"))
                 index_sector = minutes * 60 * 75 + seconds * 75 + frames
                 current_track.indexes[next_index] = index_sector + current_track.pregap + current_track.start_sector
                 next_index += 1
             elif match_pregap and current_track:
-                logger.debug(f"Found START {match_pregap.group('address') or ''} at line {line_number}")
+                logger.debug(f" Found START {match_pregap.group('address') or ''} at line {line_number}")
                 current_track.indexes[0] = current_track.start_sector
                 if match_pregap.group("address"):
                     minutes, seconds, frames = map(int, match_pregap.group("address").split(":"))
@@ -312,17 +312,17 @@ def parse_toc_file(image_filter: IFilter) -> Tuple[ErrorNumber, Optional[CdrdaoD
                 else:
                     current_track.pregap = current_track.sectors
             elif match_zero_pregap and current_track:
-                logger.debug(f"Found PREGAP {match_zero_pregap.group('length')} at line {line_number}")
+                logger.debug(f" Found PREGAP {match_zero_pregap.group('length')} at line {line_number}")
                 current_track.indexes[0] = current_track.start_sector
                 minutes, seconds, frames = map(int, match_zero_pregap.group("length").split(":"))
                 current_track.pregap = minutes * 60 * 75 + seconds * 75 + frames
             elif match_zero_data:
-                logger.debug(f"Found ZERO {match_zero_data.group('length')} at line {line_number}")
+                logger.debug(f" Found ZERO {match_zero_data.group('length')} at line {line_number}")
             elif match_zero_audio:
-                logger.debug(f"Found SILENCE {match_zero_audio.group('length')} at line {line_number}")
+                logger.debug(f" Found SILENCE {match_zero_audio.group('length')} at line {line_number}")
             elif (match_audio_file or match_file) and current_track:
                 match = match_audio_file or match_file
-                logger.debug(f"Found {'AUDIO' if match_audio_file else 'DATA'}FILE '{match.group('filename')}' at line {line_number}")
+                logger.debug(f" Found {'AUDIO' if match_audio_file else 'DATA'}FILE '{match.group('filename')}' at line {line_number}")
                 current_track.trackfile = CdrdaoTrackFile(
                     datafilter=image_filter.get_filter(os.path.join(image_filter.parent_folder, match.group("filename"))),
                     datafile=match.group("filename"),
@@ -345,56 +345,58 @@ def parse_toc_file(image_filter: IFilter) -> Tuple[ErrorNumber, Optional[CdrdaoD
 
                 last_end_sector = current_track.start_sector + current_track.sectors  # Update last_end_sector for the next track
 
-                logger.debug(f"Calculated track {current_track.sequence}: start_sector={current_track.start_sector}, sectors={current_track.sectors}, end_sector={last_end_sector - 1}, pregap={current_track.pregap}")
+                logger.debug(f" Calculated track {current_track.sequence}: start_sector={current_track.start_sector}, sectors={current_track.sectors}, end_sector={last_end_sector - 1}, pregap={current_track.pregap}")
             elif match_audio_file or match_file:
                 if not in_track:
                     return ErrorNumber.InvalidData  # File declaration outside of track
+                else:
+                    logger.debug(f' Found DATAFILE {match.group(filename)} at line {line_number}')
             elif match_disc_scrambled:
-                logger.debug(f"Found DataTracksScrambled {match_disc_scrambled.group('value')} at line {line_number}")
+                logger.debug(f" Found DataTracksScrambled {match_disc_scrambled.group('value')} at line {line_number}")
                 discimage.scrambled = match_disc_scrambled.group('value') == "1"
             # Handle CD-Text related matches
             elif match_title:
-                logger.debug(f"Found TITLE '{match_title.group('title')}' at line {line_number}")
+                logger.debug(f" Found TITLE '{match_title.group('title')}' at line {line_number}")
                 if in_track:
                     current_track.title = match_title.group("title")
                 else:
                     discimage.title = match_title.group("title")
             elif match_performer:
-                logger.debug(f"Found PERFORMER '{match_performer.group('performer')}' at line {line_number}")
+                logger.debug(f" Found PERFORMER '{match_performer.group('performer')}' at line {line_number}")
                 if in_track:
                     current_track.performer = match_performer.group("performer")
                 else:
                     discimage.performer = match_performer.group("performer")
             elif match_songwriter:
-                logger.debug(f"Found SONGWRITER '{match_songwriter.group('songwriter')}' at line {line_number}")
+                logger.debug(f" Found SONGWRITER '{match_songwriter.group('songwriter')}' at line {line_number}")
                 if in_track:
                     current_track.songwriter = match_songwriter.group("songwriter")
                 else:
                     discimage.songwriter = match_songwriter.group("songwriter")
             elif match_composer:
-                logger.debug(f"Found COMPOSER '{match_composer.group('composer')}' at line {line_number}")
+                logger.debug(f" Found COMPOSER '{match_composer.group('composer')}' at line {line_number}")
                 if in_track:
                     current_track.composer = match_composer.group("composer")
                 else:
                     discimage.composer = match_composer.group("composer")
             elif match_arranger:
-                logger.debug(f"Found ARRANGER '{match_arranger.group('arranger')}' at line {line_number}")
+                logger.debug(f" Found ARRANGER '{match_arranger.group('arranger')}' at line {line_number}")
                 if in_track:
                     current_track.arranger = match_arranger.group("arranger")
                 else:
                     discimage.arranger = match_arranger.group("arranger")
             elif match_message:
-                logger.debug(f"Found MESSAGE '{match_message.group('message')}' at line {line_number}")
+                logger.debug(f" Found MESSAGE '{match_message.group('message')}' at line {line_number}")
                 if in_track:
                     current_track.message = match_message.group("message")
                 else:
                     discimage.message = match_message.group("message")
             elif match_disc_id:
-                logger.debug(f"Found DISC_ID '{match_disc_id.group('discid')}' at line {line_number}")
+                logger.debug(f" Found DISC_ID '{match_disc_id.group('discid')}' at line {line_number}")
                 if not in_track:
                     discimage.disk_id = match_disc_id.group("discid")
             elif match_upc:
-                logger.debug(f"Found UPC_EAN '{match_upc.group('catalog')}' at line {line_number}")
+                logger.debug(f" Found UPC_EAN '{match_upc.group('catalog')}' at line {line_number}")
                 if not in_track:
                     discimage.barcode = match_upc.group("catalog")
             elif line == "":

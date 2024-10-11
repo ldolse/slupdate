@@ -21,6 +21,7 @@ def validate_subchannel(cdrdao: Cdrdao):
         return
     
     first_track = cdrdao.tracks[0]
+    print(f'first_track.start_sector: {first_track.start_sector}, first_track.sequence: {first_track.sequence}')
     error, subchannel_data = cdrdao.read_sector_tag(first_track.start_sector, SectorTagType.CdSectorSubchannel, first_track.sequence)
     
     if error != ErrorNumber.NoError or not subchannel_data:
@@ -64,7 +65,7 @@ def validate_subchannel(cdrdao: Cdrdao):
 def print_image_info(cdrdao: Cdrdao):
     print(f"Image format identified by {cdrdao.name} ({cdrdao.id}).\n")
 
-    print(f"{cdrdao.info.media_type} image describes a disc of type {cdrdao.info.media_type}")
+    print(f"{enum_name(MediaType, cdrdao.info.media_type)} image describes a disc of type {enum_name(MediaType, cdrdao.info.media_type)}")
     print("Image information:")
     print(f"Format: {cdrdao.format}")
     print(f"Image without headers is {cdrdao.info.image_size} bytes long")

@@ -6,7 +6,7 @@ from modules.ifilter import IFilter
 from modules.cdrdao_filter import CDRDAOFilter
 
 from modules.CD.atip import ATIP
-
+from modules.CD.sector import Sector
 from modules.CD.subchannel import Subchannel
 from modules.CD.sector_builder import SectorBuilder
 from modules.CD.cd_types import (
@@ -69,11 +69,6 @@ class Cdrdao(CdrdaoProperties):
         self._track_flags: Dict[int, int] = {}
         self._writing_base_name: Optional[str] = None
 
-        self.partitions: List[Partition] = []
-        self.tracks: List[Track] = []
-        self.sessions: List[Session] = []
-        self._is_writing: bool = False
-        self._error_message: Optional[str] = None
         self._discimage: CdrdaoDisc = CdrdaoDisc()
 
     def read_sector(self, *args, **kwargs):
@@ -101,6 +96,7 @@ class Cdrdao(CdrdaoProperties):
             self.partitions = []
             self._offset_map = {}
             current_offset = 0
+            partitionSequence = 0
             total_sectors = 0
 
             for track in self._discimage.tracks:
@@ -108,7 +104,7 @@ class Cdrdao(CdrdaoProperties):
                     description=f"Track {track.sequence}",
                     size=track.sectors * track.bps,
                     length=track.sectors,
-                    sequence=track.sequence,
+                    sequence=partitionSequence,
                     offset=current_offset,
                     start=track.start_sector,
                     type=track.tracktype
@@ -116,6 +112,7 @@ class Cdrdao(CdrdaoProperties):
                 self.partitions.append(partition)
                 self._offset_map[track.sequence] = track.start_sector
                 current_offset += partition.size
+                partitionSequence += 1
                 total_sectors += track.sectors
                 track.type = self._detect_track_type(track)
 
@@ -156,7 +153,7 @@ class Cdrdao(CdrdaoProperties):
                     current_session.end_sector = track.start_sector + track.sectors - 1
 
             self.sessions.append(current_session)
-            logger.debug(f"Session info: Start sector: {self.sessions[0].start_sector}, End sector: {self.sessions[0].end_sector}")
+            logger.debug(f" Session info: Start sector: {self.sessions[0].start_sector}, End sector: {self.sessions[0].end_sector}")
 
             # Create tracks
             self.tracks = [cdrdao_track_to_track(ct) for ct in self._discimage.tracks]
@@ -176,7 +173,7 @@ class Cdrdao(CdrdaoProperties):
             # Validate subchannel data for the first track
             if self._discimage.tracks:
                 first_track = self._discimage.tracks[0]
-                logger.debug(f"First track info: start_sector={first_track.start_sector}, sequence={first_track.sequence}, subchannel={first_track.subchannel}, file_offset={first_track.trackfile.offset}, sectors={first_track.sectors}")
+                logger.debug(f" First track info: start_sector={first_track.start_sector}, sequence={first_track.sequence}, subchannel={first_track.subchannel}, file_offset={first_track.trackfile.offset}, sectors={first_track.sectors}")
                 if first_track.subchannel:
                     is_valid = self.reader.validate_subchannel(first_track.start_sector, first_track.sequence)
                     if not is_valid:
@@ -192,41 +189,61 @@ class Cdrdao(CdrdaoProperties):
                 CDRDAO_TRACK_TYPE_MODE2_FORM2, CDRDAO_TRACK_TYPE_MODE2_MIX, 
                 CDRDAO_TRACK_TYPE_MODE2_RAW
             ])
-
+            # Log debug information
+            logger.debug(" Disc image parsing results")
             # Handle CD-Text
             if hasattr(self._discimage, 'cdtext') and self._discimage.cdtext:
                 self._cdtext = self._discimage.cdtext
                 self._image_info.readable_media_tags.append(MediaTagType.CD_TEXT)
                 self._parse_cd_text(self._cdtext)
 
-            # Log debug information
-            logger.debug("Disc image parsing results:")
-            logger.debug(f"Disc type: {enum_name(MediaType, self._discimage.disktype)}")
-            logger.debug(f"MCN: {self._discimage.mcn}")
-            logger.debug(f"Barcode: {self._discimage.barcode}")
-            logger.debug(f"Disc ID: {self._discimage.disk_id}")
-            logger.debug(f"Comment: {self._discimage.comment}")
-            logger.debug(f"Number of tracks: {len(self._discimage.tracks)}")
-        
-            for i, track in enumerate(self._discimage.tracks):
-                logger.debug(f"Track {track.sequence} information:")
-                logger.debug(f"  Bytes per sector: {track.bps}")
-                logger.debug(f"  Pregap: {track.pregap} sectors")
-                logger.debug(f"  Data: {track.sectors} sectors starting at sector {track.start_sector}")
-                logger.debug(f"  Type: {enum_name(TrackType, track.type)}")
-                logger.debug(f"  File: {track.trackfile.datafile}")
-                logger.debug(f"  File offset: {track.trackfile.offset}")
-                logger.debug(f"  Subchannel: {'Yes' if track.subchannel else 'No'}")
-                logger.debug(f"  Indexes: {track.indexes}")
+            logger.debug(" Disc CD-TEXT:")
+            logger.debug(f" \tArranger {'is not set.' if not self._discimage.arranger else ': '+self._discimage.arranger}")
+            logger.debug(f" \tComposer {'is not set.' if not self._discimage.composer else ': '+self._discimage.composer}")
+            logger.debug(f" \tPerformer {'is not set.' if not self._discimage.performer else ': '+self._discimage.performer}")
+            logger.debug(f" \tSongwriter {'is not set.' if not self._discimage.songwriter else ': '+self._discimage.songwriter}")
+            logger.debug(f" \tTitle {'is not set.' if not self._discimage.title else ': '+self._discimage.title}")            
 
-            logger.debug("Partition map:")
+            logger.debug(" Disc information:")
+            logger.debug(f" \tGuessed disk type: {enum_name(MediaType, self._discimage.disktype)}")
+            logger.debug(f" \tBarcode {'not set.' if not self._discimage.barcode else ': '+self._discimage.barcode}")
+            logger.debug(f" \tDisc ID {'not set.' if not self._discimage.disk_id else ': '+self._discimage.disk_id}")
+            logger.debug(f" \tMCN {'not set.' if not self._discimage.mcn else ': '+self._discimage.mcn}")
+            logger.debug(f" \tComment {'not set.' if not self._discimage.comment else ': '+self._discimage.comment}")
+
+            logger.debug(" Track information:")
+            logger.debug(f" \tDisc contains {len(self._discimage.tracks)} tracks")
+
+            for i, track in enumerate(self._discimage.tracks, 1):
+                logger.debug(f" \tTrack {track.sequence} information:")
+                logger.debug(f" \t\t{track.bps} bytes per sector")
+                logger.debug(f" \t\tPregap: {track.pregap} sectors")
+                logger.debug(f" \t\tData: {track.sectors} sectors starting at sector {track.start_sector}")
+                logger.debug(f" \t\tPostgap: {track.postgap} sectors")
+                logger.debug(f" \t\tType: {enum_name(TrackType, track.type)}")
+                logger.debug(f" \t\tTrack resides in file {track.trackfile.datafile}, type defined as {track.trackfile.filetype}, starting at byte {track.trackfile.offset}")
+                logger.debug(f" \t\tFile offset: {track.trackfile.offset}")
+                logger.debug(f" \t\tSubchannel: {'Yes' if track.subchannel else 'No'}")
+                logger.debug(" \t\tIndexes:")
+                for index, start in track.indexes.items():
+                    logger.debug(f" \t\t\tIndex {index} starts at sector {start}")
+                logger.debug(f" \t\tISRC {'is not set.' if not track.isrc else ': '+track.isrc}")
+                logger.debug(f" \t\tArranger {'is not set.' if not track.arranger else ': '+track.arranger}")
+                logger.debug(f" \t\tComposer {'is not set.' if not track.composer else ': '+track.composer}")
+                logger.debug(f" \t\tPerformer {'is not set.' if not track.performer else ': '+track.performer}")
+                logger.debug(f" \t\tSongwriter {'is not set.' if not track.songwriter else ': '+track.songwriter}")
+                logger.debug(f" \t\tTitle {'is not set.' if not track.title else ': '+track.title}")
+
+            logger.debug(" printing partition map")
             for partition in self.partitions:
-                logger.debug(f"  Sequence: {partition.sequence}")
-                logger.debug(f"  Type: {partition.type}")
-                logger.debug(f"  Start sector: {partition.start}")
-                logger.debug(f"  Sectors: {partition.length}")
-                logger.debug(f"  Start offset: {partition.offset}")
-                logger.debug(f"  Size in bytes: {partition.size}")
+                logger.debug(f" Partition sequence: {partition.sequence}")
+                logger.debug(f" \tPartition name: {partition.name}")
+                logger.debug(f" \tPartition description: {partition.description}")
+                logger.debug(f" \tPartition type: {partition.type}")
+                logger.debug(f" \tPartition starting sector: {partition.start}")
+                logger.debug(f" \tPartition sectors: {partition.length}")
+                logger.debug(f" \tPartition starting offset: {partition.offset}")
+                logger.debug(f" \tPartition size in bytes: {partition.size}")
             
             return ErrorNumber.NoError
 
@@ -235,9 +252,13 @@ class Cdrdao(CdrdaoProperties):
             logger.exception(ex)
             return ErrorNumber.UnexpectedException
 
-        finally:
-            if hasattr(self, '_data_stream') and self._data_stream:
-                self._data_stream.close()
+    def close(self):
+        if self._data_stream:
+            self._data_stream.close()
+        if self._sub_stream:
+            self._sub_stream.close()
+        if self._toc_stream:
+            self._toc_stream.close()
 
     def _update_readable_sector_tags(self, tags):
         """

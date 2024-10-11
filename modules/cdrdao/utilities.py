@@ -11,7 +11,11 @@ def lba_to_msf(sector: int) -> Tuple[int, int, int]:
     return (sector // 75 // 60, (sector // 75) % 60, sector % 75)
 
 def swap_audio_endianness(buffer: bytearray) -> bytearray:
-    return bytearray(buffer[i+1] + buffer[i] for i in range(0, len(buffer), 2))
+    swapped = bytearray(len(buffer))
+    for i in range(0, len(buffer), 2):
+        swapped[i] = buffer[i + 1]
+        swapped[i + 1] = buffer[i]
+    return swapped
 
 def get_tag_layout(track: CdrdaoTrack, tag: SectorTagType) -> Tuple[int, int, int]:
     sector_offset = 0
@@ -84,7 +88,7 @@ def cdrdao_track_to_track(cdrdao_track: CdrdaoTrack) -> Track:
         sequence=cdrdao_track.sequence,
         start_sector=cdrdao_track.start_sector,
         end_sector=cdrdao_track.start_sector + cdrdao_track.sectors - 1,
-        type=_cdrdao_track_type_to_track_type(cdrdao_track.tracktype),
+        type=cdrdao_track_type_to_track_type(cdrdao_track.tracktype),
         file=cdrdao_track.trackfile.datafile,
         file_offset=cdrdao_track.trackfile.offset,
         file_type=cdrdao_track.trackfile.filetype,
@@ -113,7 +117,7 @@ def cdrdao_track_type_to_cooked_bytes_per_sector(track_type: str) -> int:
         return 0
 
 @staticmethod
-def _cdrdao_track_type_to_track_type(track_type: str) -> TrackType:
+def cdrdao_track_type_to_track_type(track_type: str) -> TrackType:
     if track_type in [CDRDAO_TRACK_TYPE_MODE1, CDRDAO_TRACK_TYPE_MODE1_RAW]:
         return TrackType.CdMode1
     elif track_type == CDRDAO_TRACK_TYPE_MODE2_FORM1:

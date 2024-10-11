@@ -20,6 +20,7 @@ def validate_subchannel(clonecd: CloneCD):
         return
     
     first_track = clonecd.tracks[0]
+    print(f'first_track.start_sector:{first_track.start_sector}, first_track.sequence{first_track.sequence}')
     error, subchannel_data = clonecd.read_sector_tag(first_track.start_sector, SectorTagType.CdSectorSubchannel, first_track.sequence)
     
     if error != ErrorNumber.NoError or not subchannel_data:
