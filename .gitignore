@@ -154,6 +154,7 @@ cython_debug/
 .DS_Store
 *.cache
 *.txt
+.dat
 chdman
 *.cfg
 .aider*
