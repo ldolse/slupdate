@@ -10,6 +10,9 @@ def save_data(data_to_save,name,directory):
         pickle.dump(data_to_save, f)
 
 def restore_dict(name):
+    '''
+    Restores a dictionary from a pickle file
+    '''
     try:
         with open(name+'.cache', 'rb') as f:
             return pickle.load(f)
@@ -18,9 +21,23 @@ def restore_dict(name):
 
 
 def slupdate_version():
+    '''
+    Returns the version of the slupdate package
+    '''
     return __version__
     
 def list_menu(key, options, prompt):
+    '''
+    Simple wrapper for inquirer.List to create a list of options
+
+    Parameters:
+    key (str): The key to store the answer in
+    options (list): The list of options to choose from
+    prompt (str): The prompt to display to the user
+
+    Returns:
+    answer (dict): The answer to the prompt
+    '''
     optconfirm = [
         inquirer.List(key,
                       message = prompt,
@@ -32,6 +49,9 @@ def list_menu(key, options, prompt):
 
 
 def get_dat_paths(platform, datpaths, sl_dat_map):
+    '''
+    Returns the paths to the dat files for the specified platform
+    '''
     slpath = datpaths['sl']+sl_dat_map[platform]['mame']
     redump_pattern = datpaths['redump']+sl_dat_map[platform]['redump']
     files = glob.glob(redump_pattern)
@@ -39,6 +59,9 @@ def get_dat_paths(platform, datpaths, sl_dat_map):
     return [slpath, redump_path]
     
 def history(search=None):
+    '''
+    Prints the history of the current session
+    '''
     import readline
     for i in range(readline.get_current_history_length()):
         if search:

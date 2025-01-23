@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
-""" slupdate.py: Interactively Update Optical Media based Software Lists 
-against[Redump](http://redump.org/) dats.
+""" slupdate.py: Interactively Update MAME Optical Media based Software Lists 
+against[Redump](http://redump.org/) & TOSEC dats.
 
 https://github.com/ldolse/slupdate
 """
@@ -82,11 +82,11 @@ consoles = {    'Amiga CDTV' : 'cdtv',
                        '3DO' : '3do_m2'
         }
 # key for the menu correlates to the key for the menu's item list
-menu_msgs = {'0' : 'Main Menu, select an option',
+menu_msgs = {'main_menu' : 'Main Menu, select an option',
              'map' : 'Process software lists and dat files, mapping source files to build chds',
-             'map-2' : 'Next steps after auto-mapping',
-             'map-3' : 'Assisted Mapping Functions',
-             '2' : 'Choose a console to build CHD\'s for current match list',
+             'map_stage_two' : 'Next steps after auto-mapping',
+             'map_stage_three' : 'Assisted Mapping Functions',
+             'chd_builder' : 'Choose a console to build CHD\'s for current match list',
              'new' : 'This function will look for DAT entries which don\'t appear in software lists and assist with creating Software List records, continue?',
              '5' : 'MAME hash directory and dat directories for at least one platform must be configured.',
              'save' : 'Save asisted mapping answers and other user generated data?  This will overwrite anything previously written to disk',
@@ -96,9 +96,9 @@ menu_msgs = {'0' : 'Main Menu, select an option',
              'chd' : 'CHD Builder Destination Directory',
              'dat' : 'DAT Source Directories',
              'rom' : 'ROM Source Directories',
-             '4' : 'Settings',
-             '5b' : 'Select a console to configure ',
-             '5c' : 'Select a DAT to remove',
+             'settings_menu' : 'Settings',
+             'select_console' : 'Select a console to configure ',
+             'dat_remove' : 'Select a DAT to remove',
              'dir_d' : 'Select a Directory to Remove',
              'romvault' : 'Are you using ROMVault to manage DATs and ROMs?',
              'url_commit' : 'Updates based on Redump source URLs successful. Proceed to update the Softlist data?',
@@ -107,21 +107,21 @@ menu_msgs = {'0' : 'Main Menu, select an option',
     }
 # unless a list entry maps to a function it should always map to another menu in the tree
 # This allows completed functions to go back to their parent menu automatically
-menu_lists = {'0' : [('1. Mapping Functions', 'map'),
-                     ('2. CHD Builder', '2'),
+menu_lists = {'main_menu' : [('1. Mapping Functions', 'map'),
+                     ('2. CHD Builder', 'chd_builder'),
                      ('3. Create New Entries','entry_create_function'),
-                     ('4. Settings','4'),
+                     ('4. Settings','settings_menu'),
                      ('5. Save Session','save_function'),
                      ('6. Exit', 'Exit')],
-             'map' : [('a. Mapping Stage 2','map-2'), 
+             'map' : [('a. Mapping Stage 2','map_stage_two'), 
                       ('b. Automatically map based on source rom info','automap_function'),
                       ('c. List missing matched ROM Files','list_missing_function'),
                       ('d. List TOSEC sources','tosec_list_function'),
                       ('e. List unknown sources','unknown_list_function'),
                       ('f. Update ROM matches', 'update_file_match_function'),            
                       ('g. Change Platform','change_platform_function'),
-                      ('h. Back', '0')],
-             'map-2' : [('a. Mapping Stage 3','map-3'),
+                      ('h. Back', 'main_menu')],
+             'map_stage_two' : [('a. Mapping Stage 3','map_stage_three'),
                         ('b. Redump URL Based Mapping','url_map_function'),
                         ('c. Remap TOSEC sources to Redump','tosec_map_function'),
                         ('d. Automated Redump re-map based on disc serial & name','name_serial_automap_function'),
@@ -132,38 +132,56 @@ menu_lists = {'0' : [('1. Mapping Functions', 'map'),
                         ('i. Update ROM matches', 'update_file_match_function'),
                         ('j. Build CHDs','chd_build_function'),
                         ('k. Back', 'map')],
-             'map-3' : [('a. Fuzzy Matches - Remap bad/alternate Dumps','hash_map_function'),
+             'map_stage_three' : [('a. Fuzzy Matches - Remap bad/alternate Dumps','hash_map_function'),
                         ('b. Serial Only Mapping','serial_map_function'),
                         ('c. Interactive Name Based Mapping','interactive_map_function'),   
                         ('d. Update Sofltist XML','sl_update_function'),
                         ('e. Build CHDs','chd_build_function'),
                         ('f. Generate Missing DAT','dat_build_function'),
-                        ('g. Back', 'map-2')],
-             '2' : [('a. Console List','chd_build_function'),
-                    ('b. Back', '0')],
+                        ('g. Back', 'map_stage_two')],
+             'chd_builder' : [('a. Console List','chd_build_function'),
+                    ('b. Back', 'main_menu')],
              '3' : [('Map entries with no source information to Redump sources','no_src_map_function'),
                     ('Remap entries with TOSEC sources to Redump sources','tosec_map_function'),
-                    ('Back', '0')],
-             '4' : [('a. MAME Software List XML Directory', 'slist_dir_function'),
+                    ('Back', 'main_menu')],
+             'settings_menu' : [('a. MAME Software List XML Directory', 'slist_dir_function'),
                     ('b. Configure Root DAT/ROM Directories (ROMvault)', 'root_dirs_function'),
                     ('c. Configure DAT/ROM Platform Directories', 'dat'),
                     ('d. Destination folder for CHDs', 'chd_dir_function'),
-                    ('e. Back', '0')],
+                    ('e. Back', 'main_menu')],
              'dat' : [('Add Directories','platform_dat_rom_function'),
                       ('Remove DATs','del_dats_function'),
-                      ('Back', '4')],
+                      ('Back', 'settings_menu')],
     }
 
 def sl_update_function(platform):
+    '''
+    updates the software list xml file with new data
+
+    Parameters:
+    platform (str): The platform for which the mapping is being performed.
+
+    Returns:
+    None: This function does not return any value. It modifies the data in place.
+    '''
     from modules.dat import update_rom_source_refs, rewrite_comment_source_group
     # update re-mapped sources from DAT
     update_rom_source_refs(settings['sl_dir']+os.sep+platform+'.xml',softlist_dict[platform],all_dat_dict[platform])
     # update the source group reference for unknown/undocumented sources that have been matched
     rewrite_comment_source_group(settings['sl_dir']+os.sep+platform+'.xml',softlist_dict[platform])
     
-    return 'map-2'
+    return 'map_stage_two'
 
 def url_map_function(platform):
+    '''
+    remaps the softlist based on redump source urls
+
+    Parameters:
+    platform (str): The platform for which the mapping is being performed.
+
+    Returns:
+    None: This function does not return any value. It modifies the data in place.
+    '''
     from modules.mapping import redump_url_mapping
     if platform not in softlist_dict:
         print('please run the initial mapping function first')
@@ -175,9 +193,18 @@ def url_map_function(platform):
             update_soft_dict(softlist_dict[platform],all_dat_dict[platform],url_remaps)
 
 def list_missing_function(platform):
+    '''
+    lists the missing ROM files for matched entries
+
+    Parameters:
+    platform (str): The platform for which the mapping is being performed.
+
+    Returns:
+    answer (str): The key to the menu to return to.
+    '''
     from modules.mapping import get_missing_zips
     get_missing_zips(softlist_dict[platform],all_dat_dict[platform])
-    return 'map-2'
+    return 'map_stage_two'
 
 def first_run():
     """
@@ -196,6 +223,15 @@ def first_run():
     chd_dir_function()
 
 def dat_build_function(platform):
+    '''
+    creates a DAT file from the unmatched ROMs
+
+    Parameters:
+    platform (str): The platform for which the mapping is being performed.
+
+    Returns:
+    None: This function does not return any value. It modifies the data in place.
+    '''
     from modules.dat import create_dat
     from modules.mapping import get_unmatched_roms
     rom_dict = get_unmatched_roms(softlist_dict[platform])
@@ -203,13 +239,20 @@ def dat_build_function(platform):
 
 def main_menu(exit):
     '''
-    return a list answer value from any function called by this menu to get back to the 
-    chosen message / list based on the menu_msgs and menu_lists dicts
+    Main menu for the script
+    gets a list answer value from any function called by this menu to get back to the 
+    chosen message / list based on the menu_msgs and menu_lists dictionaries
+
+    Parameters:
+    exit (bool): A flag to exit the script.
+
+    Returns:
+    exit (bool): A flag to exit the script.
     '''
     global settings
     # any menus that have functions which should send the current platform are added here
-    send_platform = ('dat','rom','map','map-2','map-3')
-    menu_sel = '0'
+    send_platform = ('dat','rom','map','map_stage_two','map_stage_three')
+    menu_sel = 'main_menu'
     platform = ''
     while not exit:
         print('\n')
@@ -235,7 +278,7 @@ def main_menu(exit):
                 # return to the previous menu after completing the function
                 menu_sel = list(answer)[0]
 
-        elif menu_sel == '4' and answer[menu_sel] == '0':
+        elif menu_sel == 'settings_menu' and answer[menu_sel] == 'main_menu':
             # save settings when exiting settings and returning to main menu
             save_data(settings,'settings',script_dir)
             menu_sel = answer[menu_sel]
@@ -251,8 +294,17 @@ def change_platform_function(platform):
 
 def find_dat_matches(platform,sl_platform_dict,dathash_platform_dict):
     '''
-    matches source hash fingerprints to the dat fingerprint dicts
-    updates the softlist dict to point to the dat for that source
+    Finds the matching entries in the DAT files for the given platform.
+    matches softlist source hash fingerprints to the dat fingerprint
+    updates the softlist dictionary to point to the dat for that source hash
+
+    Parameters:
+    platform (str): The platform for which the mapping is being performed.
+    sl_platform_dict (dict): The software list dictionary for the platform.
+    dathash_platform_dict (dict): The dat hash dictionary for the platform.
+
+    Returns:
+    None: This function does not return any value. It modifies the data in place.
     '''
     from modules.chd import find_rom_zips
     from modules.mapping import get_source_stats, print_source_stats
@@ -360,15 +412,34 @@ def get_configured_platforms(action_type=''):
     return configured
 
 def platform_select(list_type='rom'):
+    '''
+    Select a platform to work with
+
+    Parameters:
+    list_type (str): The type of list to select from. Default is 'rom'.
+
+    Returns:
+    dict: A dictionary containing the seleced platform.
+    '''
     if list_type == 'dat':
         platforms = [(k, v) for k, v in consoles.items()]
     else:
         platforms = get_configured_platforms(list_type)
-    answer = list_menu('platforms', platforms, menu_msgs['5b']+menu_msgs[list_type])
+    answer = list_menu('platforms', platforms, menu_msgs['select_console']+menu_msgs[list_type])
     return answer
 
 
 def hash_map_function(platform):
+    '''
+    remaps the softlist based on hash changes
+
+    Parameters:
+    platform (str): The platform for which the mapping is being performed.
+
+    Returns:
+    None: This function does not return any value. It modifies the data in place.
+
+    '''
     from modules.mapping import fuzzy_hash_compare,interactive_title_mapping
     fuzzy_matches = fuzzy_hash_compare(softlist_dict[platform], all_dat_dict[platform])
     confirmed = interactive_title_mapping(fuzzy_matches, softlist_dict[platform], all_dat_dict[platform],platform,script_dir, 'fuzzy')
@@ -379,6 +450,15 @@ def hash_map_function(platform):
 
         
 def tosec_map_function(platform):
+    """
+    Remap entries with TOSEC sources to Redump sources for a given platform.
+
+    Parameters:
+    platform (str): The platform for which the mapping is being performed.
+
+    Returns:
+    None: This function does not return any value. It modifies the data in place.
+    """
     from modules.mapping import build_redump_tosec_tuples,map_tosec_entries
     redump_tuples = {}
     if platform in softlist_dict:
@@ -418,8 +498,17 @@ def entry_create_function(platform):
     proceed = inquirer.confirm(menu_msgs['new'], default=False)
 
 def setup_platform_dicts(platform):
+    '''
+    Sets up the dictionaries for the given platform.
+
+    Parameters:
+    platform (str): The platform for which the mapping is being performed.
+
+    Returns:
+    None: This function does not return any value. It modifies the data in place.
+    '''
     from modules.dat import build_dat_dict, remove_dupe_dat_entries, build_sl_dict, convert_xml,shift_sibling_comments
-        # process each DAT to build a list of fingerprints
+    # process each DAT to build a list of fingerprints
     print('processing '+platform+' DAT Files')
     if platform not in all_dat_dict:
         all_dat_dict.update({platform:{}})
@@ -465,9 +554,9 @@ def automap_function(platform):
     print('These steps can be skipped')
     map_stage_increment = inquirer.confirm('Begin Next Mapping Stage?', default=False)
     if map_stage_increment:
-        return 'map-2' # go to the second mapping stage menu
+        return 'map_stage_two' # go to the second mapping stage menu
     else:
-        return '0'
+        return 'main_menu'
 
 def process_interactive_matches(interactive_matches,platform,match_type):
     from modules.mapping import interactive_title_mapping
@@ -500,11 +589,11 @@ def automated_mapping(platform,lookup_type):
 
 def serial_map_function(platform):
     automated_mapping(platform,'serial')
-    return 'map-3'
+    return 'map_stage_three'
 
 def name_serial_automap_function(platform):
     automated_mapping(platform,'name_serial')
-    return 'map-3'
+    return 'map_stage_three'
 
 def interactive_map_function(platform):
     from modules.mapping import name_serial_auto_map
@@ -676,17 +765,26 @@ def root_dirs_function():
     settings.update({'romvault' : romvault})
 
 def del_dats_function(platform):
+    '''
+    removes DATs from the platform settings
+    
+    Parameters:
+    platform (str): The platform for which the mapping is being performed.
+    
+    Returns:
+    str: The key to the menu to return to.
+    '''
     if platform not in settings:
         print(f'{platform} not configured')
-        return '4'
+        return 'settings_menu'
     datlist = []
     for dat in settings[platform].keys():
         print('deleting '+settings['datroot']+'\nfrom '+dat)
         datlist.append(dat.replace(settings['datroot'], ''))
     datlist.append('back')
-    answer = list_menu('dat', datlist, menu_msgs['5c'])
+    answer = list_menu('dat', datlist, menu_msgs['dat_remove'])
     if answer['dat'] == 'back':
-        return
+        return 'settings_menu'
     else:
         dat_path = settings['datroot']+answer['dat']
         print(dat_path)

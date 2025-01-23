@@ -36,6 +36,12 @@ redump__platform_paths = { 'jaguar':'ajcd',
 def get_source_stats(sl_dict):
     '''
     builds a dict with the total number of dumps which can be attributed to each source group
+
+    Parameters:
+    sl_dict (dict): The software list dictionary
+
+    Returns:
+    dict: A dictionary with the total number of dumps which can be attributed to each source group
     '''
     from collections import defaultdict
     group_counts = defaultdict(int)
@@ -50,6 +56,13 @@ def get_source_stats(sl_dict):
 def print_source_stats(source_stats,total_source_ref):
     '''
     prints the dict returned by get_source_stats as percentages
+
+    Parameters:
+    source_stats (dict): The dictionary returned by get_source_stats
+    total_source_ref (int): The total number of dumps which can be attributed to a source group
+
+    Returns:
+    None, prints the percentages
     '''
     known_sum = 0
     for group, group_count in source_stats.items():
@@ -61,6 +74,16 @@ def print_source_stats(source_stats,total_source_ref):
         print(f"  Unknown: {other_percent:.1f}%")
 
 def build_redump_tosec_tuples(dat_hash_dict,platform):
+    '''
+    builds a dict of tuples for redump and tosec hashes
+
+    Parameters:
+    dat_hash_dict (dict): The dat hash dictionary
+    platform (str): The platform to build the tuples for
+
+    Returns:
+    dict: A dictionary of tuples for redump and tosec hashes
+    '''
     supported_platforms = ['dc']
     redump_tosec_tuples = {}
     if platform not in supported_platforms:
@@ -80,6 +103,13 @@ def build_redump_tosec_tuples(dat_hash_dict,platform):
 def get_tosec_tuples(rom_entry,debug=False):
     '''
     dreamcast - track 1 and track 3 share the same hashes for both groups
+
+    Parameters:
+    rom_entry (dict): The rom entry dictionary
+    debug (bool): Debug flag
+
+    Returns:
+    tuple: A tuple of track hashes
     '''
     track_hashes = []
     for filename, data in rom_entry.items():
@@ -99,7 +129,14 @@ def get_tosec_tuples(rom_entry,debug=False):
 
 def update_soft_dict(sl_dict,dat_dict,new_sources_map):
     '''
-    new_sources_map is a dict with the following structure:
+    updates the softlist dictionary with new source data
+
+    Parameters:
+    sl_dict (dict): The software list dictionary
+    dat_dict (dict): The dat dictionary
+    new_sources_map (dict): The new sources map
+
+    new_sources_map has the following structure:
     (soft_title, part) = {  'raw_romlist':dat_dict['hashes'][dat][source_sha]['raw_romlist'],
                             'orig_title':'orig_title',
                             'source_name':'source_name',
@@ -108,6 +145,9 @@ def update_soft_dict(sl_dict,dat_dict,new_sources_map):
                             'source_group':'redump',
                             'redump_url':'redump_url',
                             'soft_description':'soft_description'}
+
+    Returns:
+    None: Updates the softlist dictionary in place
     '''
     for disc_key, replace_data in new_sources_map.items():
         soft_name = disc_key[0]
@@ -162,6 +202,12 @@ def update_soft_dict(sl_dict,dat_dict,new_sources_map):
         sl_dict[soft_name]['update_required'] = True
 
 def libcrypt_report(psx_dict):
+    '''
+    prints a report of all software list entries which use libcrypt
+
+    Parameters:
+    psx_dict (dict): The PSX dictionary
+    '''
     from modules.libcrypt import libcrypt_titles
     for soft, soft_data in psx_dict.items():
         if 'serial' in soft_data:
@@ -174,6 +220,14 @@ def map_tosec_entries(sl_dict,dat_dict,redump_tuples):
     '''
     for some platforms redump and tosec are identical for some or all tracks
     cdi - all tracks are identical in most cases
+
+    Parameters:
+    sl_dict (dict): The software list dictionary
+    dat_dict (dict): The dat dictionary
+    redump_tuples (dict): The redump tuples dictionary
+
+    Returns:
+    dict: A dictionary of tosec matches
     '''
     tosec_matches = {}
     partial_matches = []
@@ -941,7 +995,7 @@ def interactive_title_mapping(interactive_matches,sl_dict,dat_dict,platform,scri
             print(f'Source Info:\n   No Source match but source is documented.\n   Source Filename (first entry): {fname}')
 
     def match_redump_db_to_dat(redump_sha_href,dat_title_name,redump_dict_entry):
-        source_info = None
+        source_sha = None
         source_dat = None
         source_name = None
         print(f'redump_sha_href is {redump_sha_href}')
