@@ -235,47 +235,45 @@ def main_menu(exit):
     '''
     global settings
     # any menus that have functions which should send the current platform are added here
-    send_platform = ('dat','rom','map','map_stage_two','map_stage_three')
-    menu_sel = 'main_menu'
+    send_platform_arg = ('dat','rom','map','map_stage_two','map_stage_three')
+    current_menu = 'main_menu'
     platform = ''
 
     while not exit:
         print('\n')
-        answer = list_menu(menu_sel,menu_lists[menu_sel],menu_msgs[menu_sel])
-        if any(file in answer.values() for file in send_platform):
+        answer = list_menu(current_menu,menu_lists[current_menu],menu_msgs[current_menu])
+        if any(selection in answer.values() for selection in send_platform_arg):
             if not platform:
-                platform = platform_select(answer[menu_sel])
+                platform = platform_select(answer[current_menu])
         elif answer.values() == 'change_platform':
             platform = platform_select()
 
         # if the answer ends with function then run that function passing the platform as an arg
-        if answer[menu_sel].endswith('function'):
-            if any(f in answer for f in send_platform):
-                next_step = globals()[answer[menu_sel]](platform['platforms'])
+        if answer[current_menu].endswith('function'):
+            if answer[current_menu] == 'change_platform_function':
+                platform = platform_select()
+            elif any(f in answer for f in send_platform_arg):
+                next_step = globals()[answer[current_menu]](platform['platforms'])
                 if next_step:
                     # next menu chosen based on return value from the function
-                    menu_sel = next_step
+                    current_menu = next_step
                 else:
                     # return to the previous menu after completing the function
-                    menu_sel = list(answer)[0]
+                    current_menu = list(answer)[0]
             else:
-                globals()[answer[menu_sel]]()
+                globals()[answer[current_menu]]()
                 # return to the previous menu after completing the function
-                menu_sel = list(answer)[0]
+                current_menu = list(answer)[0]
 
-        elif menu_sel == 'settings_menu' and answer[menu_sel] == 'main_menu':
+        elif current_menu == 'settings_menu' and answer[current_menu] == 'main_menu':
             # save settings when exiting settings and returning to main menu
             save_data(settings,'settings',script_dir)
-            menu_sel = answer[menu_sel]
-        elif answer[menu_sel] == 'Exit':
+            current_menu = answer[current_menu]
+        elif answer[current_menu] == 'Exit':
             exit = True
             return exit
         else:
-            menu_sel = answer[menu_sel]
-
-def change_platform_function(platform):
-    platform = platform_select()
-    return platform
+            current_menu = answer[current_menu]
 
 def find_dat_matches(platform,sl_platform_dict,dathash_platform_dict):
     '''

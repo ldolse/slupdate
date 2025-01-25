@@ -42,7 +42,7 @@ def slupdate_version():
     '''
     return __version__
     
-def list_menu(key, options, prompt):
+def list_menu(key, options, prompt, type='list'):
     '''
     Simple wrapper for inquirer.List to create a list of options
 
@@ -54,12 +54,19 @@ def list_menu(key, options, prompt):
     Returns:
     answer (dict): The answer to the prompt
     '''
-    optconfirm = [
-        inquirer.List(key,
-                      message = prompt,
-                      choices = options,
-                      carousel = True),
-                    ]
+    if type == 'list':
+        optconfirm = [
+            inquirer.List(key,
+                          message = prompt,
+                          choices = options,
+                          carousel = True),
+                        ]
+    elif type == 'checkbox':
+        optconfirm = [
+            inquirer.Checkbox(key,
+                          message = prompt,
+                          choices = options),
+                        ]
     answer = inquirer.prompt(optconfirm)
     return answer
 
