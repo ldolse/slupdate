@@ -33,6 +33,7 @@ redump__platform_paths = { 'jaguar':'ajcd',
                'psx_libcrypt':'psx/libcrypt/2'
                     }
 
+
 def get_source_stats(sl_dict):
     '''
     builds a dict with the total number of dumps which can be attributed to each source group
@@ -53,6 +54,7 @@ def get_source_stats(sl_dict):
 
     return dict(group_counts)
 
+
 def print_source_stats(source_stats,total_source_ref):
     '''
     prints the dict returned by get_source_stats as percentages
@@ -72,6 +74,7 @@ def print_source_stats(source_stats,total_source_ref):
     if total_source_ref >= 1:
         other_percent = ((total_source_ref - known_sum) / total_source_ref) * 100
         print(f"  Unknown: {other_percent:.1f}%")
+
 
 def build_redump_tosec_tuples(dat_hash_dict,platform):
     '''
@@ -100,6 +103,7 @@ def build_redump_tosec_tuples(dat_hash_dict,platform):
                 redump_tosec_tuples[entry_tuple] = source_id
         return redump_tosec_tuples
 
+
 def get_tosec_tuples(rom_entry,debug=False):
     '''
     dreamcast - track 1 and track 3 share the same hashes for both groups
@@ -126,6 +130,7 @@ def get_tosec_tuples(rom_entry,debug=False):
         return tuple(track_hashes)
     else:
         return None
+
 
 def update_soft_dict(sl_dict,dat_dict,new_sources_map):
     '''
@@ -201,6 +206,7 @@ def update_soft_dict(sl_dict,dat_dict,new_sources_map):
         # flag update for later functions to leverage
         sl_dict[soft_name]['update_required'] = True
 
+
 def libcrypt_report(psx_dict):
     '''
     prints a report of all software list entries which use libcrypt
@@ -271,6 +277,7 @@ def map_tosec_entries(sl_dict,dat_dict,redump_tuples):
         print('\n\n')
     return tosec_matches
 
+
 def requests_retry_session(
     retries=4,
     backoff_factor=0.3,
@@ -290,6 +297,7 @@ def requests_retry_session(
     session.mount('https://', adapter)
     return session
 
+
 def rtable_to_dict(bs_table):
     gameinfo = {}
     alt = re.compile(r'(Region|Languages)')
@@ -299,7 +307,7 @@ def rtable_to_dict(bs_table):
         elif bsr.find('th'):
             gameinfo.update({bsr.find('th').text:bsr.find('img').get('title')})
     return gameinfo
-    
+
 
 def get_redump_title_info(redumpurl):
     rdict = {}
@@ -324,9 +332,10 @@ def redump_to_softlist_fmt(redump_name,keep_disc=False):
     else:
         return re.sub(discpat,'',softlist_fmt)
 
+
 def dat_discs_to_titles(disclist):
     '''
-    redump entries are for individual discs, SL entries describe 
+    redump entries are for individual discs, SL entries describe
     boxes/packages this function returns a new list with only titles
     '''
     title_list = []
@@ -360,14 +369,13 @@ def select_from_redump_site(search_title, match_list,soft_nointro_fmt=''):
         return {search_title:'No Match'}, True
 
 
-
 def select_from_redump_dat(search_title, match_list,soft_nointro_fmt=''):
     matchlist = get_close_matches(search_title, match_list,n=5)
     proto_beta = proto_beta_check(search_title,matchlist)
     if len(matchlist) > 0:
         if soft_nointro_fmt and proto_beta:
             # most of these are not in DATs, skip
-            return {search_title:'No Match'}, True            
+            return {search_title:'No Match'}, True
         elif soft_nointro_fmt:
             # softlist sources titles need extra checks and can sometimes be automatically matched
             closematch = next((s for s in matchlist if soft_nointro_fmt.lower() in s.lower()), None)
@@ -387,10 +395,10 @@ def select_from_redump_dat(search_title, match_list,soft_nointro_fmt=''):
         print(f'No Matches found for {search_title}')
         return {search_title:'No Match'}, True
 
-        
+
 def tweak_nointro_dat(stitle, languages=[], region=''):
     '''
-    if only title is supplied, sub common characters that aren't supported in the 
+    if only title is supplied, sub common characters that aren't supported in the
     nointro/redump dat standard to increase likelihood of an auto-match
     if language and region are supplied then it will attempt to create a string
     which matches the redump DAT from the redump db info
@@ -434,7 +442,7 @@ def tweak_nointro_dat(stitle, languages=[], region=''):
                 lang = lang_sub[language]
             else:
                 print(f'{language} not configured in nointro list.  Title:{stitle}')
-                
+
             dat_lang += lang
             if i < len(ordered_languages) - 1:
                 dat_lang += ','
@@ -452,65 +460,6 @@ def tweak_nointro_dat(stitle, languages=[], region=''):
 
     return stitle + region + dat_lang + disc
 
-def compare_sl_with_redump(sllist,san_redumplst,sl_dict,answers={}):
-    '''
-    Expects:
-    - A list of SL descriptions
-    - A list of Redump descriptions sanitized to remove disc numbers
-    - optionally an answer dict to continue a previous session
-    
-    returns a dict of sl to redump title matches
-    todo - load redump url from SL entry, for title comparison, serial, etc
-    '''
-    matches = 0
-    close_matches = 0
-    no_match = 0
-    autofix = 0
-    sllist.sort()
-    for soft_description in sllist:
-        if soft_description in answers:
-            continue
-        else:
-            print('checking '+soft_description)
-            process_comments(get_sl_entry(my_soft['software'],soft_description,'redump'), sl_dict)
-            soft_nointro_fmt = tweak_nointro_dat(soft_description)
-        if soft_description in san_redumplst:
-            answers.update({soft_description:soft_description})
-            matches += 1
-        elif soft_nointro_fmt in san_redumplst and soft_nointro_fmt not in answers.values():
-            answers.update({soft_description:soft_nointro_fmt})
-            autofix += 1
-        else:
-            #rurl = lkup_redump_url(soft_description)
-            #if rurl and online:
-            #    rdict = get_redump_title_info(rurl)
-            #    print_redump_info(rdict)
-            print('\n   Mame Title: '+soft_description)
-            answer, auto = select_from_redump_dat(soft_description, san_redumplst, soft_nointro_fmt)
-            if answer[soft_description] == 'Stop':
-                break
-            elif answer[soft_description] == 'No Match':
-                no_match += 1
-                answers.update(answer)
-            else:
-                if answer[soft_description] in answers.values():
-                    print('title has already been selected')
-                    answer[soft_description] = 'No Match'
-                    no_match += 1
-                else:
-                    if auto:
-                        autofix += 1
-                    else:
-                        close_matches += 1
-                answers.update(answer)
-                
-
-    print(str(matches)+' titles had exact matches')
-    print(str(autofix)+' titles were automatically matched')
-    print(str(close_matches)+' titles had user selected matches')
-    print(str(no_match)+' titles had no match')
-    return answers
-
 
 def proto_beta_check(soft_description,matchlist):
     '''
@@ -522,69 +471,6 @@ def proto_beta_check(soft_description,matchlist):
             print('prototype or beta/demo not in redump, skipping')
             return True
     return False
-
-
-def update_nonmatch(answers, san_redumplst):
-    '''
-    requires a populated answer list from the first pass and
-    the sanitised title list from a redump dat (disc# stripped)
-    '''
-    for soft_description, redump in answers.items():
-        confirmq = [
-            inquirer.Confirm("inredump", message="Check "+soft_description+" against Redump titles?"),
-        ]
-        if redump == 'No Match':
-            process_comments(get_sl_entry(my_soft['software'],soft_description,'redump'), sl_dict)
-            inredump = inquirer.prompt(confirmq)
-            if inredump['inredump']:
-                #rurl = lkup_redump_url(soft_description)
-                #if rurl and online:
-                #    rdict = get_redump_title_info(rurl)
-                #    print_redump_info(rdict)
-                soft_nointro_fmt = tweak_nointro_dat(soft_description)
-                answer, auto = select_from_redump_dat(soft_description, san_redumplst, soft_nointro_fmt)
-                if answer[soft_description] == 'Stop':
-                    break
-                elif answer[soft_description] in answers.values():
-                    if answer[soft_description] != 'No Match':
-                        print('title has already been selected')
-                    try:
-                        answer = update_description(soft_description)
-                        if answer[soft_description] not in answers.values():
-                            answers.update(answer)
-                        else:
-                            print('title has already been selected')
-                    except:
-                        continue
-                elif answer[soft_description] == 'No Match':
-                    try:
-                        answer = update_description(soft_description)
-                        if answer[soft_description] not in answers.values():
-                            answers.update(answer)
-                        else:
-                            print('title has already been selected')
-                    except:
-                        continue
-                else:
-                    answers.update(answer)
-                    if not rurl:
-                        # if user provided a confirmation here then they likely have the 
-                        # redump URL for the title, ask and store it here
-                        addurl = inquirer.prompt(
-                                 [inquirer.Confirm('redumpurl',message='Add redump URL?',default=True)
-                                  ])
-                        if addurl['redumpurl']:
-                            redumpquery = [inquirer.Text('disc1source', message="Redump URL")]
-                            redumpurl = inquirer.prompt(redumpquery)
-                            #iteminfo = {soft_description:redumpurl}
-                            sl_dict.update({soft_description:redumpurl})        
-            else:
-                try:
-                    answer = update_description(soft_description)
-                    answers.update(answer)
-                except:
-                    continue
-    return answers
 
 
 def print_redump_info(redump_dict):
@@ -604,11 +490,10 @@ def print_redump_info(redump_dict):
     print('      Region: '+redump_dict['Region'])
     print('   Languages: '+redump_dict['Languages'])
     if redump_dict['Region'] == 'Japan' and re.match(limited,redump_dict['Edition']):
-        print('     Edition: '+redump_dict['Edition']+'  (Shokai Genteiban/Genteiban/Limited Edition)')        
+        print('     Edition: '+redump_dict['Edition']+'  (Shokai Genteiban/Genteiban/Limited Edition)')
     else:
         print('     Edition: '+redump_dict['Edition'])
     print('')
-
 
 
 def dat_key_lookup_dict(sl_dict):
@@ -624,6 +509,7 @@ def dat_key_lookup_dict(sl_dict):
                     source_sha_dict[source_sha].append((soft_key, part_key))
     return source_sha_dict
 
+
 def dup_report(sl_dict):
     dupe_list = []
     source_sha_dict = dat_key_lookup_dict(sl_dict)
@@ -636,6 +522,7 @@ def dup_report(sl_dict):
             for dupe in dupe_items:
                 print(f'{dupe[0]}: {sl_dict[dupe[0]]["description"]} {get_user_disc(dupe[1])}')
             print('')
+
 
 def href_sl_lookup_dict(sl_dict):
     lookup_dict = {}
@@ -654,6 +541,7 @@ def href_sl_lookup_dict(sl_dict):
 
     return lookup_dict
 
+
 def nameserial_lookup_dict(redump_dict,platform,lookup_type):
     lookup_dict = {}
 
@@ -665,7 +553,7 @@ def nameserial_lookup_dict(redump_dict,platform,lookup_type):
         edition = data['edition']
         version = data['version']
         href = data['href']
-    
+
         for serial in serials:
             if platform == 'psx':  # add back hyphen for cases where space is used
                 serial = re.sub(r'([A-Z]{4})\s(\d{5})', r'\1-\2', serial)
@@ -677,7 +565,7 @@ def nameserial_lookup_dict(redump_dict,platform,lookup_type):
                 lookup_key = (softlist_fmt, serial)
 
             second_level_key = (dat_style, serial, edition, version, href)
-        
+
             # Update lookup_dict
             if lookup_key not in lookup_dict:
                 lookup_dict[lookup_key] = []
@@ -686,7 +574,6 @@ def nameserial_lookup_dict(redump_dict,platform,lookup_type):
     return lookup_dict
 
 
-  
 def preprocess_redump_sha_txt(file_url,redump_entry):
     response = requests.get(file_url)
     if response.status_code == 200:
@@ -713,6 +600,7 @@ def preprocess_redump_sha_txt(file_url,redump_entry):
     else:
         print(f"Failed to download the file. Status code: {response.status_code}")
         return None
+
 
 def calculate_hash(rom_list):
     concatenated_hash = ''
@@ -747,6 +635,7 @@ def compare_dictionaries(dict1, dict2):
     return (matching_hashes,len(filtered_dict1))
     #return f"Match: {matching_hashes} out of {len(filtered_dict1)}"
 
+
 def find_similar_dat(source_dict,dat_dict,hash_min=1,list_limit=10):
     results = []
     for dat,hashdict in dat_dict['hashes'].items():
@@ -766,6 +655,7 @@ def find_similar_dat(source_dict,dat_dict,hash_min=1,list_limit=10):
     if len(results) > list_limit:
         results = []
     return results
+
 
 def fuzzy_hash_compare(sl_dict,dat_dict,skip_prototype=True):
     replacements = {}
@@ -789,6 +679,7 @@ def fuzzy_hash_compare(sl_dict,dat_dict,skip_prototype=True):
                 print(f"Match for {soft}: {result[1]} out of {result[2]}, dat name: {result[0]}")
     return replacements
 
+
 def get_unmatched_roms(sl_dict):
     unmatched = {}
     for soft,soft_data in sl_dict.items():
@@ -802,7 +693,8 @@ def get_unmatched_roms(sl_dict):
                     dat_title = soft+' - '+dat_title
                 unmatched.update({dat_title:part_data['file_list']})
     return unmatched
-    
+
+
 def get_name_dat_match(dat_title, dat_dict, redump=True):
     source_sha = None
     matched_dat = None
@@ -815,6 +707,7 @@ def get_name_dat_match(dat_title, dat_dict, redump=True):
             matched_dat = match_dat
             break
     return source_sha, matched_dat
+
 
 def get_sha_dat_match(sha_lookup, dat_dict, redump=True):
     matched_dat = None
@@ -829,7 +722,7 @@ def get_sha_dat_match(sha_lookup, dat_dict, redump=True):
             break
     return matched_dat, returned_title
 
-                
+
 def redump_url_mapping(sl_dict,dat_dict,script_dir,platform):
     url_mappings = {}
     if platform not in redump_site_dict:
@@ -851,7 +744,7 @@ def redump_url_mapping(sl_dict,dat_dict,script_dir,platform):
                 redump_lookup = re.match(r'http://redump.org(/disc/\d+/)',redump_url)[1]
                 if redump_lookup in redump_dict:
                     print(f'found redump disc match for {soft}: {redump_lookup}')
-                    # check if this URL has already been updated in the dict   
+                    # check if this URL has already been updated in the dict
                     if 'site_hash' in redump_dict[redump_lookup]:
                         print('site_hash in redump_dict')
                         source_sha = redump_dict[redump_lookup]['site_hash']
@@ -875,7 +768,7 @@ def redump_url_mapping(sl_dict,dat_dict,script_dir,platform):
                                     print('          was unable to find this name in the DAT, will retrieve from redump website')
                                     retrieve_name = True
                                 else:
-                                    dat_title = lookup_title   
+                                    dat_title = lookup_title
                             else: # multiple possible dat entries, get precise name from redump
                                 print('          multiple hits, will retrieve correct name from redump website')
                                 retrieve_name = True
@@ -960,7 +853,7 @@ def check_names(libcrypt_titles):
             if name_from_url:  # Check if the returned name is not empty
                 if name_from_url != title_data['name']:  # Compare the names
                     print(f"{title_data['name']} URL {url} has a different title: {name_from_url}")
-                    
+
 
 def interactive_title_mapping(interactive_matches,sl_dict,dat_dict,platform,script_dir,match_type='redump_serial'):
     '''
@@ -971,6 +864,7 @@ def interactive_title_mapping(interactive_matches,sl_dict,dat_dict,platform,scri
     From fuzzy matches:
       {('kaod', 'cdrom'): [('Kao the Kangaroo (Europe) (Demo)', 2, 7, 'redump', '<datpath>', ('0851401e42ff4899b7008fa8f4c015040ec7c984', 'sha1'))]}
     '''
+
     def print_preface(soft_key,soft_entry,match_type):
         file_list = None
         if 'redump' in match_type:
@@ -1073,7 +967,7 @@ def interactive_title_mapping(interactive_matches,sl_dict,dat_dict,platform,scri
             else:
                 print('more than one match, user select.')
                 possible_interactive = build_select_list(match_list,match_type)
-                
+
                 print_preface(soft_key,sl_dict[soft_key[0]],match_type)
                 user_choice = list_menu('u_match',possible_interactive,'       Select Matching Entry')
                 print(f'user_choice is\n{user_choice}')
@@ -1095,7 +989,7 @@ def interactive_title_mapping(interactive_matches,sl_dict,dat_dict,platform,scri
         save_data(redump_site_dict,'redump_site_dict',script_dir)
         return confirmed_matches
 
-  
+
 def create_update_entry(soft_key,sl_dict,dat_dict,dat,source_name,new_source_sha,redump_url=None):
     if 'source_dat' in sl_dict[soft_key[0]]['parts'][soft_key[1]]:
         # need to check if there are orig before populating these
@@ -1116,6 +1010,7 @@ def create_update_entry(soft_key,sl_dict,dat_dict,dat,source_name,new_source_sha
                         'soft_description':soft_description
                         }}
 
+
 def get_user_disc(mame_part):
     if mame_part == 'cdrom':
         return ''
@@ -1131,7 +1026,7 @@ def name_serial_auto_map(platform, sl_dict,dat_dict,script_dir,lookup_type='name
     second stage uses the redump title to match against unmatched dat entries
     redump site titles don't necessarily have exact matches to the dat based on version, package, etc
     entries which have only a single possible match are auto-mapped
-    entries with multiple possible matches are returned by the function for the next stage 
+    entries with multiple possible matches are returned by the function for the next stage
     '''
     redump_single_matches = {}
     redump_interactive_matches = {}
@@ -1231,7 +1126,7 @@ def name_serial_auto_map(platform, sl_dict,dat_dict,script_dir,lookup_type='name
                     continue
                 for ser in soft['serial']:
                     part_matches = update_match_lists(ser, part_matches,lookup_dict)
-                    
+
             if part_matches:
                 if len(part_matches[(soft_title,part)][0]) == 1:
                     print(f'{soft_title} {disc} part_matches is {part_matches}, updating single match dict')
@@ -1260,7 +1155,7 @@ def name_serial_auto_map(platform, sl_dict,dat_dict,script_dir,lookup_type='name
                         dat_match = True
                         dat = match_dat
                         print(f'Got a DAT match:\n   Softlist: {sl_dict[soft_key[0]]["description"]}\n     Redump: {redump_title}\n')
-                        
+
                 if not dat_match:
                         redump_interactive_matches.update({soft_key:match_tuple})
 
@@ -1268,7 +1163,6 @@ def name_serial_auto_map(platform, sl_dict,dat_dict,script_dir,lookup_type='name
                     # pass the required info to a function which creates a key to append to a list of matches
                     new_source_sha = (dat_dict['name_lookup'][dat][redump_title]['sha1_digest'], 'sha1')
                     redump_softlist_matches.update(create_update_entry(soft_key,sl_dict,dat_dict,dat,redump_title,new_source_sha,redump_url))
-                    
 
     #from modules.utils import write_data
     #debug_list.append({'redump_single_matches':redump_single_matches})
@@ -1277,7 +1171,6 @@ def name_serial_auto_map(platform, sl_dict,dat_dict,script_dir,lookup_type='name
     #write_data(debug_list)
     return redump_softlist_matches, redump_interactive_matches
 
-       
 
 def soft_redump_match(redump_title,softlist_title):
     # convert the description to comply with nointro/redump
@@ -1289,10 +1182,9 @@ def soft_redump_match(redump_title,softlist_title):
     else:
         print('No match: '+nointrofix+', '+redump_soft)
         return False
-      
+
 
 def build_redump_site_dict(platform,script_dir):
-
     def get_largest_page_number(soup):
         pages_div = soup.find('div', {'class': 'pages'})
         if pages_div is not None:
@@ -1318,7 +1210,7 @@ def build_redump_site_dict(platform,script_dir):
         games_dict.update(parse_games_table(games_dict,soup))
     redump_site_dict[platform] = games_dict
     save_data(redump_site_dict,'redump_site_dict',script_dir)
-    
+
 
 def parse_games_table(games_dict, soup):
     table = soup.find('table', class_='games')
@@ -1343,7 +1235,7 @@ def parse_games_table(games_dict, soup):
             localized_title = br_tag.find_next_siblings()[0].text
         else:
             title_lines = title_cell.text.strip().split('\n')
-        rtitle = title_lines[0]         
+        rtitle = title_lines[0]
         system = cols[2].text.strip()
         version = cols[3].text.strip()
         edition = cols[4].text.strip()
@@ -1357,7 +1249,7 @@ def parse_games_table(games_dict, soup):
             serials = []
             rawserials = rawserial.split(',')
             for serial in rawserials:
-                serials.append(serial.strip())     
+                serials.append(serial.strip())
         else:
             serials = [rawserial.strip()]
         raw_status = cols[7].find('img')['alt']
@@ -1393,15 +1285,15 @@ def parse_games_table(games_dict, soup):
             rev_list.update({serial:revtitle})
             if revtitle in games_dict[disc_href]:
                 print('duplicate title for serial '+serial+':\n'+revtitle)
-                print('This error isn\'t handled')        
+                print('This error isn\'t handled')
             games_dict[disc_href][revtitle] = game_entry
         else:
             games_dict[disc_href] = game_entry
     return games_dict
 
+
 def build_libcrypt_dict(script_dir):
     build_redump_site_dict('psx_libcrypt',script_dir)
-    
 
 
 def get_missing_zips(sl_dict,dat_dict):
