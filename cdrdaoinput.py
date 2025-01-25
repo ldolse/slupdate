@@ -15,48 +15,48 @@ def initialize_plugins():
 
 def validate_subchannel(cdrdao: Cdrdao):
     print("Validating subchannel data...")
-    
+
     if not cdrdao.tracks:
         print("No tracks found. Cannot validate subchannel.")
         return
-    
+
     first_track = cdrdao.tracks[0]
     print(f'first_track.start_sector: {first_track.start_sector}, first_track.sequence: {first_track.sequence}')
     error, subchannel_data = cdrdao.read_sector_tag(first_track.start_sector, SectorTagType.CdSectorSubchannel, first_track.sequence)
-    
+
     if error != ErrorNumber.NoError or not subchannel_data:
         print(f"Failed to read subchannel data. Error: {error}")
         return
-    
+
     if len(subchannel_data) != 96:
         print(f"Invalid subchannel data length. Expected 96 bytes, got {len(subchannel_data)} bytes.")
         return
-    
+
     # Deinterleave subchannel (using Subchannel class method)
     deinterleaved = Subchannel.deinterleave(subchannel_data)
-    
+
     # Check P subchannel (should be all 0xFF for lead-in)
     p_subchannel = deinterleaved[:12]
     if all(b == 0xFF for b in p_subchannel):
         print("P subchannel validated successfully (all 0xFF for lead-in).")
     else:
         print(f"P subchannel validation failed. Expected all 0xFF, got: {p_subchannel.hex()}")
-    
+
     # Check Q subchannel structure
     q_subchannel = deinterleaved[12:24]
     print(f"Q subchannel data: {q_subchannel.hex()}")
-    
+
     # Use Subchannel.prettify_q method to decode and display Q subchannel information
     q_info = Subchannel.prettify_q(q_subchannel, True, first_track.start_sector, False, True, False)
     print("Q subchannel decoded:")
     print(q_info)
-    
+
     # Calculate CRC
     calculated_crc = CRC16CCITTContext.calculate(q_subchannel[:10])
     stored_crc = (q_subchannel[10] << 8) | q_subchannel[11]
     print(f"Stored CRC: {stored_crc:04X}")
     print(f"Calculated CRC: {calculated_crc:04X}")
-    
+
     if calculated_crc == stored_crc:
         print("Q subchannel CRC is valid.")
     else:
@@ -84,7 +84,7 @@ def print_image_info(cdrdao: Cdrdao):
         if toc:
             print(f"First complete session number: {toc.first_complete_session}")
             print(f"Last complete session number: {toc.last_complete_session}")
-            
+
             current_session = 0
             for descriptor in toc.track_descriptors:
                 if descriptor.session_number != current_session:
@@ -137,7 +137,7 @@ def main():
         error = cdrdao.open(cdrdao_filter)
         if error == ErrorNumber.NoError:
             print("CDRDAO image opened successfully.")
-            
+
             # Print some basic information about the image
             print(f"Number of tracks: {len(cdrdao.tracks)}")
             print(f"Number of sessions: {len(cdrdao.sessions)}")
@@ -154,7 +154,7 @@ def main():
 
             # Validate subchannel data
             validate_subchannel(cdrdao)
-            
+
             # Print image information
             print_image_info(cdrdao)
 

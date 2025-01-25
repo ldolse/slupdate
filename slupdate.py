@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-""" slupdate.py: Interactively Update MAME Optical Media based Software Lists 
+""" slupdate.py: Interactively Update MAME Optical Media based Software Lists
 against[Redump](http://redump.org/) & TOSEC dats.
 
 https://github.com/ldolse/slupdate
@@ -9,30 +9,15 @@ import os
 import re
 import sys
 import inquirer
-import builtins
 import traceback
 from importlib import reload
-from modules.utils import save_data,restore_dict,list_menu
+from modules.utils import save_data, restore_dict, list_menu, get_script_path
 from modules.chd import *
 from modules.mapping import *
 from modules.dat import *
 
 
-try:
-    # get the script location directory to ensure settings are saved and update environment var
-    script_dir = os.path.abspath(os.path.dirname(__file__))
-except NameError:
-    # set it to current working dir for this scenario, which is most likely when running from interpreter
-    script_dir =  os.getcwd()
-
-# bit of a hack to pass the script dir to the chd module
-builtins.script_dir = script_dir
-
-
-
-
-
-__version__ = '.1'
+__version__ = '.2'
 
 # Require at least Python 3.7
 assert sys.version_info >= (3, 7)
@@ -54,7 +39,6 @@ except NameError:
 # disabled by default, allows the script to populate chd sha1s on subsequent runs
 # only enable if CHD destination folder ONLY contains chds created by this script
 get_sha_from_existing_chd = False
-
 
 mapping_stage = { 'source_map' : [],
         'name_serial_auto_map' : [],
@@ -113,12 +97,12 @@ menu_lists = {'main_menu' : [('1. Mapping Functions', 'map'),
                      ('4. Settings','settings_menu'),
                      ('5. Save Session','save_function'),
                      ('6. Exit', 'Exit')],
-             'map' : [('a. Mapping Stage 2','map_stage_two'), 
+             'map' : [('a. Mapping Stage 2','map_stage_two'),
                       ('b. Automatically map based on source rom info','automap_function'),
                       ('c. List missing matched ROM Files','list_missing_function'),
                       ('d. List TOSEC sources','tosec_list_function'),
                       ('e. List unknown sources','unknown_list_function'),
-                      ('f. Update ROM matches', 'update_file_match_function'),            
+                      ('f. Update ROM matches', 'update_file_match_function'),
                       ('g. Change Platform','change_platform_function'),
                       ('h. Back', 'main_menu')],
              'map_stage_two' : [('a. Mapping Stage 3','map_stage_three'),
@@ -134,7 +118,7 @@ menu_lists = {'main_menu' : [('1. Mapping Functions', 'map'),
                         ('k. Back', 'map')],
              'map_stage_three' : [('a. Fuzzy Matches - Remap bad/alternate Dumps','hash_map_function'),
                         ('b. Serial Only Mapping','serial_map_function'),
-                        ('c. Interactive Name Based Mapping','interactive_map_function'),   
+                        ('c. Interactive Name Based Mapping','interactive_map_function'),
                         ('d. Update Sofltist XML','sl_update_function'),
                         ('e. Build CHDs','chd_build_function'),
                         ('f. Generate Missing DAT','dat_build_function'),
@@ -169,7 +153,7 @@ def sl_update_function(platform):
     update_rom_source_refs(settings['sl_dir']+os.sep+platform+'.xml',softlist_dict[platform],all_dat_dict[platform])
     # update the source group reference for unknown/undocumented sources that have been matched
     rewrite_comment_source_group(settings['sl_dir']+os.sep+platform+'.xml',softlist_dict[platform])
-    
+
     return 'map_stage_two'
 
 def url_map_function(platform):
@@ -240,7 +224,7 @@ def dat_build_function(platform):
 def main_menu(exit):
     '''
     Main menu for the script
-    gets a list answer value from any function called by this menu to get back to the 
+    gets a list answer value from any function called by this menu to get back to the
     chosen message / list based on the menu_msgs and menu_lists dictionaries
 
     Parameters:
@@ -254,6 +238,7 @@ def main_menu(exit):
     send_platform = ('dat','rom','map','map_stage_two','map_stage_three')
     menu_sel = 'main_menu'
     platform = ''
+
     while not exit:
         print('\n')
         answer = list_menu(menu_sel,menu_lists[menu_sel],menu_msgs[menu_sel])
@@ -265,7 +250,7 @@ def main_menu(exit):
 
         # if the answer ends with function then run that function passing the platform as an arg
         if answer[menu_sel].endswith('function'):
-            if any(f in answer for f in send_platform):     
+            if any(f in answer for f in send_platform):
                 next_step = globals()[answer[menu_sel]](platform['platforms'])
                 if next_step:
                     # next menu chosen based on return value from the function
@@ -336,7 +321,7 @@ def find_dat_matches(platform,sl_platform_dict,dathash_platform_dict):
                     disc_data['source_name'] = dathashdict[sourcehash]['name']
                     disc_data['raw_rom_entry'] = dathashdict[sourcehash]['raw_romlist']
                     dat_name_list.update({dathashdict[sourcehash]['name']:[datfile]})
-                    
+
                     # add the matching entries from the softlist to the dat dict for reference
                     if 'softlist_matches' not in dathashdict[sourcehash]:
                         dathashdict[sourcehash]['softlist_matches'] = []
@@ -391,12 +376,12 @@ def find_dat_matches(platform,sl_platform_dict,dathash_platform_dict):
     print(f'  {total_source_rom} valid zip files')
     print(f'  {chd_count} chds already exist in the destination directory\n')
     print('\nDAT Groups:')
-    # get the stats on source groups 
+    # get the stats on source groups
     source_stats = get_source_stats(sl_platform_dict)
     print_source_stats(source_stats,total_source_ref)
     print('\n\nMatched DAT Entry Titles:')
 
-    
+
 
 
 def get_configured_platforms(action_type=''):
@@ -448,7 +433,7 @@ def hash_map_function(platform):
         if proceed:
             update_soft_dict(softlist_dict[platform],all_dat_dict[platform],confirmed)
 
-        
+
 def tosec_map_function(platform):
     """
     Remap entries with TOSEC sources to Redump sources for a given platform.
@@ -465,7 +450,7 @@ def tosec_map_function(platform):
         '''
         iterate through the dats and build a redump hash dict for mapping to TOSEC
         this technique can have variations across consoles and may not work for all platforms
-        it takes advantage of the fact that for some types of consoles both group's ripping methods 
+        it takes advantage of the fact that for some types of consoles both group's ripping methods
         produce identical hashes for specific scenarios
         '''
         for dat, group in all_dat_dict[platform]['dat_group'].items():
@@ -603,12 +588,12 @@ def interactive_map_function(platform):
         process_interactive_matches(interactive_matches,platform,match_type)
     else:
         print('No matches to commit, return to menu\n')
-        
+
 
 def chd_builder(platform):
     '''
-    checks each soft list entry for a matched source rom and builds chds using those ROM 
-    sources.  CHD hash is added to the soft-dict.  If a CHD already exists in the build 
+    checks each soft list entry for a matched source rom and builds chds using those ROM
+    sources.  CHD hash is added to the soft-dict.  If a CHD already exists in the build
     directory it's skipped, but there is a flag to enable grabbing hashes for built CDs.
     '''
     from modules.chd import create_chd_from_zip, chdman_info
@@ -718,7 +703,7 @@ def chd_builder(platform):
                             print('error producing CHD, please try again')
                     else:
                         continue
-                        
+
     if new_hashes:
         write_new_hashes = inquirer.confirm('Update the Software List with new CHD Hashes?', default=False)
         if write_new_hashes:
@@ -767,10 +752,10 @@ def root_dirs_function():
 def del_dats_function(platform):
     '''
     removes DATs from the platform settings
-    
+
     Parameters:
     platform (str): The platform for which the mapping is being performed.
-    
+
     Returns:
     str: The key to the menu to return to.
     '''
@@ -789,7 +774,7 @@ def del_dats_function(platform):
         dat_path = settings['datroot']+answer['dat']
         print(dat_path)
         settings[platform].pop(dat_path)
-        
+
 def list_soft_entries(platform,group=None):
     match_type = 'Unmatched'
     if group is not None:
@@ -847,11 +832,7 @@ def romvault_dat_to_romfolder(dat_directory,dat_files):
             return {dat_directory+os.sep+dat_files[0] : rom_dir}
         else:
             print('Unable to locate '+rom_dir+' directory in ROMroot')
-            if inquirer.confirm('Do you want to create the appropriate directory?', default=False):
-                os.makedirs(rom_dir)
-                return {dat_directory+os.sep+dat_files[0] : rom_dir}
-            else:
-                return {}
+            return {}
     else:
         dat_rom_dict = {}
         for dat in dat_files:
@@ -863,10 +844,7 @@ def romvault_dat_to_romfolder(dat_directory,dat_files):
                 full_rom_dir = rom_dir+os.sep+name
                 if not os.path.isdir(full_rom_dir):
                     print('Unable to locate "'+name+'" directory in platform ROM folder')
-                    if inquirer.confirm('Do you want to create the appropriate directory?', default=False):
-                        os.makedirs(full_rom_dir)
-                    else:
-                        continue
+                    continue
                 dat_rom_dict.update({dat_path:full_rom_dir})
         return dat_rom_dict
 
@@ -922,7 +900,7 @@ def get_start_dir(filetype=None):
     while not start_path:
         path_query = [
             inquirer.Path(name='path', message=filetype+" Path (or starting point to browse filesystem)")]
-        path_entry = inquirer.prompt(path_query) 
+        path_entry = inquirer.prompt(path_query)
 
         # remove any trailing slash, if the user enters
         pattern = os.sep+'$'
@@ -957,7 +935,7 @@ def select_directory(filetype=None,start_dir=None):
             return current_path
         elif answers[filetype] == 'Parent Directory':
             current_path = os.path.dirname(current_path)
-            os.chdir(os.path.dirname(current_path))         
+            os.chdir(os.path.dirname(current_path))
         else:
             parent_path = current_path
             current_path = current_path+os.sep+answers[filetype]
@@ -965,6 +943,7 @@ def select_directory(filetype=None,start_dir=None):
 
 
 if __name__ == '__main__':
+    script_dir = get_script_path()
 
     if len(settings) == 0:
         # walk through all the mandatory settings one by one on the first run

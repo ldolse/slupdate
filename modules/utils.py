@@ -4,6 +4,22 @@ import re
 import pickle
 import pprint
 import inquirer
+import builtins
+
+def get_script_path():
+    '''
+    Returns the path to the current script
+    '''
+    try:
+        # get the script location directory to ensure settings are saved and update environment var
+        script_dir = os.path.dirname(os.path.realpath(__file__))
+    except NameError:
+        # set it to current working dir for this scenario, which is most likely when running from interpreter
+        script_dir =  os.getcwd()
+
+    # bit of a hack to pass the script dir to the chd module
+    builtins.script_dir = script_dir
+    return script_dir
 
 def save_data(data_to_save,name,directory):
     with open(directory+os.sep+name+'.cache', 'wb') as f:
