@@ -366,7 +366,11 @@ def ccd_2_cue(ccd_sheet):
 
     Config = configparser.ConfigParser()
     Config.read(ccd_sheet)
-    cuefile = open(cue_sheet, 'wb')
+    try:
+        cuefile = open(cue_sheet, 'wb') # write binary
+    except FileNotFoundError:
+        print('could not create cue file')
+        return None
 
     track_counter = 0
     BEGIN = False
@@ -412,7 +416,7 @@ def get_imgs_from_bin(cue):
         # strip off leading 'FILE '
         pos = line.lower().index('file ')
         line = line[pos + 5:]
-        # strip off leading 'FILE '
+        # strip off  ' binary'
         pos = line.lower().index(' binary')
         line = line[:pos+1]
         #strip off leading ' '
@@ -429,7 +433,7 @@ def get_imgs_from_bin(cue):
             line = line[1:-1]
         return line
     
-    print('CUE', cue) if verbose else None
+    #print('CUE', cue) if verbose else None
 
     img_files = []
     with open(cue, 'r') as f:

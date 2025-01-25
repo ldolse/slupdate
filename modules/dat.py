@@ -9,12 +9,15 @@ XML processing functions for dat and softlist files
 '''
 def convert_xml(file, comments=False):
     #read xml content from the file
-    fileptr = open(file,"r",encoding='utf-8')
-    xml_content= fileptr.read()
-    #print("XML content is:")
-    #print(xml_content)
-    my_ordered_dict=xmltodict.parse(xml_content, process_comments=comments, force_list=('info','rom',))
-    return my_ordered_dict
+    try:
+        fileptr = open(file, 'r' ,encoding='utf-8')
+        xml_content= fileptr.read()
+        #print("XML content is:")
+        #print(xml_content)
+        my_ordered_dict=xmltodict.parse(xml_content, process_comments=comments, force_list=('info','rom',))
+        return my_ordered_dict
+    except FileNotFoundError:
+        print(f"Error: The file {dat_file} was not found.")
 
 def get_sl_descriptions(softlist,dat_type,field):
     '''
@@ -500,8 +503,12 @@ def get_lxml_replacements(softlist_xml_file):
     be changed back after lxml has updated the xml
     '''
     entity_list = re.compile(r'>[^<]+?(&quot;)[^<]+?<')
-    with open(softlist_xml_file, 'r', encoding='utf-8') as f:
-        xml_string = f.read()
+    try:
+        with open(softlist_xml_file, 'r', encoding='utf-8') as f:
+            xml_string = f.read()
+    except FileNotFoundError:
+        print(f'Error reading {softlist_xml_file}')
+        return None
     tag_regex = re.compile(r'<[^>]+? />')
     lxml_changes = {}
     for match in tag_regex.finditer(xml_string):
@@ -536,8 +543,11 @@ def write_softlist_output(tree,softlist_xml_file,tags_with_whitespace):
     # put back the whitespace lxml deleted
     for old_string, new_string in tags_with_whitespace.items():
         output = output.replace(old_string, new_string)
-    with open(softlist_xml_file, "w",encoding='utf-8') as f:
-        f.write(output)
+    try:
+        with open(softlist_xml_file, 'w', encoding='utf-8') as f:
+            f.write(output)
+    except FileNotFoundError:
+        print(f'Error writing {softlist_xml_file}')
 
 def get_lxml_tree_strings(softlist_xml_file):
     '''
@@ -1012,8 +1022,11 @@ def create_dat(rom_dict,platform):
         pass
         #print("The XML tree is not valid according to the XSD schema.")
     xml_string = etree.tostring(tree, xml_declaration=True, pretty_print=True, doctype='<!DOCTYPE datafile PUBLIC "-//Logiqx//DTD ROM Management Datafile//EN" "http://www.logiqx.com/Dats/datafile.dtd">', encoding="UTF-8").decode("UTF-8")
-    with open(dat_file, "w",encoding='utf-8') as f:
-        f.write(xml_string)
+    try:
+        with open(dat_file, 'w', encoding='utf-8') as f:
+            f.write(xml_string)
+    except FileNotFoundError:
+        print(f"Error: The file {dat_file} was not found.")
 
 def build_dat_dict(datfile,dat_dict):
     '''

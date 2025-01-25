@@ -490,7 +490,7 @@ def setup_platform_dicts(platform):
     Returns:
     None: This function does not return any value. It modifies the data in place.
     '''
-    from modules.dat import build_dat_dict, remove_dupe_dat_entries, build_sl_dict, convert_xml,shift_sibling_comments
+    from modules.dat import build_dat_dict, remove_dupe_dat_entries, build_sl_dict, convert_xml, shift_sibling_comments
     # process each DAT to build a list of fingerprints
     print('processing '+platform+' DAT Files')
     if platform not in all_dat_dict:
