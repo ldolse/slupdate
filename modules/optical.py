@@ -1,4 +1,6 @@
 
+from modules.subchannel import create_sub_channel, lsd_to_sub
+import os
 
 def create_combined_image_and_cue(cue, base_name, combined_image_path):
     # Export Cue

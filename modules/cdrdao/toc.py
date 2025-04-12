@@ -347,10 +347,11 @@ def parse_toc_file(image_filter: IFilter) -> Tuple[ErrorNumber, Optional[CdrdaoD
 
                 logger.debug(f" Calculated track {current_track.sequence}: start_sector={current_track.start_sector}, sectors={current_track.sectors}, end_sector={last_end_sector - 1}, pregap={current_track.pregap}")
             elif match_audio_file or match_file:
+                match = match_audio_file or match_file
                 if not in_track:
                     return ErrorNumber.InvalidData  # File declaration outside of track
                 else:
-                    logger.debug(f' Found DATAFILE {match.group(filename)} at line {line_number}')
+                    logger.debug(f' Found DATAFILE {match.group('filename')} at line {line_number}')
             elif match_disc_scrambled:
                 logger.debug(f" Found DataTracksScrambled {match_disc_scrambled.group('value')} at line {line_number}")
                 discimage.scrambled = match_disc_scrambled.group('value') == "1"

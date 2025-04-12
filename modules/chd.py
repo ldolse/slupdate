@@ -261,7 +261,7 @@ def convert__bincue_to_chd(chd_file_path: pathlib.Path, output_cue_file_path: pa
         chdman_result = subprocess.run(["chdman", "createcd", "--input", str(chd_file_path), "--output", str(chdman_cue_file_path)], stdout=None if show_command_output else subprocess.DEVNULL, env=env_with_script_dir)
         if chdman_result.returncode != 0:
             # chdman provides useful progress output on stderr so we don't want to capture stderr when running it. That means we can't provide actual error output to the exception, but I can't find a way around that.
-            raise ConversionException("Failed to convert .chd using chdman", chd_file_path, None)
+            raise Exception("Failed to convert .chd using chdman", chd_file_path, None)
 
 
 def find_rom_zips(dat,soft_entry_data,dathashdict,dat_rom_map):

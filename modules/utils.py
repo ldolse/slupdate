@@ -36,7 +36,7 @@ def restore_dict(name):
         return {}
 
 
-def slupdate_version():
+def slupdate_version(__version__):
     '''
     Returns the version of the slupdate package
     '''

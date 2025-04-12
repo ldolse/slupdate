@@ -84,11 +84,11 @@ def sub(filename, strsectors):
             buffer[4] = int(sec)
             buffer[5] = int(frame)
 
-            mindbl = sector2 / 60 / 75
+            mindbl = sector / 60 / 75
             minutes = int(floor(mindbl))
-            secdbl = (sector2 - (minutes * 60 * 75)) / 75
+            secdbl = (sector - (minutes * 60 * 75)) / 75
             sec = int(floor(secdbl))
-            frame = sector2 - (minutes * 60 * 75) - (sec * 75)
+            frame = sector - (minutes * 60 * 75) - (sec * 75)
             buffer[7] = int(minutes)
             buffer[8] = int(sec)
             buffer[9] = int(frame)

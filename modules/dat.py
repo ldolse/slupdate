@@ -17,7 +17,7 @@ def convert_xml(file, comments=False):
         my_ordered_dict=xmltodict.parse(xml_content, process_comments=comments, force_list=('info','rom',))
         return my_ordered_dict
     except FileNotFoundError:
-        print(f"Error: The file {dat_file} was not found.")
+        print(f"Error: The file {file} was not found.")
 
 def get_sl_descriptions(softlist,dat_type,field):
     '''

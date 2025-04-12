@@ -26,15 +26,8 @@ assert sys.version_info >= (3, 7)
 settings = restore_dict('settings')
 user_answers = restore_dict('user_answers')
 
-try:
-    softlist_dict
-except NameError:
-    softlist_dict = {}
-
-try:
-    all_dat_dict
-except NameError:
-    all_dat_dict = {}
+softlist_dict = globals().get('softlist_dict', {})
+all_dat_dict = globals().get('all_dat_dict', {})
 
 # disabled by default, allows the script to populate chd sha1s on subsequent runs
 # only enable if CHD destination folder ONLY contains chds created by this script
