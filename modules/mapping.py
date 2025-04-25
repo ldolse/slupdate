@@ -4,8 +4,8 @@ from bs4 import BeautifulSoup
 from requests.adapters import HTTPAdapter
 from requests.adapters import Retry
 from urllib.parse import urlparse
-from modules.utils import save_data, restore_dict,list_menu
-from .dat import process_comments, get_sl_entry
+from modules.menus import list_menu
+from modules.utils import save_data, restore_dict
 import inquirer
 import hashlib
 from difflib import get_close_matches

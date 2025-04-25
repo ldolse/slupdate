@@ -1,18 +1,18 @@
 import glob
-import os
+import os, sys
 import re
 import pickle
 import pprint
-import inquirer
 import builtins
 
 def get_script_path():
     '''
-    Returns the path to the current script
+    Returns the path to the current script's __main__ module
     '''
     try:
-        # get the script location directory to ensure settings are saved and update environment var
-        script_dir = os.path.dirname(os.path.realpath(__file__))
+        # Get the __file__ of the __main__ module
+        main_file = sys.modules['__main__'].__file__
+        return os.path.dirname(os.path.realpath(main_file))
     except NameError:
         # set it to current working dir for this scenario, which is most likely when running from interpreter
         script_dir =  os.getcwd()
@@ -42,34 +42,6 @@ def slupdate_version(__version__):
     '''
     return __version__
     
-def list_menu(key, options, prompt, type='list'):
-    '''
-    Simple wrapper for inquirer.List to create a list of options
-
-    Parameters:
-    key (str): The key to store the answer in
-    options (list): The list of options to choose from
-    prompt (str): The prompt to display to the user
-
-    Returns:
-    answer (dict): The answer to the prompt
-    '''
-    if type == 'list':
-        optconfirm = [
-            inquirer.List(key,
-                          message = prompt,
-                          choices = options,
-                          carousel = True),
-                        ]
-    elif type == 'checkbox':
-        optconfirm = [
-            inquirer.Checkbox(key,
-                          message = prompt,
-                          choices = options),
-                        ]
-    answer = inquirer.prompt(optconfirm)
-    return answer
-
 
 def get_dat_paths(platform, datpaths, sl_dat_map):
     '''
