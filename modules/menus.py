@@ -32,23 +32,25 @@ class MenuItem:
     """Represents a single menu option"""
     def __init__(self, text: str, 
                  target: str = None, 
-                 action_func=None,
-                 requires_platform=True):
+                 action_func = None,
+                 requires_platform: bool = True,
+                 is_back: bool = False):
         self.text = text  # Displayed text in the menu
         self.target_name = target  # Menu name to navigate to (e.g., "map_menu")
         self.action = action_func  # Callable function (must return a string menu name)
         self.requires_platform = requires_platform
-
-
+        self.is_back = is_back  # Indicates if this option is a "back" action  
 
     def execute(self, menu_system: "MenuSystem") -> str:
         """Execute option logic and return next target"""
-        print("in execute start")
-        # Handle platform requirement first
+        # Handle back action
+        if self.is_back:
+            menu_system.navigate_back()  # Navigate back in history
+            return None
+        # Handle platform requirement
         if self.requires_platform and not menu_system.current_platform:
             print(f"platform required but not set - in first check, platform is {menu_system.current_platform}")
             return "select_platform_menu"  # Redirect to select platform
-        
         try:
             print(f"inspecting action, platform is {menu_system.current_platform}")
             # Analyze action function's required parameters

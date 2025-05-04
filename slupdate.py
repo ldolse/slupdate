@@ -906,7 +906,7 @@ class SettingsMenu(BaseMenu):
             ),
             MenuItem(
                 text="e. Back",
-                target="main_menu",
+                is_back=True,
                 requires_platform = False
             )
         ]
@@ -947,7 +947,7 @@ class MapMenu(BaseMenu):
             ),
             MenuItem(
                 text="[Back to Main Menu]",
-                target="main_menu",
+                is_back=True,
                 requires_platform = False
             )
             ]
@@ -998,7 +998,7 @@ class MapStageTwo(BaseMenu):
             ),
             MenuItem(
                 text="k. Back",
-                target="map_menu",
+                is_back=True,
                 requires_platform = False
             )
         ]
@@ -1033,7 +1033,7 @@ class MapStageThree(BaseMenu):
             ),
             MenuItem(
                 text="g. Back",
-                target="map_stage_two",
+                is_back=True,
                 requires_platform = False
             )
         ]
@@ -1053,7 +1053,7 @@ class DatMenu(BaseMenu):
             ),
             MenuItem(
                 text = "c. Back",
-                target = "settings_menu",
+                is_back=True,
                 requires_platform = False
             )
         ]
@@ -1111,8 +1111,9 @@ if __name__ == '__main__':
             continue
 
         next_target_name = chosen_item.execute(system)
-
-        if next_target_name == "Exit":
+        if next_target_name == None: # Handled by 'is_back' logic in execute()
+            pass
+        elif next_target_name == "Exit":
             break
         else:
             system.navigate_to(next_target_name)  # Update current menu
