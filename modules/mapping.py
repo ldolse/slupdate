@@ -4,8 +4,7 @@ from bs4 import BeautifulSoup
 from requests.adapters import HTTPAdapter
 from requests.adapters import Retry
 from urllib.parse import urlparse
-from modules.menus import list_menu
-from modules.utils import save_data, restore_dict
+from modules.utils import save_data, restore_dict, list_menu
 import inquirer
 import hashlib
 from difflib import get_close_matches
@@ -1023,9 +1022,13 @@ def get_user_disc(mame_part):
 def name_serial_auto_map(platform, sl_dict,dat_dict,script_dir,lookup_type='name_serial',skip_proto=True):
     '''
     two-stage function - first stage compares redump site titles to sanitized soflist descriptions
+
     second stage uses the redump title to match against unmatched dat entries
+
     redump site titles don't necessarily have exact matches to the dat based on version, package, etc
+
     entries which have only a single possible match are auto-mapped
+    
     entries with multiple possible matches are returned by the function for the next stage
     '''
     redump_single_matches = {}

@@ -1,5 +1,8 @@
+from typing import Dict, Optional
 import inquirer
 import inspect
+from modules.platform_manager import PlatformManager
+from modules.platform import Platform
 
 # key for the menu correlates to the key for the menu's item list
 menu_msgs = {'main_menu' : 'Main Menu, select an option',
@@ -31,7 +34,7 @@ menu_msgs = {'main_menu' : 'Main Menu, select an option',
 class MenuItem:
     """Represents a single menu option"""
     def __init__(self, text: str, 
-                 target: str = None, 
+                 target: Optional[str] = None, 
                  action_func = None,
                  requires_platform: bool = True,
                  is_back: bool = False):
@@ -42,45 +45,50 @@ class MenuItem:
         self.is_back = is_back  # Indicates if this option is a "back" action  
 
     def execute(self, menu_system: "MenuSystem") -> str:
-        """Execute option logic and return next target"""
+        """Execute option logic and return next target."""
         # Handle back action
         if self.is_back:
-            menu_system.navigate_back()  # Navigate back in history
+            menu_system.navigate_back()
             return None
-        # Handle platform requirement
-        if self.requires_platform and not menu_system.current_platform:
-            print(f"platform required but not set - in first check, platform is {menu_system.current_platform}")
-            return "select_platform_menu"  # Redirect to select platform
+
+        current_platform = menu_system.current_platform_obj
         try:
-            print(f"inspecting action, platform is {menu_system.current_platform}")
-            # Analyze action function's required parameters
             sig = inspect.signature(self.action) if self.action else None
-            params_needed = list(sig.parameters.keys()) if self.action else []
-            
+            params_needed = list(sig.parameters.keys()) if self.action and sig else []
+
             args = []
             
-            # Check for 'platform' parameter and supply it
-            if "platform" in params_needed:
-                if not menu_system.current_platform:
-                    raise ValueError("Platform required but not set")
-                args.append(menu_system.current_platform)
+            # Check platform requirement
+            if "platform" in params_needed or self.requires_platform:
+                if not current_platform:
+                    selected_platform = menu_system.platform_manager.select_platform()
+                    if not selected_platform:
+                        print("No platform selected. Action requires a configured platform.")
+                        return self.target_name  # Stay on the same menu
 
-            # Check if action expects the full MenuSystem instance
-            elif "menu_system" in params_needed:
+                    current_platform = selected_platform
+                args.append(current_platform)
+
+            # Explicitly add PlatformManager if required in action signature
+            if "platform_manager" in params_needed:
+                args.append(menu_system.platform_manager)
+
+            # Add MenuSystem if required in action signature
+            if "menu_system" in params_needed:
                 args.append(menu_system)
-            
+
         except Exception as e:
             print(f"Error preparing arguments for {self.text}: {e}")
             return self.target_name  # Default to target
-            
+
         try:
-            # Call the function with detected parameters
-            result = self.action(*args) if self.action else None
-        except TypeError as te:
-            print(f"TypeError in action: {te}. Using default.")
             result = None
-        
-        # Determine next menu based on return value or target
+            if self.action:
+                result = self.action(*args)
+                
+        except TypeError as te:
+            print(f"[ERROR] TypeError in action: {te}. Using default.")
+
         next_target = (
             result 
             if isinstance(result, str) and result != ""  
@@ -120,13 +128,19 @@ class BaseMenu:
 
 
 class MenuSystem:
-    """Manages navigation state and history"""
+    """Manages navigation state and history with platform integration"""
     def __init__(self):
         self.stack = []  # Navigation history (LIFO)
         self.current_menu_name = None
-        self.current_platform = None
-        self.menus = {}  # Registry of all menus by name
+        self.menus: Dict[str, BaseMenu] = {}  # Registry of all menus by name
         
+        # Platform management
+        self.platform_manager = PlatformManager()
+
+    @property
+    def current_platform_obj(self) -> Optional["Platform"]:
+        return self.platform_manager.current_platform
+
     def register(self, menu: BaseMenu):
         """Adds a new menu to the system"""
         if not isinstance(menu, BaseMenu):
@@ -137,52 +151,26 @@ class MenuSystem:
     def current_menu(self) -> BaseMenu:
         return self.menus.get(self.current_menu_name)
 
-    def navigate_to(self, target):
+    def navigate_to(self, target: str) -> None:
         """Pushes current menu to stack and navigates"""
-        
         # Only add previous state to stack if current menu exists (not initial run)
-        if self.current_menu:
-            self.stack.append({
-                'menu_name': self.current_menu.name,
-            })
-        
+        if self.current_menu_name:
+            if self.current_menu_name != target:
+                # Check if target is already in stack to avoid duplicates
+                if not any(item['menu_name'] == target for item in self.stack):
+                    # Push current menu state to stack
+                    self.stack.append({
+                        'menu_name': self.current_menu_name,
+                    })
         self.current_menu_name = target
 
-
-    def navigate_back(self) -> str:
+    def navigate_back(self) -> Optional[str]:
         """Pops from stack to return to previous menu"""
         if not self.stack:
             return None # Already at root
         
         last_state = self.stack.pop()
         self.current_menu_name = last_state['menu_name']
-        return self.current_menu.name
+        return self.current_menu_name
 
 
-def list_menu(key, options, prompt, type='list'):
-    '''
-    Simple wrapper for inquirer.List to create a list of options
-
-    Parameters:
-    key (str): The key to store the answer in
-    options (list): The list of options to choose from
-    prompt (str): The prompt to display to the user
-
-    Returns:
-    answer (dict): The answer to the prompt
-    '''
-    if type == 'list':
-        optconfirm = [
-            inquirer.List(key,
-                          message = prompt,
-                          choices = options,
-                          carousel = True),
-                        ]
-    elif type == 'checkbox':
-        optconfirm = [
-            inquirer.Checkbox(key,
-                          message = prompt,
-                          choices = options),
-                        ]
-    answer = inquirer.prompt(optconfirm)
-    return answer

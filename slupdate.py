@@ -6,16 +6,17 @@ against[Redump](http://redump.org/) & TOSEC dats.
 https://github.com/ldolse/slupdate
 """
 import os
-import re
+import pickle
 import sys
 import inquirer
 import traceback
 from importlib import reload
-from modules.utils import save_data, restore_dict, get_script_path
+from modules.utils import *
 from modules.menus import *
 from modules.chd import *
 from modules.mapping import *
 from modules.dat import *
+from modules.platform_manager import PlatformManager
 
 
 __version__ = '.2'
@@ -24,8 +25,8 @@ __version__ = '.2'
 assert sys.version_info >= (3, 7)
 
 
-settings = restore_dict('settings')
-user_answers = restore_dict('user_answers')
+settings = {}
+user_answers = {}
 
 softlist_dict = globals().get('softlist_dict', {})
 all_dat_dict = globals().get('all_dat_dict', {})
@@ -40,26 +41,6 @@ mapping_stage = { 'source_map' : [],
                  'tosec_remap' : [],
                   'manual_map' : []
                   }
-
-consoles = {    'Amiga CDTV' : 'cdtv',
-                'Amiga CD32' : 'cd32',
-               'FM Towns CD' : 'fmtowns_cd',
-          'IBM PC/AT CD-ROM' : 'ibm5170_cdrom',
-       'NEC PC-9801 CD-ROMs' : 'pc98_cd',
- 'PC Engine / TurboGrafx CD' : 'pcecd',
-              'Philips CD-i' : 'cdi',
-            'Pippin CD-ROMs' : 'pippin',
-                 'NEC PC-FX' : 'pcfx',
-                   'Sega CD' : 'segacd',
-     'Sega Mega CD (Europe)' : 'megacd',
-      'Sega Mega CD (Japan)' : 'megacdj',
-               'Sega Saturn' : 'saturn',
-            'Sega Dreamcast' : 'dc',
-             'SNK NeoGeo CD' : 'neocd',
-          'Sony Playstation' : 'psx',
-                       '3DO' : '3do_m2'
-        }
-
 
 def sl_update_function(platform):
     '''
@@ -111,20 +92,6 @@ def list_missing_function(platform):
     from modules.mapping import get_missing_zips
     get_missing_zips(softlist_dict[platform],all_dat_dict[platform])
 
-def first_run(menu_system: "MenuSystem"):
-    """
-    Configures the softlist, root ROM & DAT directories
-    """
-    print('Please Configure the MAME Softlist hash directory location.\n')
-    slist_dir_function()
-    print('\nPlease Confgure the root directory locations for your DAT and ROM files')
-    print('This will be used to simplify navigation for DAT and ROM directory selection')
-    print('RomVault compatibility can also be enabled here to automate ROM directory configuration\n')
-    root_dirs_function()
-    print('\nPlease configure DATs for the first Platform (more can be configured later)\n')
-    platform_dat_rom_function(menu_system)
-    print('\nPlease configure the destination directory for created CHDs - note this directory should not contain CHDs from other sources')
-    chd_dir_function()
 
 def dat_build_function(platform):
     '''
@@ -245,45 +212,6 @@ def find_dat_matches(platform,sl_platform_dict,dathash_platform_dict):
     source_stats = get_source_stats(sl_platform_dict)
     print_source_stats(source_stats,total_source_ref)
     print('\n\nMatched DAT Entry Titles:')
-
-
-def get_configured_platforms():
-    '''
-    Builds a tuple list of the configured platforms
-    action_type variable is based on what type pre-config
-    for the sub-function
-    '''
-    configured = []
-    for name, platform in consoles.items():
-        if platform in settings and len(settings[platform]) > 0:
-            configured.append((name,platform))
-    return configured
-
-def platform_select(menu_system: "MenuSystem" = None, show_all: bool = False):
-    """
-    Select a console platform with optional filtering.
-    
-    :param menu_system: MenuSystem instance to update current_platform (optional)
-    :param show_all: Whether to include all platforms or only configured ones
-    :return: Selected platform name (e.g., "cdtv")
-    """
-    if show_all:
-        # Show ALL consoles
-        platforms = []
-        #platforms = [(name, plat) for name, plat in consoles.items()]
-        for name, platform in consoles.items():
-            platforms.append((name,platform))
-    else:
-        # Filtered list of configured platforms
-        platforms = get_configured_platforms()
-    
-    answer = inquirer.list_input(
-        message="Select a platform",
-        choices=platforms,
-        carousel=True
-    )
-    menu_system.current_platform = answer
-    return answer
 
 
 def hash_map_function(platform):
@@ -580,14 +508,11 @@ def chd_builder(platform):
 
 
 
-def chd_build_function(platform=None):
+def chd_build_function(platform):
     from modules.chd import is_greater_than_0_176, chdman_info
     if not is_greater_than_0_176(chdman_info()):
         print('Outdated Chdman, please upgrade to a recent version')
         return None
-    if not platform:
-        # get configured platforms and map selected from the returned key
-        platform = platform_select('chd')['platforms']
     if platform not in softlist_dict:
         print('No mapping has been run for this platform yet, please go back and run a mapping function\n')
         return None
@@ -595,28 +520,6 @@ def chd_build_function(platform=None):
     if build:
         chd_builder(platform)
 
-def save_function():
-    confirm_message = menu_msgs['save']
-    save = inquirer.confirm(confirm_message, default=False)
-    if save:
-        save_data(user_answers,'answers',script_dir)
-    return
-
-def restore_function():
-    confirm_message = menu_msgs['restore']
-    load = inquirer.confirm(confirm_message, default=False)
-    if load:
-        user_answers = restore_dict('user_answers')
-
-'''
-directory selection functions
-'''
-def root_dirs_function():
-    single_dir_function('datroot','Root DAT Directory')
-    single_dir_function('romroot','Root ROM Directory')
-    confirm_message = menu_msgs['romvault']
-    romvault = inquirer.confirm(confirm_message, default=False)
-    settings.update({'romvault' : romvault})
 
 def del_dats_function(platform):
     '''
@@ -666,156 +569,41 @@ def unknown_list_function(platform):
 def tosec_list_function(platform):
     list_soft_entries(platform,'TOSEC')
 
-def slist_dir_function():
-    single_dir_function('sl_dir','MAME Software List')
-
-def chd_dir_function():
-    single_dir_function('chd','CHD Destination Directory')
-    single_dir_function('zip_temp','Temporary Directory for uncompressed ZIP data')
-
 def single_dir_function(dirtype,prompt):
-    # queries and stores the software list hash directory
     directory = select_directory(prompt)
     settings.update({dirtype : directory})
 
-def get_platform_dir(dirtype,platform):
-    if dirtype not in settings[platform]:
-        settings[platform].update({dirtype:[]})
-    directory = select_directory(dirtype)
-    if directory not in settings[platform][dirtype]:
-        settings[platform][dirtype].append(directory)
+def platform_dat_rom_function(platform: Platform, platform_manager: PlatformManager):
+    """Configure DAT and ROM directories for the selected platform."""
+    dat_directory_path = select_directory("DAT", start_dir=platform_manager.datroot)
 
-def romvault_dat_to_romfolder(dat_directory,dat_files):
-    '''
-    RomVault maps the ROM directories based on the file structure in DATroot
-    DAT directories with multiple DATs will create subfolders based on the DAT title
-    returns a dict with the DAT to ROM folder mapping
-    '''
-    from modules.dat import get_dat_name
-    #print('dat dir is '+dat_directory)
-    #rom_dir = settings['romroot']+re.sub(settings['datroot'],'',dat_directory)
-    rom_dir = settings['romroot']+dat_directory.replace(settings['datroot'], '')
-    #print('rom dir is '+rom_dir)
-    if len(dat_files) == 1:
-        if os.path.isdir(rom_dir):
-            return {dat_directory+os.sep+dat_files[0] : rom_dir}
-        else:
-            print('Unable to locate '+rom_dir+' directory in ROMroot')
-            return {}
-    else:
-        dat_rom_dict = {}
-        for dat in dat_files:
-            if not dat.endswith('.xml'):
-                dat_path = dat_directory+os.sep+dat
-                # rom subfolder is based on dat name, get name
-                #print('checking dat '+dat)
-                name = get_dat_name(dat_path)
-                full_rom_dir = rom_dir+os.sep+name
-                if not os.path.isdir(full_rom_dir):
-                    print('Unable to locate "'+name+'" directory in platform ROM folder')
-                    continue
-                dat_rom_dict.update({dat_path:full_rom_dir})
-        return dat_rom_dict
+    # Process DAT files in directory
+    platform_manager.add_platform_dat_directory(
+        platform.key,
+        dat_directory_path
+    )
 
-def map_dats_to_romdirs(dat_directory):
-    dat_files = [f for f in os.listdir(dat_directory) if f.endswith('.dat') or f.endswith('.xml')]
-    #print(f"DAT files in {dat_directory}: {dat_files}")
-    # if using romvault map the ROM directores for the DATs automatically
-    if settings['romvault']:
-        datrom_dirmap = romvault_dat_to_romfolder(dat_directory, dat_files)
-    else:
-        datrom_dirmap = {}
-        for dat in dat_files:
-            if not dat.endswith('.xml'):
-                dat_path = dat_directory+os.sep+dat
-                print('Select ROM Directory for DAT:\n'+dat+'\n')
-                rom_directory = select_directory('rom',settings['romroot'])
-                datrom_dirmap.update({dat_path:rom_directory})
-    return datrom_dirmap
+def load_or_create_platform_manager():
+    try:
+        with open("platform_manager.pkl", "rb") as f:
+            return pickle.load(f)
+    except (FileNotFoundError, EOFError):
+        print("Initializing new PlatformManager.")
+        pm = PlatformManager()
+        pm.initialize_settings()  # Configures datroot/romroot etc.
 
-def update_dats():
-    print('Updating DAT Folders')
-    for platform in consoles.values():
-        if platform in settings:
-            for folder in settings[platform].keys():
-                datrom_dirmap = map_dats_to_romdirs(folder)
-                settings[platform][folder] = datrom_dirmap
+        # Ensure at least one platform is configured on first run
+        configure_initial_platform(pm)
 
-def platform_dat_rom_function(menu_system: "MenuSystem"):
-    """
-    Configures DAT and ROM directories for a specific platform.
-    """
-    print("running platform_select in platform_dat_rom_function")
-    platform = platform_select(menu_system, show_all=True)
-    print(f"selected platform is {platform}")
-    # Check if the platform is already configured
-    if platform not in settings:
-        settings.update({platform : {}})
-    # get the dat dir first
-    if 'datroot' not in settings:
-        single_dir_function('datroot','Root DAT Directory')
-    if 'romroot' not in settings:
-        single_dir_function('romroot','Root ROM Directory')
-    dat_directory = select_directory('dat',settings['datroot'])
-    datrom_dirmap = map_dats_to_romdirs(dat_directory)
-    settings[platform][dat_directory] = datrom_dirmap
+        return pm
 
-def get_os_dirs(path):
-    """
-    Returns a list of directories in the given path
-    """
-    directories = [d for d in os.listdir(path) if os.path.isdir(os.path.join(path, d))]
-    directories.sort()
-    directories.insert(0,'Parent Directory')
-    directories.append('Select the current directory')
-    return directories
-
-def get_start_dir(filetype=None):
-    start_path = None
-
-    while not start_path:
-        path_query = [
-            inquirer.Path(name='path', message=filetype+" Path (or starting point to browse filesystem)")]
-        path_entry = inquirer.prompt(path_query)
-
-        # remove any trailing slash, if the user enters
-        pattern = os.sep+'$'
-        path_entry = re.sub(pattern,'',path_entry['path'])
-        if not os.path.exists(path_entry):
-            print('invalid path, try again')
-            # could potentially count failures and switch to working dir
-            #current_path = os.getcwd()
-            continue
-        else:
-            start_path = path_entry
-    return start_path
-
-
-def select_directory(filetype=None,start_dir=None):
-    """
-    Displays a list of directories in the current directory and prompts the user to select one
-    """
-    selected = False
-    origin_path = os.getcwd()
-    if not start_dir:
-        current_path = get_start_dir(filetype)
-    else:
-        current_path = start_dir
-    while not selected:
-        message = message = "Select a directory - current: ["+current_path+"]"
-        choices = get_os_dirs(current_path)
-        answers = list_menu(filetype,choices,message)
-        if answers[filetype] == 'Select the current directory':
-            selected = True
-            os.chdir(origin_path)
-            return current_path
-        elif answers[filetype] == 'Parent Directory':
-            current_path = os.path.dirname(current_path)
-            os.chdir(os.path.dirname(current_path))
-        else:
-            parent_path = current_path
-            current_path = current_path+os.sep+answers[filetype]
-            os.chdir(current_path)
+def configure_initial_platform(platform_manager: PlatformManager):
+    """Ensure at least one platform has a DAT directory and ROM folder."""
+    print("\nConfiguring initial platform with DAT/ROM directories.")
+    
+    selected_platform = platform_manager.select_platform(show_all=True)
+    if selected_platform:
+        platform_dat_rom_function(selected_platform, platform_manager)
 
 class MainMenu(BaseMenu):
     def __init__(self):
@@ -837,7 +625,7 @@ class MainMenu(BaseMenu):
             ),
             MenuItem(
                 text = "d. Save Settings",
-                action_func = save_function,
+                action_func = platform_manager.save,
                 requires_platform = False
             ),
             MenuItem(
@@ -848,68 +636,44 @@ class MainMenu(BaseMenu):
         ]
 
 
-class SelectPlatformMenu(BaseMenu):
-    def __init__(self):
-        super().__init__("select_platform_menu")
-        
-        # Helper to create action functions that return the previous menu name
-        def make_select_action(platform: str):
-            """Sets platform and returns prior menu's name"""
-            print("in make_select platform function")
-            def select(menu_system: MenuSystem) -> str:
-                print(f"Setting platform to: {platform}")
-                menu_system.current_platform = platform  # Set platform here
-                # Return to the previous menu (stored in stack)
-                if menu_system.stack:
-                    return menu_system.stack[-1]["menu_name"]  # Prior menu before selection
-                else:
-                    return "main_menu"  # Default fallback
-            
-            return select
-
-        # Generate options for each configured platform
-        self.options = []
-        for name, platform in get_configured_platforms():  # Use your existing logic to filter platforms
-            self.options.append(
-                MenuItem(
-                    text=f"{name} ({platform})",
-                    action_func=make_select_action(platform),
-                    requires_platform=False,
-                    target=None  # No default fallback needed due to return value
-                )
-            )
-
-
 class SettingsMenu(BaseMenu):
     def __init__(self):
         super().__init__("settings_menu")
         self.options = [
             MenuItem(
-                text="a. MAME Software List XML Directory",
-                action_func=slist_dir_function,
-                requires_platform = False
-            ),
-            MenuItem(
-                text="b. Configure Root DAT/ROM Directories (ROMvault)",
-                action_func=root_dirs_function,
-                requires_platform = False
-            ),
-            MenuItem(
-                text="c. Configure DAT/ROM Platform Directories",
+                text="a. Configure DAT/ROM Platform Directories",
                 target="dat_menu",
+                requires_platform = True
+            ),
+            MenuItem(
+                text="b. Reconfigure Global Directories",
+                action_func=self._handle_reconfigure_settings,
                 requires_platform = False
             ),
             MenuItem(
-                text="d. Destination folder for CHDs",
-                action_func=chd_dir_function,
+                text="c. Destination folder for CHDs",
+                #action_func=chd_dir_function,
                 requires_platform = False
             ),
             MenuItem(
-                text="e. Back",
+                text="d. Back",
                 is_back=True,
                 requires_platform = False
             )
         ]
+    def _get_settings_list(self) -> List[Tuple[str, str, str]]:
+        """Define the list of configurable settings for this menu with input type."""
+        return [
+            ('datroot', 'DAT Root Directory', 'directory'),
+            ('romroot', 'ROM Root Directory', 'directory'),
+            ('mame_hash_dir', 'MAME Software List (hash) Directory', 'directory'),
+            ('romvault', 'Enable RomVault', 'boolean')  # Add boolean flag
+        ]
+
+    def _handle_reconfigure_settings(self, platform_manager: "PlatformManager"):
+        """Handler for re-configuring global settings in this menu."""
+        settings_list = self._get_settings_list()
+        reconfigure_settings(instance=platform_manager, settings_list=settings_list)
 
 class MapMenu(BaseMenu):
     def __init__(self):
@@ -918,31 +682,31 @@ class MapMenu(BaseMenu):
         self.options = [
             MenuItem(
                 text="a. Automatically map based on source rom info", 
-                action_func = automap_function,
+                action_func = automap_function
             ),
             MenuItem(
                 text="b. List missing matched ROM Files",
-                action_func = list_missing_function,
+                action_func = list_missing_function
             ),
             MenuItem(
                 text="c. List TOSEC sources",
-                action_func = tosec_list_function,
+                action_func = tosec_list_function
             ),
             MenuItem(
                 text="d. List unknown sources",
-                action_func = unknown_list_function,
+                action_func = unknown_list_function
             ),
             MenuItem(
                 text="e. Update ROM matches",
-                action_func = update_file_match_function,
+                action_func = update_file_match_function
             ),
             MenuItem(
                 text = "b. Mapping Stage 2", 
-                target = "map_stage_two",
+                target = "map_stage_two"
             ),
             MenuItem(
                 text = "g. Change Platform",
-                action_func = platform_select,
+                # action_func = platform_select,
                 requires_platform = False
             ),
             MenuItem(
@@ -1061,16 +825,10 @@ class DatMenu(BaseMenu):
 
 if __name__ == '__main__':
     script_dir = get_script_path()
-
-    if len(settings) == 0:
-        # walk through all the mandatory settings one by one on the first run
-        first_run()
-        save_data(settings,'settings',script_dir)
-    else:
-        update_dats()
-        save_data(settings,'settings',script_dir)
+    platform_manager = load_or_create_platform_manager()
 
     system = MenuSystem()
+    system.platform_manager = platform_manager
     
     # Register all menus
     system.register(MainMenu())
@@ -1078,7 +836,6 @@ if __name__ == '__main__':
     system.register(SettingsMenu())
     system.register(MapStageTwo())
     system.register(MapStageThree())
-    system.register(SelectPlatformMenu())
     system.register(DatMenu())
 
     # Initialize the main menu
@@ -1114,6 +871,8 @@ if __name__ == '__main__':
         if next_target_name == None: # Handled by 'is_back' logic in execute()
             pass
         elif next_target_name == "Exit":
+            platform_manager.save()
+            print("Exiting...")
             break
         else:
             system.navigate_to(next_target_name)  # Update current menu

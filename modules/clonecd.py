@@ -4,10 +4,9 @@ import os
 import struct
 from datetime import datetime
 from typing import List, Dict, Optional, Union
-from dataclasses import dataclass, field
 
 from modules.CD.atip import ATIP
-from modules.CD.fulltoc import FullTOC, TrackDataDescriptor, CDFullTOC
+from modules.CD.fulltoc import TrackDataDescriptor, CDFullTOC
 from modules.CD.sector import Sector
 from modules.CD.subchannel import Subchannel
 from modules.CD.cd_types import (

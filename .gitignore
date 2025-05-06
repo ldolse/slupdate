@@ -159,3 +159,4 @@ chdman
 *.cfg
 .aider*
 aider
+.pkl

@@ -1,7 +1,26 @@
 import re, xmltodict, hashlib
 import xml.etree.ElementTree as ET
-import html
+from html import unescape
 from lxml import etree
+import os
+from typing import Optional
+
+class DAT:
+    def __init__(self, path: str, rom_directory: Optional[str] = None):
+        self.path = path  # Full path to the DAT file (e.g., /datroot/psx/redump-psx.dat)
+        self.rom_directory = rom_directory  # Path to ROM directory for this DAT
+
+    @property
+    def name(self) -> str:
+        """Extract <name> from the DAT's XML header."""
+        try:
+            tree = ET.parse(self.path)
+            root = tree.getroot()
+            return unescape(root.find(".//header/name").text.strip())
+        except Exception as e:
+            print(f"Error parsing {self.path}: {e}")
+            return os.path.basename(self.path)  # Fallback to filename
+
 
 
 '''
@@ -522,7 +541,7 @@ def get_lxml_replacements(softlist_xml_file):
         # get the matched tag as a string
         entity_str = match.group(0)
         # unescape the entities to create the new key
-        new_key = html.unescape(entity_str)
+        new_key = unescape(entity_str)
         # add the new key and the matched tag as the value to the dictionary
         lxml_changes[new_key] = entity_str
     return lxml_changes
@@ -1270,12 +1289,3 @@ def get_dat_author(dat_path):
     root = tree.getroot()
     author = root.find('header/author').text
     return author
-
-
-def get_dat_name(dat_path):
-    tree = ET.parse(dat_path)
-    root = tree.getroot()
-    name = root.find('header/name').text
-    name = html.unescape(name)
-    return name
-    
