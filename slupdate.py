@@ -75,7 +75,8 @@ def url_map_function(platform):
         return 'map_menu'
     url_remaps = redump_url_mapping(softlist_dict[platform],all_dat_dict[platform],script_dir,platform)
     if url_remaps:
-        proceed = inquirer.confirm(menu_msgs['url_commit'], default=False)
+        url_commit_msg = "Updates based on Redump source URLs successful. Proceed to update the Softlist data?"
+        proceed = inquirer.confirm(url_commit_msg, default=False)
         if proceed:
             update_soft_dict(softlist_dict[platform],all_dat_dict[platform],url_remaps)
 
@@ -229,7 +230,8 @@ def hash_map_function(platform):
     fuzzy_matches = fuzzy_hash_compare(softlist_dict[platform], all_dat_dict[platform])
     confirmed = interactive_title_mapping(fuzzy_matches, softlist_dict[platform], all_dat_dict[platform],platform,script_dir, 'fuzzy')
     if confirmed:
-        proceed = inquirer.confirm(menu_msgs['fuzzy_commit'], default=False)
+        fuzzy_commit_msg = "Do you want to commit the new hashes the softlist?"
+        proceed = inquirer.confirm(fuzzy_commit_msg, default=False)
         if proceed:
             update_soft_dict(softlist_dict[platform],all_dat_dict[platform],confirmed)
 
@@ -264,7 +266,8 @@ def tosec_map_function(platform):
                 print('\nTOSEC to Redump matches have been found, note the entries listed above are multi-disc entries where there are')
                 print('both redump and tosec matches the next step will rewrite the softlist xml to update for redump sources.')
                 print('However for these mixed titles the tosec sources references will be deleted. please take note and manually restore these lines.\n')
-                proceed = inquirer.confirm(menu_msgs['tosec_commit'], default=False)
+                tosec_commit_msg = "Do you want to write the redump hashes to the softlist, overwriting TOSEC references?"
+                proceed = inquirer.confirm(tosec_commit_msg, default=False)
                 if proceed:
                     # update softlist sources based on tosec/redump matches
                     update_soft_dict(softlist_dict[platform],all_dat_dict[platform],tosec_matches)
@@ -279,7 +282,7 @@ def tosec_map_function(platform):
 
 def entry_create_function(platform):
     print('new entry placeholder')
-    proceed = inquirer.confirm(menu_msgs['new'], default=False)
+    pass
 
 def setup_platform_dicts(platform):
     '''
@@ -347,7 +350,8 @@ def process_interactive_matches(interactive_matches,platform,match_type):
     print('Some matches require user review\n')
     confirmed_interactive = interactive_title_mapping(interactive_matches,softlist_dict[platform],all_dat_dict[platform],platform,script_dir,match_type)
     if confirmed_interactive:
-        proceed = inquirer.confirm(menu_msgs['tosec_commit'], default=False)
+        message = "Do you want to commit the new hashes the softlist?"
+        proceed = inquirer.confirm(message, default=False)
         if proceed:
             update_soft_dict(softlist_dict[platform],all_dat_dict[platform],confirmed_interactive)
 
@@ -356,7 +360,8 @@ def automated_mapping(platform,lookup_type):
     name_serial_matches, redump_interactive_matches = name_serial_auto_map(platform, softlist_dict[platform],all_dat_dict[platform],script_dir,lookup_type)
     if name_serial_matches:
         print('\nThe above Name / Serial matches have been found, do you want to commit the new hashes the softlist?')
-        proceed = inquirer.confirm(menu_msgs['tosec_commit'], default=False)
+        message = "Do you want to commit the new hashes the softlist?"
+        proceed = inquirer.confirm(message, default=False)
         if proceed:
             # update softlist sources based on tosec/redump matches
             update_soft_dict(softlist_dict[platform],all_dat_dict[platform],name_serial_matches)
@@ -539,7 +544,8 @@ def del_dats_function(platform):
         print('deleting '+settings['datroot']+'\nfrom '+dat)
         datlist.append(dat.replace(settings['datroot'], ''))
     datlist.append('back')
-    answer = list_menu('dat', datlist, menu_msgs['dat_remove'])
+    message = 'Select a DAT to remove from the list'
+    answer = list_menu('dat', datlist, message)
     if answer['dat'] == 'back':
         return 'settings_menu'
     else:
@@ -608,6 +614,7 @@ def configure_initial_platform(platform_manager: PlatformManager):
 class MainMenu(BaseMenu):
     def __init__(self):
         super().__init__("main_menu")
+        self.message = "Main Menu"
         self.options = [
             MenuItem(
                 text = "a. Mapping Functions",
@@ -639,6 +646,7 @@ class MainMenu(BaseMenu):
 class SettingsMenu(BaseMenu):
     def __init__(self):
         super().__init__("settings_menu")
+        self.message = "Settiings Menu"
         self.options = [
             MenuItem(
                 text="a. Configure DAT/ROM Platform Directories",
@@ -678,7 +686,7 @@ class SettingsMenu(BaseMenu):
 class MapMenu(BaseMenu):
     def __init__(self):
         super().__init__("map_menu")
-        # Populate options using MenuItem objects
+        self.message = "Process software lists and dat files, mapping source file references"
         self.options = [
             MenuItem(
                 text="a. Automatically map based on source rom info", 
@@ -719,6 +727,7 @@ class MapMenu(BaseMenu):
 class MapStageTwo(BaseMenu):
     def __init__(self):
         super().__init__("map_stage_two")
+        self.message = "Use other reference datapoints to remap the software list & DAT files"
         self.options = [
             MenuItem(
                 text="a. Redump URL Based Mapping",
@@ -770,6 +779,7 @@ class MapStageTwo(BaseMenu):
 class MapStageThree(BaseMenu):
     def __init__(self):
         super().__init__("map_stage_three")
+        self.message = "Assisted Mapping Functions"
         self.options = [
             MenuItem(
                 text="a. Fuzzy Matches - Remap bad/alternate Dumps",

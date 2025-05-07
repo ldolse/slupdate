@@ -1,34 +1,7 @@
 from typing import Dict, Optional
-import inquirer
 import inspect
 from modules.platform_manager import PlatformManager
 from modules.platform import Platform
-
-# key for the menu correlates to the key for the menu's item list
-menu_msgs = {'main_menu' : 'Main Menu, select an option',
-             'map_menu' : 'Process software lists and dat files, mapping source files to build chds',
-             'map_stage_two' : 'Next steps after auto-mapping',
-             'map_stage_three' : 'Assisted Mapping Functions',
-             'chd_builder' : 'Choose a console to build CHD\'s for current match list',
-             'new' : 'This function will look for DAT entries which don\'t appear in software lists and assist with creating Software List records, continue?',
-             '5' : 'MAME hash directory and dat directories for at least one platform must be configured.',
-             'save' : 'Save asisted mapping answers and other user generated data?  This will overwrite anything previously written to disk',
-             '2a' : 'Begin building CHDs?',
-             '2b' : 'Update the Software List with new hashes?',
-             'soft' : 'Please select the MAME Software List XML directory',
-             'chd' : 'CHD Builder Destination Directory',
-             'dat_menu' : 'DAT Source Directories',
-             'rom' : 'ROM Source Directories',
-             'settings_menu' : 'Settings',
-             'select_console' : 'Select a console to configure ',
-             'select_platform_menu' : 'Platform Selection: Select a console to to work with ',
-             'dat_remove' : 'Select a DAT to remove',
-             'dir_d' : 'Select a Directory to Remove',
-             'romvault' : 'Are you using ROMVault to manage DATs and ROMs?',
-             'url_commit' : 'Updates based on Redump source URLs successful. Proceed to update the Softlist data?',
-             'tosec_commit' : 'Proceed to update the Softlist data?',
-             'fuzzy_commit' : 'Proceed to update the Softlist data?'
-    }
 
 # Core Classes for Navigation System
 class MenuItem:
@@ -101,8 +74,8 @@ class MenuItem:
 class BaseMenu:
     """Base class for all menus"""
     def __init__(self, name: str):
-        self.name = name  # Matches keys from original "menu_msgs"
-        self.message_key = name  
+        self.name = name
+        self.message = f"Message not set - should be defined by subclass {name}"
         self._options = []
     
     @property
@@ -121,10 +94,6 @@ class BaseMenu:
                 item.target_name = self.name  # Default back to own menu
         
         self._options = new_options
-
-    @property
-    def message(self) -> str:
-        return menu_msgs.get(self.message_key, f"NO MESSAGE FOUND: {self.name}")
 
 
 class MenuSystem:
