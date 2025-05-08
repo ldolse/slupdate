@@ -8,6 +8,7 @@ from modules.utils import save_data, restore_dict, list_menu
 import inquirer
 import hashlib
 from difflib import get_close_matches
+from modules.platform import Platform
 
 
 redump_site_dict = restore_dict('redump_site_dict')
@@ -131,7 +132,7 @@ def get_tosec_tuples(rom_entry,debug=False):
         return None
 
 
-def update_soft_dict(sl_dict,dat_dict,new_sources_map):
+def update_soft_dict(platform: Platform, new_sources_map):
     '''
     updates the softlist dictionary with new source data
 
@@ -153,6 +154,8 @@ def update_soft_dict(sl_dict,dat_dict,new_sources_map):
     Returns:
     None: Updates the softlist dictionary in place
     '''
+    sl_dict = platform.software_list_data
+    dat_dict = platform.dat_hashes
     for disc_key, replace_data in new_sources_map.items():
         soft_name = disc_key[0]
         soft_part = sl_dict[soft_name]['parts'][disc_key[1]]

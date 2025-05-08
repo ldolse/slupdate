@@ -29,6 +29,7 @@ class PlatformManager:
         }
         self.datroot: Optional[str] = None
         self.romroot: Optional[str] = None
+        self.chdroot: Optional[str] = None
         self.mame_hash_dir: Optional[str] = None
         self.romvault: bool = True
 
@@ -49,6 +50,9 @@ class PlatformManager:
         if not self.mame_hash_dir:
             print("Configure MAME Software List (hash) directory...")
             self.mame_hash_dir = select_directory('MAME Hash', start_dir=self.datroot)
+        if not self.chdroot:
+            print("CHD Root directory...")
+            self.chdroot = select_directory('CHD Folder', start_dir=self.romroot)
         if not hasattr(self, 'romvault'):
             romvault_answer = inquirer.confirm("Are you using RomVault?")
             self.romvault = romvault_answer
@@ -122,11 +126,13 @@ class PlatformManager:
                 (name for name, platform_key in self.consoles.items() if platform_key == key),
                 key
             )
+            softlist_xml_path = os.path.join(self.mame_hash_dir, f"{key}.xml")
+            chd_path = os.path.join(self.chdroot, key)
             # Create the appropriate subclass based on platform key
             if key == 'psx':
-                platform = PlayStationPlatform(key=key, name=name_from_consoles)
+                platform = PlayStationPlatform(key=key, name=name_from_consoles, softlist_xml_path=softlist_xml_path, chd_path=chd_path)
             else:
-                platform = Platform(key=key, name=name_from_consoles)
+                platform = Platform(key=key, name=name_from_consoles, softlist_xml_path=softlist_xml_path, chd_path=chd_path)
             self.platforms[key] = platform
         return self.platforms[key]
 
