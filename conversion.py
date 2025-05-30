@@ -1,12 +1,12 @@
 import os
 from modules.plugin_register import PluginRegister
-from modules.clonecd_filter import CloneCDFilter
-from modules.clonecd import CloneCD
+from optical_media.clonecd.clonecd_filter import CloneCDFilter
+from optical_media.clonecd import CloneCD
 from modules.error_number import ErrorNumber
-from modules.CD.subchannel import Subchannel
-from modules.CD.fulltoc import FullTOC
-from modules.CD.cd_types import enum_name, SectorTagType, MediaType, MetadataMediaType, TrackType, TrackSubchannelType
-from modules.checksums import CRC16CCITTContext
+from optical_media.BaseCD.subchannel import Subchannel
+from optical_media.BaseCD.fulltoc import FullTOC
+from optical_media.BaseCD.cd_types import enum_name, SectorTagType, MediaType, MetadataMediaType, TrackType, TrackSubchannelType
+from optical_media.cd_utils.checksums import CRC16CCITTContext
 
 def initialize_plugins():
     register = PluginRegister.get_instance()

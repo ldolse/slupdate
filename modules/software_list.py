@@ -18,7 +18,7 @@ def convert_xml(file, comments=False):
         fileptr = open(file, 'r' ,encoding='utf-8')
         xml_content= fileptr.read()
         my_ordered_dict=xmltodict.parse(xml_content, process_comments=comments, force_list=('info','rom',))
-        return my_ordered_dict
+        return dict(my_ordered_dict['softwarelist'])
     except FileNotFoundError:
         print(f"Error: The file {file} was not found.")
 
@@ -257,140 +257,142 @@ def process_commentlines(raw_comment_lines):
             note_entry = note_entry+line.strip()+'\n'
     return note_entry,rom_entry,redump_sources
 
-def comment_to_sl_dict(soft,raw_comment_dict,sl_dict):
-    '''
-    takes a comment dictionary and adds the parsed data to the softlist dictionary
-    '''
-    s_name = soft['@name']
-    split_sources = False
-    toc = r'(\.(cue|gdi))'
-    trurip = '(Trurip|trurip)'
-    redump_sources = []
-    rom_sources = {}
-    notenum = 1
-    mismatch = False
-    disc_count = len(sl_dict[s_name]['parts'])
-    # get number of TOC files in the comment
-    total_toc = sum(len(re.findall(toc, comment)) for comments in raw_comment_dict.values() for comment in comments)
-    if disc_count != total_toc and total_toc > 0:
-        print(f' * mismatched toc/disc count for {s_name} {total_toc} toc / {disc_count} disc(s)\n   - Please ensure the source references are attached to the correct disc')
-        mismatch = True
-    if disc_count > 1:
-        split_sources = True
-    for comment_location, comments in raw_comment_dict.items():
-        notedict = {}
-        rom_entry = ''
-        notes = ''
-        for comment in comments:
-            if split_sources and len(re.findall(toc, comment)) > 1:
-                # add lines which aren't rom entries to a new comment until we hit a rom line
-                commentlines = comment.split('\n')
-                romhash = r'^(\s+)?<rom name'
-                info_comments = ''
-                rom_comments = ''
-                for line in commentlines:
-                    if re.match(romhash,line.strip()):
-                        rom_comments += line.strip()+'\n'
-                    else:
-                        line = line.strip()
-                        if line:
-                            info_comments += line.strip()+'\n'
-                #print(f'rom_comments are\n{rom_comments}')
-                comments_by_disc = split_data_by_discs(rom_comments)
-                #print(f'have {len(comments_by_disc)} rom comments in {s_name}')
-                # separate out the individual comment lines to the different types of comments
-                note_entry,rom_entry,redump_source_info = process_commentlines(info_comments)
-                notes += note_entry.strip()
-                redump_sources += redump_source_info
-                disc = 1
-                for disc_comm in comments_by_disc:
-                    note_entry,rom_entry,redump_source_info = process_commentlines(disc_comm)
-                    notes += note_entry.strip()
-                    redump_sources += redump_source_info
-                    if rom_entry:
-                        # convert commented DAT entries to a dict list
-                        rom_sources['cdrom'+str(disc)] = sl_romhashes_to_dict(rom_entry)
-                        disc +=1
-            else:
-                note_entry,rom_entry,redump_source_info = process_commentlines(comment)
-                notes += note_entry
-                redump_sources += redump_source_info
-                # convert commented DAT entries to a dict
-                if rom_entry:
-                    # keep the comment associated with the assigned disc
-                    if comment_location.startswith('cdrom'):
-                        rom_sources[comment_location] = sl_romhashes_to_dict(rom_entry)
-                    # if discs/sources mismatch for a single disc, assign to the first disc
-                    elif mismatch:
-                        rom_sources['cdrom1'] = sl_romhashes_to_dict(rom_entry)
-                    else:
-                        rom_sources['cdrom'] = sl_romhashes_to_dict(rom_entry)
 
-        # set the proper destinations based on whether the comment came from the root of 
-        # the softlist or if it came from a disc part
-        if comment_location == 'main_entry':
-            comment_dest = sl_dict[s_name]
-            except_dest_outer = sl_dict
-            except_dest_inner = s_name
-        elif comment_location.startswith('cdrom'):
-            comment_dest = sl_dict[s_name]['parts'][comment_location]
-            except_dest_outer = sl_dict[s_name]['parts'][comment_location]
-            except_dest_inner = comment_location
-        if rom_sources:
-            # concatenate the hashes from the rom dict if it was directly associated with a disc
-            #if rom_dict and comment_location.startswith('cdrom'):
-            for location, rom_data in rom_sources.items():
-                if location.startswith('cdrom'):
-                    try:
-                        comment_dest = sl_dict[s_name]['parts'][location]
-                    except:
-                        print(f'Error writing hashes for {s_name}, {location}, check the softlist entry')
-                else:
-                    location = 'cdrom'
-                concatenated_hashes, source_type, sizes = rom_entries_to_source_ids(s_name,rom_data['file_list'])
-                update_sl_rom_source_ids(concatenated_hashes,s_name,sl_dict[s_name],source_type,sizes,location)
-                # store the raw source info for troubleshooting or dat creation
-                try:
-                    comment_dest.update(rom_data)
-                except Exception as error:
-                    print(f'got an error trying to update this note {error}, {rom_sources}')
-                    except_dest_outer.update({comment_location:rom_sources})
-        # handle notes
-        if notes:
-            notedict['note'+str(notenum)] = notes
-            notenum += 1
-            try:
-                comment_dest.update(notedict)
-            except Exception as error:
-                print(f'got an error trying to update this note {error}, {notedict}')
-                except_dest_outer.update({except_dest_inner:notedict})
-
-        if redump_sources:
-            if len(redump_sources) == 1 and comment_location == 'main_entry':
-                if 'cdrom' in sl_dict[s_name]['parts']:
-                    sl_dict[s_name]['parts']['cdrom'].update({'redump_url':redump_sources[0].strip()})
-                else:
-                    print(f'could not find the cdrom disc to insert redump url for {soft["@name"]}')
-            elif len(redump_sources) == 1 and comment_location.startswith('cdrom'):
-                if comment_location in sl_dict[s_name]['parts']:
-                    sl_dict[s_name]['parts'][comment_location].update({'redump_url':redump_sources[0].strip()})
-                else:
-                    print(f'could not find the {comment_location} disc to insert redump url for {soft["@name"]}')
-            else:
-                discnum = 1
-                for url in redump_sources:
-                    disc = 'cdrom'+str(discnum)
-                    if disc in sl_dict[s_name]['parts']:
-                        sl_dict[s_name]['parts'][disc].update({'redump_url':url.strip()})
-                    else:
-                        print(f'could not find the {disc} to insert redump url for {soft["@name"]}')
-                    discnum += 1
 
 
 def process_comments(soft_entry, sl_dict):
     '''
     takes a softlist entry and processes the comments into a dictionary
     '''
+    def comment_to_sl_dict(soft,raw_comment_dict,sl_dict):
+        '''
+        takes a comment dictionary and adds the parsed data to the softlist dictionary
+        '''
+        s_name = soft['@name']
+        split_sources = False
+        toc = r'(\.(cue|gdi))'
+        trurip = '(Trurip|trurip)'
+        redump_sources = []
+        rom_sources = {}
+        notenum = 1
+        mismatch = False
+        disc_count = len(sl_dict[s_name]['parts'])
+        # get number of TOC files in the comment
+        total_toc = sum(len(re.findall(toc, comment)) for comments in raw_comment_dict.values() for comment in comments)
+        if disc_count != total_toc and total_toc > 0:
+            print(f' * mismatched toc/disc count for {s_name} {total_toc} toc / {disc_count} disc(s)\n   - Please ensure the source references are attached to the correct disc')
+            mismatch = True
+        if disc_count > 1:
+            split_sources = True
+        for comment_location, comments in raw_comment_dict.items():
+            notedict = {}
+            rom_entry = ''
+            notes = ''
+            for comment in comments:
+                if split_sources and len(re.findall(toc, comment)) > 1:
+                    # add lines which aren't rom entries to a new comment until we hit a rom line
+                    commentlines = comment.split('\n')
+                    romhash = r'^(\s+)?<rom name'
+                    info_comments = ''
+                    rom_comments = ''
+                    for line in commentlines:
+                        if re.match(romhash,line.strip()):
+                            rom_comments += line.strip()+'\n'
+                        else:
+                            line = line.strip()
+                            if line:
+                                info_comments += line.strip()+'\n'
+                    #print(f'rom_comments are\n{rom_comments}')
+                    comments_by_disc = split_data_by_discs(rom_comments)
+                    #print(f'have {len(comments_by_disc)} rom comments in {s_name}')
+                    # separate out the individual comment lines to the different types of comments
+                    note_entry,rom_entry,redump_source_info = process_commentlines(info_comments)
+                    notes += note_entry.strip()
+                    redump_sources += redump_source_info
+                    disc = 1
+                    for disc_comm in comments_by_disc:
+                        note_entry,rom_entry,redump_source_info = process_commentlines(disc_comm)
+                        notes += note_entry.strip()
+                        redump_sources += redump_source_info
+                        if rom_entry:
+                            # convert commented DAT entries to a dict list
+                            rom_sources['cdrom'+str(disc)] = sl_romhashes_to_dict(rom_entry)
+                            disc +=1
+                else:
+                    note_entry,rom_entry,redump_source_info = process_commentlines(comment)
+                    notes += note_entry
+                    redump_sources += redump_source_info
+                    # convert commented DAT entries to a dict
+                    if rom_entry:
+                        # keep the comment associated with the assigned disc
+                        if comment_location.startswith('cdrom'):
+                            rom_sources[comment_location] = sl_romhashes_to_dict(rom_entry)
+                        # if discs/sources mismatch for a single disc, assign to the first disc
+                        elif mismatch:
+                            rom_sources['cdrom1'] = sl_romhashes_to_dict(rom_entry)
+                        else:
+                            rom_sources['cdrom'] = sl_romhashes_to_dict(rom_entry)
+
+            # set the proper destinations based on whether the comment came from the root of 
+            # the softlist or if it came from a disc part
+            if comment_location == 'main_entry':
+                comment_dest = sl_dict[s_name]
+                except_dest_outer = sl_dict
+                except_dest_inner = s_name
+            elif comment_location.startswith('cdrom'):
+                comment_dest = sl_dict[s_name]['parts'][comment_location]
+                except_dest_outer = sl_dict[s_name]['parts'][comment_location]
+                except_dest_inner = comment_location
+            if rom_sources:
+                # concatenate the hashes from the rom dict if it was directly associated with a disc
+                #if rom_dict and comment_location.startswith('cdrom'):
+                for location, rom_data in rom_sources.items():
+                    if location.startswith('cdrom'):
+                        try:
+                            comment_dest = sl_dict[s_name]['parts'][location]
+                        except:
+                            print(f'Error writing hashes for {s_name}, {location}, check the softlist entry')
+                    else:
+                        location = 'cdrom'
+                    concatenated_hashes, source_type, sizes = rom_entries_to_source_ids(s_name,rom_data['file_list'])
+                    update_sl_rom_source_ids(concatenated_hashes,s_name,sl_dict[s_name],source_type,sizes,location)
+                    # store the raw source info for troubleshooting or dat creation
+                    try:
+                        comment_dest.update(rom_data)
+                    except Exception as error:
+                        print(f'got an error trying to update this note {error}, {rom_sources}')
+                        except_dest_outer.update({comment_location:rom_sources})
+            # handle notes
+            if notes:
+                notedict['note'+str(notenum)] = notes
+                notenum += 1
+                try:
+                    comment_dest.update(notedict)
+                except Exception as error:
+                    print(f'got an error trying to update this note {error}, {notedict}')
+                    except_dest_outer.update({except_dest_inner:notedict})
+
+            if redump_sources:
+                if len(redump_sources) == 1 and comment_location == 'main_entry':
+                    if 'cdrom' in sl_dict[s_name]['parts']:
+                        sl_dict[s_name]['parts']['cdrom'].update({'redump_url':redump_sources[0].strip()})
+                    else:
+                        print(f'could not find the cdrom disc to insert redump url for {soft["@name"]}')
+                elif len(redump_sources) == 1 and comment_location.startswith('cdrom'):
+                    if comment_location in sl_dict[s_name]['parts']:
+                        sl_dict[s_name]['parts'][comment_location].update({'redump_url':redump_sources[0].strip()})
+                    else:
+                        print(f'could not find the {comment_location} disc to insert redump url for {soft["@name"]}')
+                else:
+                    discnum = 1
+                    for url in redump_sources:
+                        disc = 'cdrom'+str(discnum)
+                        if disc in sl_dict[s_name]['parts']:
+                            sl_dict[s_name]['parts'][disc].update({'redump_url':url.strip()})
+                        else:
+                            print(f'could not find the {disc} to insert redump url for {soft["@name"]}')
+                        discnum += 1
+    
     raw_comment_dict = {}
     if '#comment' in soft_entry:
         if not isinstance(soft_entry['#comment'], list):
@@ -443,6 +445,9 @@ def sanitize_serials(raw_serial,platform):
 
 def build_sl_dict(softlist, sl_dict,platform):
     '''
+    softlist: raw softlist data from xmltodict
+    sl_dict: dictionary to build
+    platform: platform key
     grabs useful sofltist data and inserts into a simpler dict object
     '''
     for soft in softlist:
@@ -967,7 +972,6 @@ def modify_rom_source_refs_old(xml_root, software_name, rom_strings, disc):
             software_node.remove(comment_node)
 
 def shift_sibling_comments(xml_file):
-    import lxml.etree
     tree, tags_with_whitespace = get_lxml_tree_strings(xml_file)
     root = tree.getroot()
 
@@ -978,7 +982,7 @@ def shift_sibling_comments(xml_file):
             for sibling in child.itersiblings(preceding=True):
                 if not firstsibling:
                     break
-                if isinstance(sibling, lxml.etree._Comment):
+                if isinstance(sibling, etree._Comment):
                     comment_string = etree.tostring(sibling)
                     #comment_bytes = str(lxml.html.tostring(sibling))
                     #comment_string = comment_bytes.decode('UTF-8')

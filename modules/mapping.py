@@ -1,14 +1,13 @@
 import re
 import requests
+from utils import requests_retry_session
 from bs4 import BeautifulSoup
-from requests.adapters import HTTPAdapter
-from requests.adapters import Retry
 from urllib.parse import urlparse
-from modules.utils import save_data, restore_dict, list_menu
+from utils.utils import save_data, restore_dict, list_menu
 import inquirer
 import hashlib
 from difflib import get_close_matches
-from modules.platform import Platform
+from consoles import Platform
 
 
 redump_site_dict = restore_dict('redump_site_dict')
@@ -216,7 +215,7 @@ def libcrypt_report(psx_dict):
     Parameters:
     psx_dict (dict): The PSX dictionary
     '''
-    from modules.libcrypt import libcrypt_titles
+    from consoles.psx.libcrypt import libcrypt_titles
     for soft, soft_data in psx_dict.items():
         if 'serial' in soft_data:
             for serial in soft_data['serial']:
@@ -278,27 +277,6 @@ def map_tosec_entries(sl_dict,dat_dict,redump_tuples):
             print(f'    {description}')
         print('\n\n')
     return tosec_matches
-
-
-def requests_retry_session(
-    retries=4,
-    backoff_factor=0.3,
-    status_forcelist=(500, 502, 504),
-    session=None,
-):
-    session = session or requests.Session()
-    retry = Retry(
-        total=retries,
-        read=retries,
-        connect=retries,
-        backoff_factor=backoff_factor,
-        status_forcelist=status_forcelist,
-    )
-    adapter = HTTPAdapter(max_retries=retry)
-    session.mount('http://', adapter)
-    session.mount('https://', adapter)
-    return session
-
 
 def rtable_to_dict(bs_table):
     gameinfo = {}
@@ -725,7 +703,10 @@ def get_sha_dat_match(sha_lookup, dat_dict, redump=True):
     return matched_dat, returned_title
 
 
-def redump_url_mapping(sl_dict,dat_dict,script_dir,platform):
+def redump_url_mapping(platform_inst: Platform,script_dir):
+    platform = platform_inst.key
+    sl_dict = platform_inst.software_list_data
+    dat_dict = platform_inst.dat_hashes
     url_mappings = {}
     if platform not in redump_site_dict:
         build_redump_site_dict(platform,script_dir)
@@ -1220,7 +1201,7 @@ def build_redump_site_dict(platform,script_dir):
 
 def parse_games_table(games_dict, soup):
     table = soup.find('table', class_='games')
-    print(f'table is \n{table.text}')
+    #print(f'table is \n{table.text}')
     rows = table.find_all('tr')[1:]
     rev_list = {}
     for row in rows:
@@ -1280,19 +1261,8 @@ def parse_games_table(games_dict, soup):
         }
         if localized_title:
             game_entry['localized'] = localized_title
-        if disc_href not in games_dict:
-            games_dict[disc_href] = {}
-        if dat_style_title in games_dict[disc_href]:
-            # handle different revisions with the same url
-            if version:
-                revtitle = dat_style_title+'('+version+')'
-            else:
-                revtitle = dat_style_title+'('+re.sub(r'/disc/(\d+)/',r'\1',disc_href)+')'
-            rev_list.update({serial:revtitle})
-            if revtitle in games_dict[disc_href]:
-                print('duplicate title for serial '+serial+':\n'+revtitle)
-                print('This error isn\'t handled')
-            games_dict[disc_href][revtitle] = game_entry
+        if disc_href in games_dict:
+            print(f"duplicate entry occurred - {game_entry["db_title"]}: {disc_href} ")
         else:
             games_dict[disc_href] = game_entry
     return games_dict

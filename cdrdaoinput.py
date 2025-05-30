@@ -1,12 +1,12 @@
 import os
 from modules.plugin_register import PluginRegister
-from modules.cdrdao_filter import CDRDAOFilter
-from modules.cdrdao import Cdrdao
+from optical_media.cdrdao.cdrdao_filter import CDRDAOFilter
+from optical_media import Cdrdao
 from modules.error_number import ErrorNumber
-from modules.CD.subchannel import Subchannel
-from modules.CD.fulltoc import FullTOC
-from modules.CD.cd_types import enum_name, SectorTagType, MediaType, MetadataMediaType, TrackType, TrackSubchannelType
-from modules.checksums import CRC16CCITTContext
+from optical_media.BaseCD.subchannel import Subchannel
+from optical_media.BaseCD.fulltoc import FullTOC
+from optical_media.BaseCD.cd_types import enum_name, SectorTagType, MediaType, MetadataMediaType, TrackType, TrackSubchannelType
+from optical_media.cd_utils.checksums import CRC16CCITTContext
 
 def initialize_plugins():
     register = PluginRegister.get_instance()

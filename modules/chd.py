@@ -8,7 +8,6 @@ import zipfile
 import logging
 import builtins
 import inquirer
-import requests
 
 '''
 functions for working with chds and ROM/Zip files are defined in this module
