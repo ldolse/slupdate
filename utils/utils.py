@@ -127,8 +127,13 @@ def get_os_dirs(path):
     try:
         directories = [d for d in os.listdir(path) if os.path.isdir(os.path.join(path, d))]
         directories.sort()
-        directories.insert(0,'Parent Directory')
-        directories.append('Select the current directory')
+        # If no directories found, reverse the order of special options
+        if len(directories) == 0:
+            directories.insert(0, 'Select the current directory')
+            directories.append('Parent Directory')
+        else:
+            directories.insert(0, 'Parent Directory')
+            directories.append('Select the current directory')
         return directories
     except FileNotFoundError as e:
         print(f"Error: Directory not found - {path}")
