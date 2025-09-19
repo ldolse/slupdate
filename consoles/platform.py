@@ -1,9 +1,9 @@
 #from modules.dat import DAT
-import os, pickle
+import os
 from dat import RomDat
 from modules.software_list import shift_sibling_comments, convert_xml, build_sl_dict
 from softwarelist import SoftwareList, Part
-from utils.utils import save_data, select_directory
+from utils.utils import select_directory
 from media_registry import MediaRegistry
 from game_metadata import RedumpDB
 
