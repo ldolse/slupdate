@@ -27,11 +27,11 @@ class Platform:
         self.softlist_xml_path = softlist_xml_path
         self.chd_path = chd_path
         self.softwarelist: SoftwareList = None
-        self.software_list_data = {}  # MAME software list data
+        self.software_list_data = {}  # MAME software list data; Deprecated: Use SoftwareList class instead.
         self.dat_directories: dict[str, list[RomDat]] = {}
-        self.redump_data = {}           # Redump site data
+        self.redump_data = {}           # Redump site data; Deprecated: Use RedumpDB class instead.
         self.redump_db: RedumpDB = None
-        self.dat_hashes = {}         # Hashes for DAT files
+        self.dat_hashes = {}         # Hashes for DAT files; Deprecated: Use MediaRegistry instead.
         self._stats_cache = {}
         self.mr: MediaRegistry = None
 
@@ -79,10 +79,13 @@ class Platform:
     def _init_redump_db(self) -> None:
         if self.redump_db == None:
             self.redump_db = RedumpDB(self.key)
-        self.redump_db.fetch_all        
+        self.redump_db.fetch_all
 
     def build_dat_hashes(self) -> None:
-        """Process all DAT files for this platform, building hash/name lookup tables."""
+        """
+        Deprecated: Use MediaRegistry instead.
+        Process all DAT files for this platform, building hash/name lookup tables.
+        """
         # Initialize top-level keys if they don't exist
         for key in ['dat_group', 'name_lookup', 'hashes', 'duplicates']:
             self.dat_hashes.setdefault(key, {})
@@ -108,6 +111,7 @@ class Platform:
 
     def build_softlist_dict(self) -> None:
         '''
+        Deprecated: Use SoftwareList class instead.
         Processes the software list XML file and builds a dictionary of software entries.
         '''
         
@@ -122,6 +126,7 @@ class Platform:
 
     def update_softlist(self) -> None:
         '''
+        Deprecated: Use SoftwareList class instead.
         updates the software list xml file with new data
         '''
         from modules.software_list import update_rom_source_refs, rewrite_comment_source_group
@@ -132,6 +137,7 @@ class Platform:
 
     def remove_duplicate_entries(self) -> None:
         """
+        Deprecated: Use MediaRegistry instead.
         Removes duplicate DAT entries across groups, prioritizing 'redump' hashes.
         Updates self.dat_hashes in-place.
         """
@@ -164,59 +170,14 @@ class Platform:
 
         print(f"Removed {dupe_count} duplicate DAT entries")
         
-    def process_all_mapping_data(self) -> None:
+    def process_data(self) -> None:
         """
         Wrapper function to run all necessary setup steps for mapping.
         This orchestrates the complete data processing pipeline.
         """
-        self.update_dats()
-        self.register_dat_media()
-        self.register_softlist()
-
-    def find_dat_matches(self) -> None:
-        """
-        Find matches between software list entries and DAT entries using the MediaRegistry.
-        This replaces the original find_dat_matches function by leveraging the object-oriented
-        media registry system that handles all the core matching logic.
-        
-        This method now uses the data populated by process_all_mapping_data() and displays
-        the results from the MediaRegistry.
-        """
-        # Validate that we have the required data structures
-        if not self.mr:
-            print("Error: MediaRegistry not initialized. Please run process_all_mapping_data() first.")
-            return
-            
-        if not self.software_list_data:
-            print("Error: Software list data not available. Please run process_all_mapping_data() first.")
-            return
-
-        # Count the total number of softlist entries
-        total_softlist_entries = len(self.software_list_data)
-        # count the total number of entries with source references
-        total_source_ref = sum(1 for softlist_entry in self.software_list_data.values() for part in softlist_entry['parts'].values() if 'source_sha' in part)
-        # Count the number of entries where 'source_found' is True
-        total_source_found = sum(1 for softlist_entry in self.software_list_data.values() if softlist_entry['source_found'])
-        # Count the total number of CHDs found
-        chd_count = sum(1 for softlist_entry in self.software_list_data.values() for part in softlist_entry['parts'].values() if 'chd_found' in part and part['chd_found'])
-        # Count the total number of 'parts' across all entries
-        total_parts = sum(len(softlist_entry['parts']) for softlist_entry in self.software_list_data.values())
-        # Count the number of parts that have a 'source_dat' entry
-        total_source_dat = sum(1 for softlist_entry in self.software_list_data.values() for part in softlist_entry['parts'].values() if 'source_dat' in part)
-        # Count the number of parts that have a 'source_rom' entry
-        total_source_rom = len(list(part['source_rom'] for softlist_entry in self.software_list_data.values() for part in softlist_entry['parts'].values() if 'source_rom' in part))
-
-        print(f'found:\n  {total_source_ref} / {total_parts} individual discs contain source references')
-        print(f'  {total_source_dat} individual discs can be matched to dat sources')
-        print(f'  {total_source_found} / {total_softlist_entries} Software List Entries have DAT matches')
-        print(f'  {total_source_rom} valid zip files')
-        print(f'  {chd_count} chds already exist in the destination directory\n')
-        print('\nDAT Groups:')
-        # get the stats on source groups
-        from modules.mapping import get_source_stats, print_source_stats
-        source_stats = get_source_stats(self.software_list_data)
-        print_source_stats(source_stats,total_source_ref)
-        print('\n\nMatched DAT Entry Titles:')
+        self.update_dats() # find all DAT files and assign ROM directories
+        self.register_dat_media() # register all DAT files to MediaRegistry
+        self.register_softlist() # load and register software list to MediaRegistry
 
     def reset(self):
         """
