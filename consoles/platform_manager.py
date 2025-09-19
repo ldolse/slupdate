@@ -1,4 +1,4 @@
-from consoles.platform import Platform, PlayStationPlatform
+from .console import Platform, PlayStationPlatform
 from utils.utils import select_directory
 import os
 from typing import Optional

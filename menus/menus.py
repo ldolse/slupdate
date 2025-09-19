@@ -1,7 +1,7 @@
 from typing import Dict, Optional
 import inspect
 from consoles.platform_manager import PlatformManager
-from consoles.platform import Platform
+from consoles.consoles import Platform
 
 # Core Classes for Navigation System
 class MenuItem:
