@@ -124,11 +124,15 @@ def get_os_dirs(path):
     """
     Returns a list of directories in the given path
     """
-    directories = [d for d in os.listdir(path) if os.path.isdir(os.path.join(path, d))]
-    directories.sort()
-    directories.insert(0,'Parent Directory')
-    directories.append('Select the current directory')
-    return directories
+    try:
+        directories = [d for d in os.listdir(path) if os.path.isdir(os.path.join(path, d))]
+        directories.sort()
+        directories.insert(0,'Parent Directory')
+        directories.append('Select the current directory')
+        return directories
+    except FileNotFoundError as e:
+        print(f"Error: Directory not found - {path}")
+        raise
 
 def get_start_dir(filetype=None):
     start_path = None
@@ -162,20 +166,26 @@ def select_directory(filetype=None,start_dir=None):
     else:
         current_path = start_dir
     while not selected:
-        message = message = "Select a directory - current: ["+current_path+"]"
-        choices = get_os_dirs(current_path)
-        answers = list_menu(filetype,choices,message)
-        if answers[filetype] == 'Select the current directory':
-            selected = True
+        try:
+            message = "Select a directory - current: ["+current_path+"]"
+            choices = get_os_dirs(current_path)
+            answers = list_menu(filetype,choices,message)
+            if answers[filetype] == 'Select the current directory':
+                selected = True
+                os.chdir(origin_path)
+                return current_path
+            elif answers[filetype] == 'Parent Directory':
+                current_path = os.path.dirname(current_path)
+                os.chdir(os.path.dirname(current_path))
+            else:
+                parent_path = current_path
+                current_path = current_path+os.sep+answers[filetype]
+                os.chdir(current_path)
+        except FileNotFoundError as e:
+            print(f"Error: Directory not found - {current_path}")
+            # Return to the origin path and re-prompt
             os.chdir(origin_path)
-            return current_path
-        elif answers[filetype] == 'Parent Directory':
-            current_path = os.path.dirname(current_path)
-            os.chdir(os.path.dirname(current_path))
-        else:
-            parent_path = current_path
-            current_path = current_path+os.sep+answers[filetype]
-            os.chdir(current_path)
+            current_path = origin_path
 
 
 def reconfigure_settings(instance: object, settings_list: list[tuple[str, str, str]]):
@@ -218,4 +228,3 @@ def reconfigure_settings(instance: object, settings_list: list[tuple[str, str, s
             update_directory(choice_key)
         elif any(key[0] == choice_key and key[2] == "boolean" for key in settings_list):
             update_boolean(choice_key)
-
