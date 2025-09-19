@@ -27,12 +27,8 @@ class Platform:
         self.softlist_xml_path = softlist_xml_path
         self.chd_path = chd_path
         self.softwarelist: SoftwareList = None
-        self.software_list_data = {}  # MAME software list data; Deprecated: Use SoftwareList class instead.
         self.dat_directories: dict[str, list[RomDat]] = {}
-        self.redump_data = {}           # Redump site data; Deprecated: Use RedumpDB class instead.
         self.redump_db: RedumpDB = None
-        self.dat_hashes = {}         # Hashes for DAT files; Deprecated: Use MediaRegistry instead.
-        self._stats_cache = {}
         self.mr: MediaRegistry = None
 
     @property
@@ -40,17 +36,6 @@ class Platform:
         """Flatten all DAT instances across directories."""
         return [dat for dats_list in self.dat_directories.values() for dat in dats_list]
 
-    @property
-    def total_entries(self):
-        return len(self.software_list_data) if self.software_list_data else 0
-
-    @property
-    def source_found_count(self):
-        if 'source_found' not in self._stats_cache:
-            count = sum(1 for entry in self.software_list_data.values() 
-                       if getattr(entry, 'source_found', False))
-            self._stats_cache['source_found'] = count
-        return self._stats_cache['source_found']
     
     @property
     def dat_rom_dict(self):
@@ -80,95 +65,6 @@ class Platform:
         if self.redump_db == None:
             self.redump_db = RedumpDB(self.key)
         self.redump_db.fetch_all
-
-    def build_dat_hashes(self) -> None:
-        """
-        Deprecated: Use MediaRegistry instead.
-        Process all DAT files for this platform, building hash/name lookup tables.
-        """
-        # Initialize top-level keys if they don't exist
-        for key in ['dat_group', 'name_lookup', 'hashes', 'duplicates']:
-            self.dat_hashes.setdefault(key, {})
-
-        print(f'Processing {self.name} DAT Files')
-        for dat_instance in self._all_dats:
-            try:
-                # Build hash/name data from the DAT file
-                print(f'Building Hash Dict {dat_instance.path}')
-                keyresult, nameresult = dat_instance.build_hash_dict()
-                
-                dat_path = dat_instance.path
-                
-                # Update top-level dictionaries in self.dat_hashes
-                print('group')
-                self.dat_hashes['dat_group'][dat_path] = dat_instance.dat_group
-                self.dat_hashes['hashes'][dat_path] = keyresult
-                self.dat_hashes['name_lookup'][dat_path] = nameresult
-
-            except Exception as e:
-                print(f"Error processing DAT {dat_instance.path}: {e}")
-        self.remove_duplicate_entries()
-
-    def build_softlist_dict(self) -> None:
-        '''
-        Deprecated: Use SoftwareList class instead.
-        Processes the software list XML file and builds a dictionary of software entries.
-        '''
-        
-        # process the software list into a dict, creating hash based fingerprints from comments
-        print('processing '+self.name+' software list')
-        process_comments = True
-        shift_sibling_comments(self.softlist_xml_path)
-        softdict = convert_xml(self.softlist_xml_path,process_comments)
-
-        # build the dict object with relevant softlist data for this script, return bool whether crc source keys are needed
-        build_sl_dict(softdict['software'], self.software_list_data,self.key)
-
-    def update_softlist(self) -> None:
-        '''
-        Deprecated: Use SoftwareList class instead.
-        updates the software list xml file with new data
-        '''
-        from modules.software_list import update_rom_source_refs, rewrite_comment_source_group
-        # update re-mapped sources from DAT
-        update_rom_source_refs(self.softlist_xml_path,self.software_list_data)
-        # update the source group reference for unknown/undocumented sources that have been matched
-        rewrite_comment_source_group(self.softlist_xml_path,self.software_list_data)
-
-    def remove_duplicate_entries(self) -> None:
-        """
-        Deprecated: Use MediaRegistry instead.
-        Removes duplicate DAT entries across groups, prioritizing 'redump' hashes.
-        Updates self.dat_hashes in-place.
-        """
-        dupe_count = 0
-
-        for lookup_dat_path, lookup_hash_dict in self.dat_hashes["hashes"].items():
-            dat_group = self.dat_hashes["dat_group"][lookup_dat_path]
-            
-            # Skip redump DATs (we keep them as primary)
-            if dat_group == "redump":
-                continue
-                
-            pop_list = []
-            
-            for source_id in lookup_hash_dict:
-                for target_dat_path, target_hash_dict in self.dat_hashes["hashes"].items():
-                    target_group = self.dat_hashes["dat_group"][target_dat_path]
-                    
-                    # Skip same group and redump entries
-                    if dat_group == target_group:
-                        continue
-                        
-                    if source_id in target_hash_dict:
-                        pop_list.append(source_id)
-            
-            for to_delete in set(pop_list):  # Use set to avoid duplicates
-                if to_delete in lookup_hash_dict:
-                    lookup_hash_dict.pop(to_delete)
-                    dupe_count += 1
-
-        print(f"Removed {dupe_count} duplicate DAT entries")
         
     def process_data(self) -> None:
         """
@@ -178,15 +74,6 @@ class Platform:
         self.update_dats() # find all DAT files and assign ROM directories
         self.register_dat_media() # register all DAT files to MediaRegistry
         self.register_softlist() # load and register software list to MediaRegistry
-
-    def reset(self):
-        """
-        Resets the platform's state, clearing software list data and hashes.
-        """
-        self.software_list_data.clear()
-        self.dat_hashes.clear()
-        self.redump_data.clear()
-        self._stats_cache.clear()
 
     def update_dats(self):
         """

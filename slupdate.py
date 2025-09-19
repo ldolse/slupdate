@@ -6,13 +6,12 @@ against[Redump](http://redump.org/) & TOSEC dats.
 https://github.com/ldolse/slupdate
 """
 import os
-import pickle
 import sys
 import inquirer
 import traceback
 from consoles import PlatformManager, Platform
 from typing import List, Tuple
-from utils.utils import select_directory, reconfigure_settings, get_script_path, list_menu, write_data
+from utils.utils import select_directory, reconfigure_settings, get_script_path, list_menu
 from menus.menus import MenuItem, MenuSystem, BaseMenu
 from modules.chd import is_greater_than_0_176, chdman_info, find_rom_zips, create_chd_from_zip, chdman_info
 from modules.mapping import build_redump_tosec_tuples, fuzzy_hash_compare, get_missing_zips, get_unmatched_roms, get_source_stats, name_serial_auto_map
@@ -236,15 +235,7 @@ def update_file_match_function(platform: Platform) -> None:
     find_dat_matches(platform)
 
 def automap_function(platform: Platform) -> None:
-    platform.build_dat_hashes()
-    platform.build_softlist_dict()
-    print('\nplatform dicts completed\n')
-    debug = inquirer.confirm('Write Debug Data?', default=False)
-    # iterate through each fingerprint in the software list and search for matching hashes
-    find_dat_matches(platform)
-    if debug:
-        write_data(platform.software_list_data,'soft_dict_stage1')
-        write_data(platform.dat_hashes,'dat_dict_stage1')
+    platform.process_data()
     # flag that this stage is completed for this platform
     if platform not in mapping_stage['source_map']:
         mapping_stage['source_map'].append(platform.key)
@@ -468,10 +459,6 @@ def unknown_list_function(platform: Platform) -> None:
 
 def tosec_list_function(platform: Platform) -> None:
     list_soft_entries(platform,'TOSEC')
-
-def single_dir_function(dirtype,prompt):
-    directory = select_directory(prompt)
-    settings.update({dirtype : directory})
 
 def platform_add_dat_function(platform: Platform, platform_manager: PlatformManager):
     """Select and Configure DAT and ROM directories for a platform."""
@@ -748,6 +735,14 @@ if __name__ == '__main__':
 
     system = MenuSystem()
     system.platform_manager = platform_manager
+    if not platform_manager.current_platform:
+        print("No platform selected. Please select a platform to continue.")
+        selected_platform = platform_manager.select_platform(show_all=True)
+        if selected_platform:
+            print(f"Selected platform: {selected_platform.name}")
+        else:
+            print("No platform selected. Exiting.")
+            sys.exit(0)
     
     # Register all menus
     system.register(MainMenu())
