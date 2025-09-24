@@ -70,7 +70,7 @@ class IFilter:
     def open(self, path: str) -> ErrorNumber:
         if not self.identify(path):
             return ErrorNumber.InvalidArgument
-        
+
         try:
             self._stream = open(path, 'rb')
             return ErrorNumber.NoError

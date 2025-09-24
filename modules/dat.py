@@ -35,7 +35,7 @@ class DAT:
         """Determine the DAT group based on the URL in the header."""
         try:
             root = self.xml_tree.getroot()
-            url = root.find('header/url').text  
+            url = root.find('header/url').text
             if 'tosec' in url:
                 return 'TOSEC'
             elif 'redump' in url:
@@ -61,7 +61,7 @@ class DAT:
         Parses this DAT's XML and returns hash/name lookup tables.
         hash based on concatenating rom sha1s and creating a new sha1
         same is done for crc for old rom sources which don't use sha1
-        
+
         Returns:
             keyresult (Dict[hashes -> metadata])
             nameresult (Dict[name -> list of hashes])
@@ -169,7 +169,7 @@ def create_dat(rom_dict,platform):
 
     # Validate the XML tree against the XSD schema
     is_valid = schema.validate(tree)
-    
+
     dat_file = f'dat/mame {platform} unmatched.dat'
     # write the XML tree if valid
     if not is_valid:
@@ -191,7 +191,7 @@ def remove_dupe_dat_entries(platform_dat_dict):
         pop_list = []
         # get current dat group
         dat_group = platform_dat_dict['dat_group'][lookup_dat]
-        # skip redump 
+        # skip redump
         if dat_group == 'redump':
             continue
         # look for each source ID for this dat across all the DATs
@@ -208,7 +208,7 @@ def remove_dupe_dat_entries(platform_dat_dict):
                 lookup_hash_dict.pop(to_delete)
                 dupe_count += 1
     print(f'removed {dupe_count} duplicate DAT entries')
-                
+
 def get_raw_rom_entry(dat_entry):
     rom_elements = dat_entry.findall('rom')
     rom_strings = [ET.tostring(rom, encoding='unicode').strip() for rom in rom_elements]
@@ -218,7 +218,7 @@ def get_raw_rom_entry(dat_entry):
 
 
 
-    
+
 
 
 

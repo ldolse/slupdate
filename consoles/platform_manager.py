@@ -68,7 +68,7 @@ class PlatformManager:
         - For manual mode: User selects a single ROM directory for each DAT
         """
         platform = self.get_platform(platform_key)
-        
+
         if not os.path.exists(dat_directory_path) or not os.path.isdir(dat_directory_path):
             print(f"Directory `{dat_directory_path}` does not exist.")
             return
@@ -108,7 +108,7 @@ class PlatformManager:
 
     def select_platform(self, show_all: bool = False) -> Optional["Platform"]:
         """Prompt the user to select a configured or all available platforms.
-        
+
         Returns:
             Platform instance corresponding to the selected key.
         """
@@ -132,7 +132,7 @@ class PlatformManager:
 
         # Update internal state
         self._current_key = answer  # Store the key for later use (e.g., menus)
-        
+
         # Return the corresponding Platform instance
         return self.get_platform(answer)
 
@@ -185,7 +185,7 @@ class PlatformManager:
 
         pm = cls()
         global_data = loaded_data.get('global_vars', {})
-        platform_data = loaded_data.get('platforms', {})    
+        platform_data = loaded_data.get('platforms', {})
 
         # Restore global settings
         pm.romvault = global_data.get('romvault', True)

@@ -23,7 +23,7 @@ class Cue:
     # Add a track index
     def AddListing(self, Track, TrackType, Index, Minutes, Seconds, Frames, FileName):
         """Add a track index to the CUE list.
-        
+
         Args:
             Track (int): Track number.
             TrackType (str): Track type (e.g., "AUDIO").
@@ -85,7 +85,7 @@ class Cue:
 
     def AddCue(self, CuePath):
         """Parse and add tracks from a CUE file.
-        
+
         Args:
             CuePath (str): Path to the CUE file.
         """
@@ -93,7 +93,7 @@ class Cue:
         CuePath = CuePath.replace("/", os.sep)
         # Set the path and read the CUE
         Cue.FDRPath = CuePath.split(os.sep)
-        
+
         try:
             with open(CuePath, "r") as CueFile:
                 CurrentTrack = 0
@@ -163,7 +163,7 @@ class Cue:
         """List all tracks and their filenames."""
         if not Cue.FDRPath:
             raise RuntimeError("FDRPath is not populated.")
-        
+
         print(f"Tracks found in CUE: {len(Cue.List)}")
         for track in Cue.List:
             print(f"Track: {track.Track}, Type: {track.TrackType}, Index: {track.Index}, Filename: {track.TrackFN}")
@@ -376,7 +376,7 @@ def ccd_Generator(cue: Cue):
                 CCDFile.write("AFrame=0\n")
                 CCDFile.write("ALBA=-150\n")
                 CCDFile.write("Zero=0\n")
-                
+
                 EntryMSF = SectorToMSF(CueFile.Sector + 150)
                 if CueFile.Sector > 150 and CueFile.TrackType == "MODE2/2352":
                     EntryMSF = SectorToMSF(CueFile.Sector)
@@ -411,7 +411,7 @@ def ccd_Generator(cue: Cue):
                 CCDFile.write(f"INDEX {CueFile.Index}={CueFile.Sector}\n")
 
     print("Done writing CCD!")
-    
+
 
 def handle_image(cue: Cue):
     # Use GetBinPath in class

@@ -1012,7 +1012,7 @@ def name_serial_auto_map(platform, sl_dict,dat_dict,script_dir,lookup_type='name
     redump site titles don't necessarily have exact matches to the dat based on version, package, etc
 
     entries which have only a single possible match are auto-mapped
-    
+
     entries with multiple possible matches are returned by the function for the next stage
     '''
     redump_single_matches = {}

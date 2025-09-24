@@ -21,7 +21,7 @@ class CDRDAOFilter(IFilter):
         if not os.path.isfile(path):
             logger.debug(f"File does not exist: {path}")
             return False
-        
+
         _, ext = os.path.splitext(path)
         if ext.lower() != '.toc':
             logger.debug(f"File extension is not .toc: {ext}")
@@ -38,7 +38,7 @@ class CDRDAOFilter(IFilter):
     def open(self, path: str) -> ErrorNumber:
         if not self.identify(path):
             return ErrorNumber.InvalidArgument
-        
+
         try:
             self._data_stream = open(path, 'rb')
             return ErrorNumber.NoError

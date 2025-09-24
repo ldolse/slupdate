@@ -70,7 +70,7 @@ class Software:
     def _process_serial(self, raw_serial: str) -> list[str]:
         """
         Parse and expand platform-specific serial formats.
-        
+
         Handles:
         - PSX-style ranges like "SLUS-013~SLUS-017"
         - Bracketed comments to be removed
@@ -90,17 +90,17 @@ class Software:
             prefix_match = re.match(r"([A-Za-z-]+)(\d+)", start)
             if not prefix_match:
                 return [serial_range]  # Return original on failure
-            
+
             prefix, num_str_start = prefix_match.groups()
             num_len = len(num_str_start)  # Preserve length with leading zeros
             num_start = int(num_str_start)
-            
+
             end_match = re.match(rf"{prefix}(\d+)", end)
             if not end_match:
                 return [serial_range]
-            
+
             num_end = int(end_match.group(1))
-            
+
             return [
                 f"{prefix}{num:0{num_len}d}"  # Format with original length
                 for num in range(num_start, num_end + 1)
@@ -159,12 +159,12 @@ class Software:
 
     def _map_items_to_parts(self, source_list, target_attr):
         """Map items (GameEntry or redump URL) to valid Parts based on order.
-        
+
         Invalid Parts are filtered out if they have disk_status == 'nodump'.
         """
         # Filter valid parts by excluding "nodump"
         valid_parts = [part for part in self.parts if part.disk_status != "nodump"]
-        
+
         source_count = len(source_list)
         part_count = len(valid_parts)
 
@@ -174,12 +174,12 @@ class Software:
         # One-to-one mapping
         if part_count == 1 and source_count == 1:
             setattr(valid_parts[0], target_attr, source_list.pop(0))
-        
+
         # Multiple parts and matching items count
         elif part_count > 1 and part_count == source_count:
             for i in range(part_count):
                 setattr(valid_parts[i], target_attr, source_list[i])
-            
+
             # Clear the entire list after mapping
             del source_list[:]
 
@@ -196,14 +196,14 @@ class Software:
         # move single part items directly
         if len(self.parts) == 1:
             dest_part = self.parts[0]
-        
+
         else: # multi-part logic
             dat_disc_name = game_entry.roms[0].name
             part_matches = self._find_part_by_disc_name(dat_disc_name)
 
             if part_matches:
                 dest_part = part_matches[0]
-        
+
         if dest_part is not None:
             dest_part.game_entry.append(game_entry)
             self.game_entries.remove(game_entry)
@@ -214,13 +214,13 @@ class Software:
         part_mapping = {
             r"disc (\d+)": lambda x: f"cdrom{x.group(1)}",
         }
-        
+
         matching_parts = []
         for pattern, formatter in part_mapping.items():
             match = re.search(pattern, disc_name.lower())
             if not match:
                 continue
-                
+
             target_name = formatter(match)
             for part in self.parts:
                 if part.name == target_name:

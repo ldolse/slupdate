@@ -28,7 +28,7 @@ class Part:
             (f'⚠️ [Warning] - Too many source references for {self.part_of.name}, part "{self.name}" using first source')
         if game_discs:
             self.game_entry = game_discs[0]
-    
+
     def extract_redump_url(self) -> None:
         """Extract redump URLs from comments."""
         redump_urls = []
@@ -39,7 +39,7 @@ class Part:
             (f'⚠️ [Warning] - Too many source URL references for {self.part_of.name}, part "{self.name}" using first URL')
         if redump_urls:
             self.redump_url = redump_urls[0]
- 
+
     def to_dict(self):
         return {
             "name": self.name,

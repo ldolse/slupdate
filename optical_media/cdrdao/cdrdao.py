@@ -10,7 +10,7 @@ from ..BaseCD.sector import Sector
 from ..BaseCD.subchannel import Subchannel
 from ..BaseCD.sector_builder import SectorBuilder
 from ..BaseCD.cd_types import (
-    TrackType, TrackSubchannelType, SectorTagType, MediaType, 
+    TrackType, TrackSubchannelType, SectorTagType, MediaType,
     MediaTagType, MetadataMediaType, TocControl,
     Track, Session, Partition, ImageInfo, enum_name
 )
@@ -83,7 +83,7 @@ class Cdrdao(CdrdaoProperties):
     def open(self, image_filter: IFilter) -> ErrorNumber:
         if image_filter is None:
             return ErrorNumber.NoSuchFile
-        
+
         self._cdrdao_filter = image_filter
 
         try:
@@ -91,7 +91,7 @@ class Cdrdao(CdrdaoProperties):
             error, self._discimage = parse_toc_file(image_filter)
             if error != ErrorNumber.NoError:
                 return error
-            
+
             # Process tracks and build offset map
             self.partitions = []
             self._offset_map = {}
@@ -185,8 +185,8 @@ class Cdrdao(CdrdaoProperties):
             data_tracks = sum(1 for track in self._discimage.tracks if track.tracktype != CDRDAO_TRACK_TYPE_AUDIO)
             audio_tracks = len(self._discimage.tracks) - data_tracks
             mode2_tracks = sum(1 for track in self._discimage.tracks if track.tracktype in [
-                CDRDAO_TRACK_TYPE_MODE2, CDRDAO_TRACK_TYPE_MODE2_FORM1, 
-                CDRDAO_TRACK_TYPE_MODE2_FORM2, CDRDAO_TRACK_TYPE_MODE2_MIX, 
+                CDRDAO_TRACK_TYPE_MODE2, CDRDAO_TRACK_TYPE_MODE2_FORM1,
+                CDRDAO_TRACK_TYPE_MODE2_FORM2, CDRDAO_TRACK_TYPE_MODE2_MIX,
                 CDRDAO_TRACK_TYPE_MODE2_RAW
             ])
             # Log debug information
@@ -202,7 +202,7 @@ class Cdrdao(CdrdaoProperties):
             logger.debug(f" \tComposer {'is not set.' if not self._discimage.composer else ': '+self._discimage.composer}")
             logger.debug(f" \tPerformer {'is not set.' if not self._discimage.performer else ': '+self._discimage.performer}")
             logger.debug(f" \tSongwriter {'is not set.' if not self._discimage.songwriter else ': '+self._discimage.songwriter}")
-            logger.debug(f" \tTitle {'is not set.' if not self._discimage.title else ': '+self._discimage.title}")            
+            logger.debug(f" \tTitle {'is not set.' if not self._discimage.title else ': '+self._discimage.title}")
 
             logger.debug(" Disc information:")
             logger.debug(f" \tGuessed disk type: {enum_name(MediaType, self._discimage.disktype)}")
@@ -244,7 +244,7 @@ class Cdrdao(CdrdaoProperties):
                 logger.debug(f" \tPartition sectors: {partition.length}")
                 logger.debug(f" \tPartition starting offset: {partition.offset}")
                 logger.debug(f" \tPartition size in bytes: {partition.size}")
-            
+
             return ErrorNumber.NoError
 
         except Exception as ex:
@@ -263,7 +263,7 @@ class Cdrdao(CdrdaoProperties):
     def _update_readable_sector_tags(self, tags):
         """
         Update the list of readable sector tags in the image info.
-        
+
         :param tags: List of SectorTagType to be added
         """
         for tag in tags:
@@ -337,7 +337,7 @@ class Cdrdao(CdrdaoProperties):
             if track.subchannel:
                 if SectorTagType.CdSectorSubchannel not in self._image_info.readable_sector_tags:
                     self._image_info.readable_sector_tags.append(SectorTagType.CdSectorSubchannel)
-            
+
             if track.tracktype != CDRDAO_TRACK_TYPE_AUDIO:
                 tags_to_add = [
                     SectorTagType.CdSectorSync,

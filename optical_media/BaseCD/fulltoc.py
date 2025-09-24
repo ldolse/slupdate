@@ -11,43 +11,43 @@ logger = logging.getLogger(__name__)
 class TrackDataDescriptor:
     session_number: int = 0
     """Byte 0 Session number in hex"""
-    
+
     adr: int = 0
     """Byte 1, bits 7 to 4 Type of information in Q subchannel of block where this TOC entry was found"""
-    
+
     control: int = 0
     """Byte 1, bits 3 to 0 Track attributes"""
-    
+
     tno: int = 0
     """Byte 2"""
-    
+
     point: int = 0
     """Byte 3"""
-    
+
     min: int = 0
     """Byte 4"""
-    
+
     sec: int = 0
     """Byte 5"""
-    
+
     frame: int = 0
     """Byte 6"""
-    
+
     zero: int = 0
     """Byte 7, CD only"""
-    
+
     hour: int = 0
     """Byte 7, bits 7 to 4, DDCD only"""
-    
+
     phour: int = 0
     """Byte 7, bits 3 to 0, DDCD only"""
-    
+
     pmin: int = 0
     """Byte 8"""
-    
+
     psec: int = 0
     """Byte 9"""
-    
+
     pframe: int = 0
     """Byte 10"""
 
@@ -55,15 +55,15 @@ class TrackDataDescriptor:
 class CDFullTOC:
     data_length: int = 0
     """Total size of returned session information minus this field"""
-    
+
     first_complete_session: int = 0
     """First complete session number in hex"""
-    
+
     last_complete_session: int = 0
     """Last complete session number in hex"""
-    
+
     track_descriptors: List[TrackDataDescriptor] = field(default_factory=list)
-    """Track descriptors"""    
+    """Track descriptors"""
 
 class FullTOC:
     MODULE_NAME = "CD full TOC decoder"
@@ -115,15 +115,15 @@ class FullTOC:
     def prettify(cd_full_toc_response: Optional[CDFullTOC]) -> Optional[str]:
         if cd_full_toc_response is None:
             return None
-    
+
         response = cd_full_toc_response
         output = []
-    
+
         last_session = 0
-    
+
         output.append(f"First complete session number: {response.first_complete_session}")
         output.append(f"Last complete session number: {response.last_complete_session}")
-    
+
         for descriptor in response.track_descriptors:
             if ((descriptor.control & 0x08) == 0x08 or
                 descriptor.adr not in [1, 4, 5, 6] or
@@ -146,7 +146,7 @@ class FullTOC:
                 if descriptor.session_number > last_session:
                     output.append(f"Session {descriptor.session_number}")
                     last_session = descriptor.session_number
-    
+
                 if descriptor.adr in [1, 4]:
                     if descriptor.point == 0xA0:
                         if descriptor.adr == 4:
@@ -313,7 +313,7 @@ class FullTOC:
                 elif descriptor.adr == 6:
                     id_ = (descriptor.min << 16) + (descriptor.sec << 8) + descriptor.frame
                     output.append(f"Disc ID: {id_ & 0x00FFFFFF:06X}")
-    
+
         return "\n".join(output)
 
     @staticmethod
@@ -330,36 +330,36 @@ class FullTOC:
         track_descriptors = []
         current_track = 0
 
-    
+
         for track in sorted(tracks, key=lambda t: (t.session, t.sequence)):
             if track.session < toc.first_complete_session:
                 toc.first_complete_session = track.session
-    
+
             if track.session <= toc.last_complete_session:
                 current_track = track.sequence
                 continue
-    
+
             if toc.last_complete_session > 0:
                 session_ending_track[toc.last_complete_session] = current_track
-    
+
             toc.last_complete_session = track.session
-    
-        session_ending_track.setdefault(toc.last_complete_session, 
+
+        session_ending_track.setdefault(toc.last_complete_session,
                                         max(t.sequence for t in tracks if t.session == toc.last_complete_session))
-    
+
         current_session = 0
-    
+
         for track in sorted(tracks, key=lambda t: (t.session, t.sequence)):
             track_control = track_flags.get(track.sequence, 0)
-    
+
             if track_control == 0 and track.type != TrackType.Audio:
                 track_control = CdFlags.DataTrack
-    
+
             # Lead-Out
             if track.session > current_session and current_session != 0:
                 leadout_amsf = FullTOC.lba_to_msf(track.start_sector - 150)
                 leadout_pmsf = FullTOC.lba_to_msf(max(t.start_sector for t in tracks))
-    
+
                 # Lead-out
                 track_descriptors.append(TrackDataDescriptor(
                     session_number=current_session,
@@ -375,7 +375,7 @@ class FullTOC:
                     psec=leadout_pmsf[1],
                     pframe=leadout_pmsf[2]
                 ))
-    
+
                 # This seems to be constant? It should not exist on CD-ROM but CloneCD creates them anyway
                 # Format seems like ATIP, but ATIP should not be as 0xC0 in TOC...
                 if create_c0_entry:
@@ -388,14 +388,14 @@ class FullTOC:
                         pmin=97,
                         psec=25
                     ))
-    
+
             # Lead-in
             if track.session > current_session:
                 current_session = track.session
                 ending_track_number = session_ending_track.get(current_session, 0)
-    
+
                 leadin_pmsf = FullTOC.lba_to_msf(next((t.end_sector for t in tracks if t.sequence == ending_track_number), 0) + 1)
-    
+
                 # Starting track
                 track_descriptors.append(TrackDataDescriptor(
                     session_number=current_session,
@@ -404,7 +404,7 @@ class FullTOC:
                     control=track_control,
                     pmin=track.sequence
                 ))
-    
+
                 # Ending track
                 track_descriptors.append(TrackDataDescriptor(
                     session_number=current_session,
@@ -413,7 +413,7 @@ class FullTOC:
                     control=track_control,
                     pmin=ending_track_number
                 ))
-    
+
                 # Lead-out start
                 track_descriptors.append(TrackDataDescriptor(
                     session_number=current_session,
@@ -425,9 +425,9 @@ class FullTOC:
                     psec=leadin_pmsf[1],
                     pframe=leadin_pmsf[2]
                 ))
-    
+
             pmsf = FullTOC.lba_to_msf(track.indexes[1])
-    
+
             # Track
             track_descriptors.append(TrackDataDescriptor(
                 session_number=track.session,
@@ -439,7 +439,7 @@ class FullTOC:
                 psec=pmsf[1],
                 pframe=pmsf[2]
             ))
-    
+
         toc.track_descriptors = track_descriptors
         return toc
 
@@ -452,36 +452,36 @@ class FullTOC:
         toc.last_complete_session = 0  # byte.MinValue
         track_descriptors: List[TrackDataDescriptor] = []
         current_track = 0
-    
+
         for track in sorted(tracks, key=lambda t: (t.session, t.sequence)):
             if track.session < toc.first_complete_session:
                 toc.first_complete_session = track.session
-    
+
             if track.session <= toc.last_complete_session:
                 current_track = track.sequence
                 continue
-    
+
             if toc.last_complete_session > 0:
                 session_ending_track[toc.last_complete_session] = current_track
-    
+
             toc.last_complete_session = track.session
-    
+
         if toc.last_complete_session not in session_ending_track:
             session_ending_track[toc.last_complete_session] = max(t.sequence for t in tracks if t.session == toc.last_complete_session)
-    
+
         current_session = 0
-    
+
         for track in sorted(tracks, key=lambda t: (t.session, t.sequence)):
             track_control = track_flags.get(track.sequence, 0)
-    
+
             if track_control == 0 and track.type != TrackType.Audio:
                 track_control = CdFlags.DataTrack
-    
+
             # Lead-Out
             if track.session > current_session and current_session != 0:
                 leadout_amsf = FullTOC.lba_to_msf(track.start_sector - 150)
                 leadout_pmsf = FullTOC.lba_to_msf(max(t.start_sector for t in tracks))
-    
+
                 # Lead-out
                 track_descriptors.append(TrackDataDescriptor(
                     session_number=current_session,
@@ -497,7 +497,7 @@ class FullTOC:
                     psec=leadout_pmsf[1],
                     pframe=leadout_pmsf[2]
                 ))
-    
+
                 # This seems to be constant? It should not exist on CD-ROM but CloneCD creates them anyway
                 # Format seems like ATIP, but ATIP should not be as 0xC0 in TOC...
                 if create_c0_entry:
@@ -510,14 +510,14 @@ class FullTOC:
                         pmin=97,
                         psec=25
                     ))
-    
+
             # Lead-in
             if track.session > current_session:
                 current_session = track.session
                 ending_track_number = session_ending_track.get(current_session, 0)
-    
+
                 leadin_pmsf = FullTOC.lba_to_msf(next((t.end_sector for t in tracks if t.sequence == ending_track_number), 0) + 1)
-    
+
                 # Starting track
                 track_descriptors.append(TrackDataDescriptor(
                     session_number=current_session,
@@ -526,7 +526,7 @@ class FullTOC:
                     control=track_control,
                     pmin=track.sequence
                 ))
-    
+
                 # Ending track
                 track_descriptors.append(TrackDataDescriptor(
                     session_number=current_session,
@@ -535,7 +535,7 @@ class FullTOC:
                     control=track_control,
                     pmin=ending_track_number
                 ))
-    
+
                 # Lead-out start
                 track_descriptors.append(TrackDataDescriptor(
                     session_number=current_session,
@@ -547,9 +547,9 @@ class FullTOC:
                     psec=leadin_pmsf[1],
                     pframe=leadin_pmsf[2]
                 ))
-    
+
             pmsf = FullTOC.lba_to_msf(track.indexes[1])
-    
+
             # Track
             track_descriptors.append(TrackDataDescriptor(
                 session_number=track.session,
@@ -561,7 +561,7 @@ class FullTOC:
                 psec=pmsf[1],
                 pframe=pmsf[2]
             ))
-    
+
         toc.track_descriptors = track_descriptors
         return toc
 

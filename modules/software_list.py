@@ -35,7 +35,7 @@ def get_sl_descriptions(softlist,dat_type,field):
 
 def comment_xml_to_dict(xml_string):
     '''
-    takes dat source xml strings extracted from 
+    takes dat source xml strings extracted from
     comments and converts them to a dictionary
     '''
     root = etree.fromstring(xml_string)
@@ -82,8 +82,8 @@ def sl_romhashes_to_dict(comment):
 
 def update_sl_rom_source_ids(concatenated_hashes,soft_title,soft_data,source_type,sizes,known_disc=''):
     '''
-    takes concatenated hashes and calculates a sha1 checksum 
-    source_type defines the type of hash used.  
+    takes concatenated hashes and calculates a sha1 checksum
+    source_type defines the type of hash used.
     Both are added to a tuple which is then added to the disc
     known_disc is used for cases where this function is called for a single known disc name
     total binary size is also updated here but not currently added to the tuple
@@ -175,7 +175,7 @@ def rom_entries_to_source_ids(soft_title,raw_rom_source_data):
             try:
                 current_concatenated_hash += rom_data[hashtype]
             except:
-                print(soft_title+' has an error in the commented rom listing') 
+                print(soft_title+' has an error in the commented rom listing')
                 continue
         if first:
            first = False
@@ -333,7 +333,7 @@ def process_comments(soft_entry, sl_dict):
                         else:
                             rom_sources['cdrom'] = sl_romhashes_to_dict(rom_entry)
 
-            # set the proper destinations based on whether the comment came from the root of 
+            # set the proper destinations based on whether the comment came from the root of
             # the softlist or if it came from a disc part
             if comment_location == 'main_entry':
                 comment_dest = sl_dict[s_name]
@@ -392,7 +392,7 @@ def process_comments(soft_entry, sl_dict):
                         else:
                             print(f'could not find the {disc} to insert redump url for {soft["@name"]}')
                         discnum += 1
-    
+
     raw_comment_dict = {}
     if '#comment' in soft_entry:
         if not isinstance(soft_entry['#comment'], list):
@@ -407,7 +407,7 @@ def process_comments(soft_entry, sl_dict):
         return None
     else:
         comment_to_sl_dict(soft_entry,raw_comment_dict,sl_dict)
-        
+
 def expand_serial_range(serial_range):
     '''
     expands a serial range into a list of serial numbers
@@ -505,8 +505,8 @@ def get_lxml_replacements(softlist_xml_file):
      - trailing whitespace from self closed tags - there are a lot of these so retain
        to keep changes to a minimum
     - double quote entities are converted to quotes by lxml, convert back to entity later
-    
-    function builds a dictionary of each case to find the impacted strings so they can 
+
+    function builds a dictionary of each case to find the impacted strings so they can
     be changed back after lxml has updated the xml
     '''
     entity_list = re.compile(r'>[^<]+?(&quot;)[^<]+?<')
@@ -738,7 +738,7 @@ def replace_comment_string(node, old_string, new_string, disc):
         for comment_node in comment_nodes:
             comment_head = re.match(r'^\s+',comment_node.text)[0]+new_string+c_tail
             comment_text = comment_node.text.strip()  # Extract comment content as a string
-            
+
             if old_string in comment_text.lower():
                 comment_text = '\n'.join(line for line in comment_text.splitlines() if old_string.lower() not in line.strip().lower())
                 # put the new source at the start of the comment
@@ -844,13 +844,13 @@ def handle_comment_nodes(node, rom_strings, disc, delete_string=None):
                 print(f'rom 1 is:\n{rom_strings[0]}')
             else:
                 print('no rom_strings')
-            
+
             for string in delete_strings:
                 comment_text = '\n'.join(line for line in comment_text.splitlines() if string not in line.strip().lower())
-                
+
             # delete the comment if it's now empty
             if comment_text.strip() == '':
-                node.remove(comment_node)            
+                node.remove(comment_node)
 
             if any(line.strip().startswith('<rom') for line in comment_text.splitlines()):
                 print('removing <rom lines')
@@ -868,7 +868,7 @@ def handle_comment_nodes(node, rom_strings, disc, delete_string=None):
                         rewritten_comment += c_head + rom_string + '\n'
                     if source_info:
                         comment_head = ' '
-                        
+
                     unwritten = False
 
                 if rewritten_comment.strip() == '':
@@ -884,7 +884,7 @@ def handle_comment_nodes(node, rom_strings, disc, delete_string=None):
 
             elif counter < len(comment_nodes):
                 continue # keep going as there might be better comments to insert into
-            
+
             elif rom_strings and unwritten:
                 print('creating a new comment because no existing comments matched modify rules')
                 create_new_comment(node,rom_strings,c_head,c_tail)
@@ -894,7 +894,7 @@ def handle_comment_nodes(node, rom_strings, disc, delete_string=None):
         print(f'creating a new comment because no comments exist in this {disc} node')
         create_new_comment(node,rom_strings,c_head,c_tail)
         unwritten = False
-        
+
 def create_new_comment(node,rom_strings,c_head,c_tail):
     '''
     creates a new comment node with the rom entries
@@ -941,7 +941,7 @@ def modify_rom_source_refs_old(xml_root, software_name, rom_strings, disc):
                 continue
             rewritten_comment += '\t\t' + line + '\n'
 
-        # if the disc is cdrom then add the new rom entries to the rewritten comment  
+        # if the disc is cdrom then add the new rom entries to the rewritten comment
         if disc == 'cdrom':
             for rom_string in rom_strings:
                 rewritten_comment += '\t\t' + rom_string.strip() + '\n'
@@ -957,7 +957,7 @@ def modify_rom_source_refs_old(xml_root, software_name, rom_strings, disc):
             new_comment = etree.Comment('\n\t\t\t' + new_part_comment.strip() + '\n\t\t\t')
             new_comment.tail = '\n\t\t\t'  # Add newline and indentation to the tail
             part_node.insert(0, new_comment)
-        
+
         if rewritten_comment.strip():
             rewritten_comment = etree.Comment('\n\t\t' + rewritten_comment.strip() + '\n\t\t')
             rewritten_comment.tail = '\n\t\t'

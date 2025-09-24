@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from typing import Dict, Optional, List
-from modules.CD.cd_types import MediaType
+from optical_media.BaseCD.cd_types import MediaType
 from modules.ifilter import IFilter
 
 @dataclass

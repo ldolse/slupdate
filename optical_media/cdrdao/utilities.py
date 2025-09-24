@@ -1,6 +1,6 @@
 from .structs import CdrdaoTrack
-from modules.CD.cd_types import (
-    TrackType, TrackSubchannelType, SectorTagType, 
+from optical_media.BaseCD.cd_types import (
+    TrackType, TrackSubchannelType, SectorTagType,
     Track, MediaType
 )
 from typing import Tuple, Optional
@@ -40,7 +40,7 @@ def get_tag_layout(track: CdrdaoTrack, tag: SectorTagType) -> Tuple[int, int, in
         else:
             raise ValueError("Unsupported tag type for Mode 1")
     elif track.tracktype == CDRDAO_TRACK_TYPE_MODE2:
-        if tag in [SectorTagType.CdSectorSync, SectorTagType.CdSectorHeader, 
+        if tag in [SectorTagType.CdSectorSync, SectorTagType.CdSectorHeader,
                 SectorTagType.CdSectorEcc, SectorTagType.CdSectorEccP, SectorTagType.CdSectorEccQ]:
             raise ValueError("Unsupported tag type for Mode 2 Formless")
         elif tag == SectorTagType.CdSectorSubHeader:
@@ -174,11 +174,11 @@ def determine_media_type(discimagetracks,sessions):
     data_tracks = sum(1 for track in discimagetracks if track.tracktype != CDRDAO_TRACK_TYPE_AUDIO)
     audio_tracks = len(discimagetracks) - data_tracks
     mode2_tracks = sum(1 for track in discimagetracks if track.tracktype in [
-        CDRDAO_TRACK_TYPE_MODE2, CDRDAO_TRACK_TYPE_MODE2_FORM1, 
-        CDRDAO_TRACK_TYPE_MODE2_FORM2, CDRDAO_TRACK_TYPE_MODE2_MIX, 
+        CDRDAO_TRACK_TYPE_MODE2, CDRDAO_TRACK_TYPE_MODE2_FORM1,
+        CDRDAO_TRACK_TYPE_MODE2_FORM2, CDRDAO_TRACK_TYPE_MODE2_MIX,
         CDRDAO_TRACK_TYPE_MODE2_RAW
     ])
-    
+
     if data_tracks == 0:
         return MediaType.CDDA
     elif discimagetracks[0].tracktype == CDRDAO_TRACK_TYPE_AUDIO and data_tracks > 0 and len(sessions) > 1 and mode2_tracks > 0:

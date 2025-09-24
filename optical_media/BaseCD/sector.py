@@ -159,7 +159,7 @@ class Sector:
         if len(data) == 2352:
             if data[:12] != Sector.SYNC_MARK:
                 return data
-            
+
             if data[15] == 0:
                 return bytes(2048)
             elif data[15] == 1:
@@ -258,17 +258,17 @@ class Sector:
                 result.append("Correct EDC")
             else:
                 result.append("Incorrect EDC")
-            
+
             if correct_ecc_p:
                 result.append("Correct ECC P")
             else:
                 result.append("Incorrect ECC P")
-            
+
             if correct_ecc_q:
                 result.append("Correct ECC Q")
             else:
                 result.append("Incorrect ECC Q")
-            
+
             if all(b == 0 for b in buffer[2068:2076]):
                 result.append("Correct zero fill")
             else:
@@ -276,26 +276,26 @@ class Sector:
         elif mode == 2:
             if buffer[16:20] != buffer[20:24]:
                 result.append("Subheader copies differ")
-            
+
             if correct_edc:
                 result.append("Correct EDC")
             else:
                 result.append("Incorrect EDC")
-            
+
             if correct_ecc_p:
                 result.append("Correct ECC P")
             else:
                 result.append("Incorrect ECC P")
-            
+
             if correct_ecc_q:
                 result.append("Correct ECC Q")
             else:
                 result.append("Incorrect ECC Q")
-            
+
             result.append(f"File number: {buffer[16]}")
             result.append(f"Channel number: {buffer[17]}")
             result.append(f"Coding information number: {buffer[19]}")
-            
+
             if buffer[18] & 0x80:
                 result.append("End of file")
             if buffer[18] & 0x40:

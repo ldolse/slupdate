@@ -5,19 +5,19 @@ from typing import Dict, Optional, Tuple
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    
+
     from dat import GameEntry
 
 class CDMedia:
     def __init__(self):
         self.id = None  # Will be set by MediaRegistry
-        
+
         # Core hash information
         self.sha1_signature: Optional[str] = ""
         self.crc_signature: Optional[str] = ""
         self.total_rom_size: int = 0
         self.confirmed_from_redump: bool = False
-        
+
         # References to source objects that point to this media
         # self.dat_game_entry is the primary source reference
         self.dat_game_entry: Optional['DATGameEntry'] = None
@@ -27,16 +27,21 @@ class CDMedia:
         self.softlist_title: Optional[Software] = None
         self.softlist_part: Optional['Part'] = None
 
+        # Zip processing attributes
+        self.zip_path: Optional[str] = None
+        self.chd_path: Optional[str] = None
+        self.processing_status: str = "pending"  # pending, processing, complete, failed
+
     @property
     def dat_entries(self) -> list["GameEntry"]:
         """Returns a dict of {group: [DATGameEntries]} for all groups."""
         result = {g: [] for g in ['redump', 'tosec', 'no-intro', 'other', 'MAME']}
-        
+
         # Categorize entries by group from _all_dat_references
         for entry in self._all_dat_references.values():
             group = entry.dat_group if hasattr(entry, 'dat_group') else 'unknown'
             result[group].append(entry)
-        
+
         return {g: v for g, v in result.items() if v}
     @property
     def matched(self) -> bool:
@@ -77,11 +82,11 @@ class CDMedia:
 
 class MediaRegistry:
     def __init__(self):
-        
+
         # Maps hash signatures to CDMedia objects
         self.media_directory: Dict[str, CDMedia] = {}
         self.media_id_counter = 0
-        
+
     def get_or_create_media(self, game_entry: DATGameEntry) -> Tuple[CDMedia, bool]:
         """Get or create media for a DAT GameEntry
 
@@ -89,7 +94,7 @@ class MediaRegistry:
             Tuple[CDMedia, bool]: The media object and a boolean indicating if it was newly created
         """
         sha1_sig, crc_sig, size = self._calculate_hashes(game_entry)
-        
+
         # Early exit for invalid signatures
         if not (sha1_sig or crc_sig):
             print(f"⚠️ No valid signature found for {game_entry.dat}: {game_entry.name}")
@@ -103,7 +108,7 @@ class MediaRegistry:
             # Prioritize SHA1 first
             if sig[1] == 'SHA1' and sig in self.media_directory:
                 matched_cdm = self.media_directory[sig]
-            
+
             elif sig[1] == 'CRC_SHA1' and sig in self.media_directory:
                 existing_media = self.media_directory[sig]
                 if matched_cdm is None:  # First match (only CRC available)
@@ -160,22 +165,22 @@ class MediaRegistry:
         """Generate hash signatures using the exact algorithm from original code"""
         if not game_entry.roms:
             return "", None, 0
-            
+
         total_size = 0
         sha1_builder = hashlib.sha1()
         crc_builder = hashlib.sha1()
-        
+
         rom_count = 0
         has_sha1 = False
         has_crc = False
-        
+
         for rom in game_entry.roms:
             file_name = rom.name.lower()
-            
+
             # Skip TOC files and special cases as per original algorithm
             if file_name.endswith(('.cue', '.gdi')) or file_name == 'ip.bin':
                 continue
-                
+
             # Track size for validation
             try:
                 total_size += int(rom.size)
@@ -183,20 +188,20 @@ class MediaRegistry:
                 print(f"⚠️   Invalid or missing 'size' attribute in ROM '{rom.name}'. Defaulting to 0.")
                 total_size += 0
                 pass
-                
+
             rom_count += 1
-            
+
             # Build SHA1 signature from ROMs with SHA1 hashes
             if rom.sha1:
                 has_sha1 = True
                 sha1_builder.update(rom.sha1.encode('utf-8'))
-                
+
             # Build CRC signature for older DAT files (fallback)
             if rom.crc and rom.size:  # Only include if we have both values
                 has_crc = True
                 crc_key = f"crc:{rom.crc}~size:{rom.size}"
                 crc_builder.update(crc_key.encode('utf-8'))
-            
+
         sha1_signature = (sha1_builder.hexdigest(), 'SHA1') if has_sha1 else None
         crc_signature = (crc_builder.hexdigest(), 'CRC_SHA1') if has_crc and rom_count > 0 else None
         return sha1_signature, crc_signature, total_size

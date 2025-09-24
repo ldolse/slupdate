@@ -2,7 +2,7 @@ from typing import List, Tuple, Type, Any, Optional
 from enum import Flag, auto
 from uuid import UUID
 from dataclasses import dataclass, field
-from modules.CD.cd_types import (
+from optical_media.BaseCD.cd_types import (
     OpticalImageCapabilities, ImageInfo, MediaTagType, SectorTagType,
     MediaType, TrackSubchannelType, Track, Session, Partition
 )
@@ -32,15 +32,15 @@ class CdrdaoProperties:
                 OpticalImageCapabilities.CanStoreCookedData |
                 OpticalImageCapabilities.CanStoreMultipleTracks |
                 OpticalImageCapabilities.CanStoreIndexes)
-    
+
     @property
     def info(self) -> ImageInfo:
         return self._image_info
-    
+
     @property
     def name(self) -> str:
         return "CDRDAO"
-    
+
     @property
     def id(self) -> UUID:
         return UUID("04D7BA12-1BE8-44D4-97A4-1B48A505463E")
@@ -131,15 +131,15 @@ def tracks(self) -> List[Track]:
     @property
     def dump_hardware(self) -> Optional[List]:
         return None
-    
+
     @property
     def aaru_metadata(self) -> Optional[Any]:
         return None
-    
+
     @property
     def supported_media_tags(self) -> List[MediaTagType]:
         return [MediaTagType.CD_MCN]
-    
+
     @property
     def supported_sector_tags(self) -> List[SectorTagType]:
         return [
@@ -148,7 +148,7 @@ def tracks(self) -> List[Track]:
             SectorTagType.CdSectorSubHeader, SectorTagType.CdSectorSync, SectorTagType.CdTrackFlags,
             SectorTagType.CdTrackIsrc
         ]
-    
+
     @property
     def supported_media_types(self) -> List[MediaType]:
         return [
@@ -163,21 +163,21 @@ def tracks(self) -> List[Track]:
             MediaType.MilCD, MediaType.VideoNow, MediaType.VideoNowColor,
             MediaType.VideoNowXp, MediaType.CVD, MediaType.PCD
         ]
-    
+
     @property
     def supported_options(self) -> List[Tuple[str, Type, str, Any]]:
         return [
             ("separate", bool, "Write each track to a separate file", False)
         ]
-    
+
     @property
     def known_extensions(self) -> List[str]:
         return [".toc"]
-    
+
     @property
     def is_writing(self) -> bool:
         return self._is_writing
-    
+
     @property
     def error_message(self) -> Optional[str]:
         return self._error_message

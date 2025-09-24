@@ -38,7 +38,7 @@ class RedumpEntry:
     def site_hash(self) -> Optional[tuple[str, str]]:
         if self._site_hash is not None:
             return self._site_hash
-        
+
         # Fetch data only once
         if self._rom_list is None and self.rom_list is None:
             return None  # Fallback after failure
@@ -61,10 +61,10 @@ class RedumpEntry:
             'English': 'En','Japanese': 'Ja', 'French': 'Fr', 'German': 'De',
             'Spanish': 'Es', 'Italian': 'It', 'Dutch': 'Nl', 'Portuguese': 'Pt',
             'Swedish': 'Sv', 'Norwegian': 'No', 'Danish': 'Da', 'Finnish': 'Fi',
-            'Chinese': 'Zh','Korean': 'Ko', 'Polish': 'Pl', 'Russian': 'Ru', 
+            'Chinese': 'Zh','Korean': 'Ko', 'Polish': 'Pl', 'Russian': 'Ru',
             'Arabic': 'Ar', 'Czech': 'Cs', 'Catalan': 'Ca', 'Slovak': 'Sk'
         }
-        
+
         disc_pat = r'\s\(Disc\s\d+\)'
         disc_match = re.findall(disc_pat, self.db_title)
         disc_str = f' {disc_match[0]}' if disc_match else ''
@@ -81,7 +81,7 @@ class RedumpEntry:
             lang_str = f' ({",".join([lang_sub[l] for l in ordered_languages])})'
 
         region_str = f" ({self.region})" if self.region else ""
-        
+
         return f"{title_base}{region_str}{lang_str}{disc_str}"
 
     def __getstate__(self):

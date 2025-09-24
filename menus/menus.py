@@ -6,8 +6,8 @@ from consoles import Platform
 # Core Classes for Navigation System
 class MenuItem:
     """Represents a single menu option"""
-    def __init__(self, text: str, 
-                 target: Optional[str] = None, 
+    def __init__(self, text: str,
+                 target: Optional[str] = None,
                  action_func = None,
                  requires_platform: bool = True,
                  is_back: bool = False):
@@ -15,7 +15,7 @@ class MenuItem:
         self.target_name = target  # Menu name to navigate to (e.g., "map_menu")
         self.action = action_func  # Callable function (must return a string menu name)
         self.requires_platform = requires_platform
-        self.is_back = is_back  # Indicates if this option is a "back" action  
+        self.is_back = is_back  # Indicates if this option is a "back" action
 
     def execute(self, menu_system: "MenuSystem") -> str:
         """Execute option logic and return next target."""
@@ -30,7 +30,7 @@ class MenuItem:
             params_needed = list(sig.parameters.keys()) if self.action and sig else []
 
             args = []
-            
+
             # Check platform requirement
             if "platform" in params_needed or self.requires_platform:
                 if not current_platform:
@@ -58,16 +58,16 @@ class MenuItem:
             result = None
             if self.action:
                 result = self.action(*args)
-                
+
         except TypeError as te:
             print(f"[ERROR] TypeError in action: {te}. Using default.")
 
         next_target = (
-            result 
-            if isinstance(result, str) and result != ""  
+            result
+            if isinstance(result, str) and result != ""
             else self.target_name  # Fallback to target name
         )
-        
+
         return next_target
 
 
@@ -77,22 +77,22 @@ class BaseMenu:
         self.name = name
         self.message = f"Message not set - should be defined by subclass {name}"
         self._options = []
-    
+
     @property
     def options(self) -> list[MenuItem]:
         return self._options
-    
+
     @options.setter
     def options(self, new_options: list[MenuItem]):
         """Setter ensures all items are MenuItem instances and sets default targets"""
         if not all(isinstance(item, MenuItem) for item in new_options):
             raise TypeError("All menu items must be MenuItem instances")
-        
+
         # Set default target to the current menu's name if not provided
         for item in new_options:
-            if not item.target_name:  
+            if not item.target_name:
                 item.target_name = self.name  # Default back to own menu
-        
+
         self._options = new_options
 
 
@@ -102,7 +102,7 @@ class MenuSystem:
         self.stack = []  # Navigation history (LIFO)
         self.current_menu_name = None
         self.menus: Dict[str, BaseMenu] = {}  # Registry of all menus by name
-        
+
         # Platform management
         self.platform_manager = PlatformManager()
 
@@ -137,7 +137,7 @@ class MenuSystem:
         """Pops from stack to return to previous menu"""
         if not self.stack:
             return None # Already at root
-        
+
         last_state = self.stack.pop()
         self.current_menu_name = last_state['menu_name']
         return self.current_menu_name

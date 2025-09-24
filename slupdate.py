@@ -73,7 +73,7 @@ def find_dat_matches(platform: Platform) -> None:
     - Finds the matching entries in the DAT files for the given platform.
 
     - matches softlist source hash fingerprints to the dat fingerprint
-    
+
     - updates the softlist dictionary to point to the dat for that source hash
 
     Parameters:
@@ -488,7 +488,7 @@ def load_or_create_platform_manager():
 def configure_initial_platform(platform_manager: PlatformManager):
     """Ensure at least one platform has a DAT directory and ROM folder."""
     print("\nConfiguring initial platform with DAT/ROM directories.")
-    
+
     selected_platform = platform_manager.select_platform(show_all=True)
     if selected_platform:
         platform_add_dat_function(selected_platform, platform_manager)
@@ -590,7 +590,7 @@ class MapMenu(BaseMenu):
         self.message = "Process software lists and dat files, mapping source file references"
         self.options = [
             MenuItem(
-                text = "a. Automatically map based on source rom info", 
+                text = "a. Automatically map based on source rom info",
                 action_func = automap_function
             ),
             MenuItem(
@@ -610,7 +610,7 @@ class MapMenu(BaseMenu):
                 action_func = update_file_match_function
             ),
             MenuItem(
-                text = "f. Mapping Stage 2", 
+                text = "f. Mapping Stage 2",
                 target = "map_stage_two"
             ),
             MenuItem(
@@ -729,6 +729,49 @@ class DatMenu(BaseMenu):
             )
         ]
 
+class CHDErrorMenu(BaseMenu):
+    def __init__(self, chd_path: str, error_message: str):
+        super().__init__("chd_error_menu")
+        self.message = f"Error processing {chd_path}: {error_message}"
+        self.options = [
+            MenuItem(text="Skip this CHD and continue", action_func=self.skip),
+            MenuItem(text="Stop processing all CHDs", action_func=self.stop),
+            MenuItem(text="Retry this CHD", action_func=self.retry)
+        ]
+
+    def skip(self, menu_system: "MenuSystem") -> str:
+        return "continue_chd_processing"
+
+    def stop(self, menu_system: "MenuSystem") -> str:
+        return "main_menu"
+
+    def retry(self, menu_system: "MenuSystem") -> str:
+        return "retry_current_chd"
+
+class ExistingCHDMenu(BaseMenu):
+    def __init__(self, chd_path: str, existing_version: str, current_version: str):
+        super().__init__("existing_chd_menu")
+        self.message = f"CHD already exists at {chd_path}\nExisting version: {existing_version}, Current version: {current_version}"
+        self.options = [
+            MenuItem(text="Overwrite this CHD", action_func=self.overwrite),
+            MenuItem(text="Skip this CHD", action_func=self.skip),
+            MenuItem(text="Always overwrite older CHDs for this session", action_func=self.set_overwrite_preference),
+            MenuItem(text="Always skip existing CHDs for this session", action_func=self.set_skip_preference)
+        ]
+
+    def overwrite(self, menu_system: "MenuSystem") -> str:
+        return "overwrite_current_chd"
+
+    def skip(self, menu_system: "MenuSystem") -> str:
+        return "continue_chd_processing"
+
+    def set_overwrite_preference(self, menu_system: "MenuSystem") -> str:
+        menu_system.current_platform.set_chd_preference("overwrite")
+        return "continue_chd_processing"  # Continue with overwrite
+
+    def set_skip_preference(self, menu_system: "MenuSystem") -> str:
+        menu_system.current_platform.set_chd_preference("skip")
+        return "continue_chd_processing"  # Continue with skip
 
 if __name__ == '__main__':
     platform_manager = load_or_create_platform_manager()
@@ -743,7 +786,7 @@ if __name__ == '__main__':
         else:
             print("No platform selected. Exiting.")
             sys.exit(0)
-    
+
     # Register all menus
     system.register(MainMenu())
     system.register(MapMenu())
@@ -751,6 +794,8 @@ if __name__ == '__main__':
     system.register(MapStageTwo())
     system.register(MapStageThree())
     system.register(DatMenu())
+    system.register(CHDErrorMenu())
+    system.register(ExistingCHDMenu())
 
     # Initialize the main menu
     system.navigate_to("main_menu")  # Start at root menu
@@ -769,14 +814,14 @@ if __name__ == '__main__':
             default=0,
             carousel = True
         )
-        
+
         # Find which MenuItem corresponds to this text
         chosen_item = None
         for item in current_menu.options:
             if item.text == selected_item:
                 chosen_item = item
                 break
-        
+
         if not chosen_item:
             print("Selection invalid")
             continue

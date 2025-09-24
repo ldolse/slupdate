@@ -31,7 +31,7 @@ def identify(self, image_filter: IFilter) -> bool:
                 return False
 
         self._cue_stream = io.TextIOWrapper(image_filter.get_data_fork_stream(), encoding='utf-8')
-        
+
         cr = re.compile(self.REGEX_COMMENT)
         dr = re.compile(self.REGEX_DISCTYPE)
 

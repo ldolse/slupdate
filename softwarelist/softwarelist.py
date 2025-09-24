@@ -33,11 +33,11 @@ class SoftwareList:
         def validate_parts(parts: list["Part"], basename: str = "cdrom") -> None:
             """
             Validate and automatically fix part names in a software item.
-            
+
             Ensures parts are named sequentially as:
             - cdrom - single part entry
             - cdrom1, cdrom2, ... for multiple parts
-            
+
             Supports custom basenames like 'dvdrom' or 'bdrom'.
             """
 
@@ -56,7 +56,7 @@ class SoftwareList:
 
         def validate_software_names(items: list["Software"]) -> None:
             name_count = {}
-            
+
             for idx, item in enumerate(items):
                 if item.name in name_count:
                     new_name = f"{item.name}_{name_count[item.name]}"
@@ -149,7 +149,7 @@ class SoftwareList:
                 prev_part_sib = part_element.getprevious()
                 if isinstance(prev_part_sib, etree._Comment):
                     part.comments.append(Comment(prev_part_sib))
-                
+
                 # capture comments inside <part>
                 for child in part_element:
                     if isinstance(child, etree._Comment):
@@ -189,7 +189,7 @@ class SoftwareList:
     def all_redump_url_parts(self) -> list[Part]:
         self._build_redump_url_parts()
         return self._redump_url_parts['matched_url_parts'] + self._redump_url_parts['unmatched_url_parts']
-    
+
     @property
     def unmatched_redump_url_parts(self) -> list[Part]:
         self._build_redump_url_parts()

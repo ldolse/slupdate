@@ -10,7 +10,7 @@ from ..BaseCD.fulltoc import TrackDataDescriptor, CDFullTOC
 from ..BaseCD.sector import Sector
 from ..BaseCD.subchannel import Subchannel
 from ..BaseCD.cd_types import (
-    TrackType, TrackSubchannelType, SectorTagType, MediaType, 
+    TrackType, TrackSubchannelType, SectorTagType, MediaType,
     MediaTagType, MetadataMediaType, TocControl, OpticalImageCapabilities,
     Track, Session, Partition, ImageInfo
 )
@@ -167,10 +167,6 @@ class CloneCD:
         return None
 
     @property
-    def aaru_metadata(self) -> Optional['Metadata']:
-        return None
-
-    @property
     def supported_media_tags(self) -> List[MediaTagType]:
         return [MediaTagType.CD_MCN, MediaTagType.CD_FullTOC]
 
@@ -232,36 +228,36 @@ class CloneCD:
 
     def identify(self, image_filter: IFilter) -> bool:
         self._ccd_filter = image_filter
-    
+
         try:
             with image_filter.get_data_fork_stream() as stream:
                 stream.seek(0)
                 test_array = bytearray(512)
                 stream.readinto(test_array)
                 stream.seek(0)
-    
+
                 # Check for unexpected control characters
                 two_consecutive_nulls = False
-    
+
                 for i, byte in enumerate(test_array):
                     if i >= image_filter.length:
                         break
-    
+
                     if byte == 0:
                         if two_consecutive_nulls:
                             return False
                         two_consecutive_nulls = True
                     else:
                         two_consecutive_nulls = False
-    
+
                     if byte < 0x20 and byte not in (0x0A, 0x0D, 0x00):
                         return False
-    
+
                 self._cue_stream = io.TextIOWrapper(stream, encoding='utf-8')
                 line = self._cue_stream.readline()
-    
+
                 return self.ccd_identifier_regex.match(line) is not None
-    
+
         except Exception as ex:
             logger.error(f"Exception trying to identify image file: {image_filter.filename}")
             logger.exception(ex)
@@ -459,12 +455,12 @@ class CloneCD:
             toc.first_complete_session = min_session
             toc.last_complete_session = max_session
             toc.track_descriptors = entries
-    
+
             # Create binary representation of TOC
             toc_ms = io.BytesIO()
             toc_ms.write(struct.pack('>H', len(entries) * 11 + 2))  # DataLength
             toc_ms.write(bytes([toc.first_complete_session, toc.last_complete_session]))
-    
+
             for descriptor in toc.track_descriptors:
                 toc_ms.write(bytes([
                     descriptor.session_number,
@@ -479,7 +475,7 @@ class CloneCD:
                     descriptor.psec,
                     descriptor.pframe
                 ]))
-    
+
             self._full_toc = toc_ms.getvalue()
             logger.debug(f"Read TOC data: {len(self._full_toc)} bytes")
             self._image_info.readable_media_tags.append(MediaTagType.CD_FullTOC)
@@ -687,7 +683,7 @@ class CloneCD:
             self._image_info.metadata_media_type = MetadataMediaType.OpticalDisc
 
             return ErrorNumber.NoError
-    
+
         except Exception as ex:
             logger.error(f"Exception trying to open image file: {image_filter.filename}")
             logger.exception(ex)
@@ -697,22 +693,22 @@ class CloneCD:
         for s in range(225, min(750, int(track.end_sector - track.start_sector))):
             sync_test = bytearray(12)
             sect_test = bytearray(2352)
-    
+
             pos = track.file_offset + s * 2352
-    
+
             if pos >= self._data_stream.seek(0, io.SEEK_END) + 2352:
                 break
-    
+
             self._data_stream.seek(pos)
             self._data_stream.readinto(sect_test)
             sync_test[:] = sect_test[:12]
-    
+
             if sync_test != Sector.SYNC_MARK:
                 continue
-    
+
             if self._scrambled:
                 sect_test = Sector.scramble(sect_test)
-    
+
             if sect_test[15] == 1:
                 track.bytes_per_sector = 2048
                 track.type = TrackType.CdMode1
@@ -726,7 +722,7 @@ class CloneCD:
                 sub_hdr1 = sect_test[16:20]
                 sub_hdr2 = sect_test[20:24]
                 emp_hdr = bytes(4)
-    
+
                 if sub_hdr1 == sub_hdr2 and sub_hdr1 != emp_hdr:
                     if sub_hdr1[2] & 0x20:
                         track.bytes_per_sector = 2324
@@ -752,27 +748,27 @@ class CloneCD:
                         SectorTagType.CdSectorSync, SectorTagType.CdSectorHeader
                     ])
                     break
-    
+
     def update_readable_sector_tags(self, tags):
         for tag in tags:
             if tag not in self._image_info.readable_sector_tags:
                 self._image_info.readable_sector_tags.append(tag)
 
-    
+
     def determine_media_type(self):
         data = False
         mode2 = False
         first_audio = False
         first_data = False
         audio = False
-    
+
         for i, track in enumerate(self.tracks):
             first_audio |= i == 0 and track.type == TrackType.Audio
             first_data |= i == 0 and track.type != TrackType.Audio
             data |= i != 0 and track.type != TrackType.Audio
             audio |= i != 0 and track.type == TrackType.Audio
             mode2 |= track.type in [TrackType.CdMode2Form1, TrackType.CdMode2Form2, TrackType.CdMode2Formless]
-    
+
         if not data and not first_data:
             self._image_info.media_type = MediaType.CDDA
         elif first_audio and data and len(self.sessions) > 1 and mode2:
@@ -798,28 +794,28 @@ class CloneCD:
     def read_sector_tag(self, sector_address: int, tag: SectorTagType, track: Optional[int] = None) -> tuple[ErrorNumber, Optional[bytes]]:
         if tag == SectorTagType.CdTrackFlags:
             track = sector_address
-    
+
         aaruTrack = next((t for t in self.tracks if t.sequence == track), None)
         if aaruTrack is None:
             return ErrorNumber.SectorNotFound, None
 
         if sector_address > aaruTrack.end_sector:
             return ErrorNumber.OutOfRange, None
-    
+
         if aaruTrack.type == TrackType.Audio:
             return ErrorNumber.NotSupported, None
-    
+
         if tag == SectorTagType.CdSectorSubchannel:
             if self._sub_stream is None:
                 return ErrorNumber.NotSupported, None
-            
+
             buffer = bytearray(96)
             self._sub_stream.seek(aaruTrack.subchannel_offset + sector_address * 96)
             bytes_read = self._sub_stream.readinto(buffer)
-            
+
             if bytes_read != 96:
                 return ErrorNumber.ReadError, None
-            
+
             # Interleave the subchannel data
             interleaved = Subchannel.interleave(buffer)
             return ErrorNumber.NoError, bytes(interleaved)
@@ -830,7 +826,7 @@ class CloneCD:
             return ErrorNumber.NoError, bytes([self._track_flags[track]])
 
         return ErrorNumber.NotSupported, None
-    
+
 
     def read_sectors_tag(self, sector_address: int, length: int, tag: SectorTagType, track: Optional[int] = None) -> tuple[ErrorNumber, Optional[bytes]]:
         if track is None:
@@ -840,17 +836,17 @@ class CloneCD:
                     if track and sector_address - start_sector < track.end_sector - track.start_sector + 1:
                         return self.read_sectors_tag(sector_address - start_sector, length, tag, track_sequence)
             return ErrorNumber.SectorNotFound, None
-    
+
         if tag == SectorTagType.CdTrackFlags:
             track = sector_address
-    
+
         aaruTrack = next((t for t in self.tracks if t.sequence == track), None)
         if aaruTrack is None:
             return ErrorNumber.SectorNotFound, None
-    
+
         if length + sector_address - 1 > aaruTrack.end_sector:
             return ErrorNumber.OutOfRange, None
-    
+
         if aaruTrack.type == TrackType.Audio:
             return ErrorNumber.NotSupported, None
 
@@ -955,15 +951,15 @@ class CloneCD:
             aaruTrack = next((t for t in self.tracks if t.sequence == track), None)
             if aaruTrack is None:
                 return ErrorNumber.SectorNotFound, None
-            
+
             if length + sector_address - 1 > aaruTrack.end_sector:
                 return ErrorNumber.OutOfRange, None
-            
+
             sector_offset = 0
             sector_size = 0
             sector_skip = 0
             mode2 = False
-            
+
             if aaruTrack.type == TrackType.Audio:
                 sector_offset = 0
                 sector_size = 2352
@@ -979,10 +975,10 @@ class CloneCD:
                 sector_skip = 0
             else:
                 return ErrorNumber.NotSupported, None
-            
+
             buffer = bytearray(sector_size * length)
             self._data_stream.seek(aaruTrack.file_offset + sector_address * 2352)
-            
+
             if mode2:
                 mode2_ms = io.BytesIO()
                 self._data_stream.readinto(buffer)
@@ -1000,7 +996,7 @@ class CloneCD:
                     self._data_stream.readinto(sector)
                     self._data_stream.seek(sector_skip, io.SEEK_CUR)
                     buffer[i*sector_size:(i+1)*sector_size] = sector
-            
+
             return ErrorNumber.NoError, bytes(buffer)
 
     def read_sectors_long(self, sector_address: int, length: int, track: Optional[int] = None) -> tuple[ErrorNumber, Optional[bytes]]:

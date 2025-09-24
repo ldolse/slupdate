@@ -7,7 +7,7 @@ from utils import requests_retry_session
 from collections import defaultdict
 from typing import Optional, Any
 
-    
+
 
 redump__platform_paths = {
     'jaguar': 'ajcd',
@@ -91,7 +91,7 @@ class RedumpDB:
     def report_fetch_failure(self):
         """Increment the network failure counter."""
         self.failure_count += 1
-    
+
     def __setstate__(self, state):
         """reset the network failure counter on load"""
         self.__dict__.update(state)
@@ -286,7 +286,7 @@ class RedumpDB:
         }
 
         target_dict = lookup_dict.get(filter_type, self.entries_by_url)
-        
+
         for key in keys:
             entries: list[RedumpEntry] = []
             if filter_type == 'serial' or filter_type == 'name':

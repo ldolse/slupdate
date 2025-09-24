@@ -116,7 +116,7 @@ class ATIP:
 
             output.append(f"ATIP Start time of Lead-in: {(response.lead_in_start_min << 16) + (response.lead_in_start_sec << 8) + response.lead_in_start_frame}")
             output.append(f"ATIP Last possible start time of Lead-out: {(response.lead_out_start_min << 16) + (response.lead_out_start_sec << 8) + response.lead_out_start_frame}")
-            
+
             if response.s4_values:
                 output.append(f"S4 value: {(response.s4_values[0] << 16) + (response.s4_values[1] << 8) + response.s4_values[2]}")
         else:

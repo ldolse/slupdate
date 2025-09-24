@@ -132,12 +132,12 @@ def setup_temp_directory(zip_path,settings):
         with zipfile.ZipFile(zip_path, 'r') as zip_file:
             try:
                 temp_dir = tempfile.mkdtemp(dir=settings['zip_temp'])
-                temp_setup = True 
+                temp_setup = True
             except:
                 fix_message = f"temp directory {settings['zip_temp']} not available, do you want to resolve this"
                 error = manual_fix_query(fix_message)
                 if error is not None:
-                    return None, None, error            
+                    return None, None, error
             # extract all files to temp directory
             for file_info in zip_file.infolist():
                 # handle manually zipped garbage added by osx
@@ -191,7 +191,7 @@ def special_rom_handling(special_info, toc_file, temp_dir, zip_file, zip_path):
                 manual_fix_needed = True
 
         elif toc_file.endswith('.cue'):
-            # no-intro non redump files often use original cues but changed 
+            # no-intro non redump files often use original cues but changed
             # the actual filenames without updating the cue, rewrite single file cues
             cue_file_list = parse_cue_sheet(toc_file)
             # only handling renaming a single file at this time
@@ -286,31 +286,6 @@ def find_rom_zips(dat,soft_entry_data,dathashdict,dat_rom_map):
         return zips
     else:
         return None
-
-
-def find_softlist_zips(soft_list, platform_dats,dat_rom_map):
-    '''
-    iterates through the soft_list to check source DAT and fingerprint
-    checks the platform_dats for the description to calculate the name
-    gets the ROM folder from the dat_rom_map to find a matching ZIP
-    Checks the ZIP contents, returns the list of valid matches
-    deprecated in favor of doing the check rom by rom from another function
-    '''
-    print('checking all source zip files')
-    valid_zips = {}
-    for soft, softdata in soft_list.items():
-        if 'sourcedat' in softdata:
-            dat = softdata['sourcedat']
-            for disc, disc_info in softdata['parts'].items():
-                if 'source_sha' in disc_info and disc_info['source_sha'] in platform_dats[dat]:
-                    game_entry = platform_dats[dat][disc_info['source_sha']]
-                    goodzip = check_valid_zips(game_entry,dat_rom_map[dat])
-                    if goodzip:
-                        disc_info.update({'source_rom':goodzip})
-                        valid_zips.update({'sha':goodzip})
-        else:
-            continue
-    print('found '+str(len(valid_zips))+' valid rom sources which can be coverted to CHD')
 
 
 def check_valid_zips(dat_entry,rom_folder):
@@ -431,7 +406,7 @@ def get_imgs_from_bin(cue):
         if line[0] == '\'':
             line = line[1:-1]
         return line
-    
+
     #print('CUE', cue) if verbose else None
 
     img_files = []

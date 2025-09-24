@@ -11,7 +11,7 @@ from ..BaseCD.sector_builder import SectorBuilder
 from ..BaseCD.cd_checksums import CdChecksums
 from optical_media.cd_utils.checksums import CRC16CCITTContext
 from ..BaseCD.cd_types import (
-    TrackType, TrackSubchannelType, SectorTagType, MediaType, 
+    TrackType, TrackSubchannelType, SectorTagType, MediaType,
     MediaTagType, MetadataMediaType, CdFlags,
     Track, Session, Partition, enum_name
 )
@@ -88,7 +88,7 @@ class CdrdaoRead:
         print('In read_sectors function')
         print("Current Offset Map:")
         pprint.pprint(self._offset_map.items())
-        print(f'sector_address: {sector_address}, length: {length}, track: {track}')        
+        print(f'sector_address: {sector_address}, length: {length}, track: {track}')
         if track is None:
             # Logic for when track is not specified
             for track_sequence, start_sector in self._offset_map.items():
@@ -100,7 +100,7 @@ class CdrdaoRead:
 
         # Original logic when track is specified
         aaru_track = next((ct for ct in self._discimage.tracks if ct.sequence == track), None)
-        
+
         if not aaru_track:
             return ErrorNumber.SectorNotFound, None
 
@@ -111,7 +111,7 @@ class CdrdaoRead:
 
         buffer = bytearray(sector_size * length)
 
-        self._data_stream.seek(aaru_track.trackfile.offset + 
+        self._data_stream.seek(aaru_track.trackfile.offset +
                             sector_address * (sector_offset + sector_size + sector_skip))
 
         if mode2:
@@ -142,7 +142,7 @@ class CdrdaoRead:
     def read_sector_long(self, sector_address: int, track: Union[int, None] = None) -> Tuple[ErrorNumber, Optional[bytes]]:
         self._check_initialization()
         return self.read_sectors_long(sector_address, 1, track)
-    
+
     def read_sectors_long(self, sector_address: int, length: int, track: Union[int, None] = None) -> Tuple[ErrorNumber, Optional[bytes]]:
         self._check_initialization()
         if track is None:
@@ -153,10 +153,10 @@ class CdrdaoRead:
                     if cdrdao_track and sector_address - start_sector < cdrdao_track.sectors:
                         return self.read_sectors_long(sector_address - start_sector, length, track_sequence)
             return ErrorNumber.SectorNotFound, None
-        
+
         # Read sectors for a specific track
         aaru_track = next((t for t in self._discimage.tracks if t.sequence == track), None)
-        
+
         if not aaru_track:
             return ErrorNumber.SectorNotFound, None
 
@@ -238,11 +238,11 @@ class CdrdaoRead:
             buffer = swap_audio_endianness(buffer)
 
         return ErrorNumber.NoError, bytes(buffer)
-    
+
     def read_sector_tag(self, sector_address: int, tag: SectorTagType, track: Optional[int] = None) -> Tuple[ErrorNumber, Optional[bytes]]:
         """
         Read a single sector tag.
-        
+
         This function calls read_sectors_tag with a length of 1.
         """
         return self.read_sectors_tag(sector_address, 1, tag, track)
@@ -255,10 +255,10 @@ class CdrdaoRead:
                     if track and sector_address - start_sector < track.sectors:
                         return self.read_sectors_tag(sector_address - start_sector, length, tag, track_sequence)
             return ErrorNumber.SectorNotFound, None
-    
+
         if tag == SectorTagType.CdTrackFlags:
             track = sector_address
-    
+
         aaru_track = next((t for t in self._discimage.tracks if t.sequence == track), None)
         if not aaru_track:
             return ErrorNumber.SectorNotFound, None
@@ -333,7 +333,7 @@ class CdrdaoRead:
 
         buffer = bytearray(sector_size * length)
         image_stream = aaru_track.trackfile.datafilter.get_data_fork_stream()
-        
+
         image_stream.seek(aaru_track.trackfile.offset + sector_address * (sector_offset + sector_size + sector_skip))
 
         if sector_offset == 0 and sector_skip == 0:
@@ -350,17 +350,17 @@ class CdrdaoRead:
     def _read_track_flags(self, track: 'CdrdaoTrack') -> Tuple[ErrorNumber, Optional[bytes]]:
         flags = calculate_track_flags(track)
         return ErrorNumber.NoError, bytes([flags])
-    
+
     def _read_track_isrc(self, track: 'CdrdaoTrack') -> Tuple[ErrorNumber, Optional[bytes]]:
         if track.isrc:
             return ErrorNumber.NoError, track.isrc.encode('ascii')
         return ErrorNumber.NoData, None
-    
+
     def _read_subchannel(self, track: 'CdrdaoTrack', sector_address: int, length: int) -> Tuple[ErrorNumber, Optional[bytes]]:
         if not track.subchannel:
             logger.warning(f"Track {track.sequence} does not have subchannel data")
             return ErrorNumber.NotSupported, None
-        
+
         buffer = bytearray(96 * length)
         try:
             with track.trackfile.datafilter.get_data_fork_stream() as stream:
@@ -370,32 +370,32 @@ class CdrdaoRead:
                 stream.seek(offset)
                 logger.debug(f"Seeking to offset {offset} for subchannel data (track {track.sequence}, sector {sector_address})")
                 bytes_read = stream.readinto(buffer)
-                
+
                 if bytes_read != 96 * length:
                     logger.warning(f"Expected to read {96 * length} bytes, but read {bytes_read} bytes")
                     return ErrorNumber.InOutError, None
-                
+
                 # Deinterleave the subchannel data
                 deinterleaved = Subchannel.deinterleave(buffer)
                 return ErrorNumber.NoError, bytes(deinterleaved)
         except Exception as e:
             logger.error(f"Error reading subchannel data: {str(e)}")
             return ErrorNumber.InOutError, None
-    
+
     def verify_sector(self, sector_address: int) -> Optional[bool]:
         error, buffer = self.read_sector_long(sector_address)
         if error != ErrorNumber.NoError:
             return None
         return CdChecksums.check_cd_sector(buffer)
-    
+
     def verify_sectors(self, sector_address: int, length: int) -> Tuple[Optional[bool], List[int], List[int]]:
         failing_lbas = []
         unknown_lbas = []
         error, buffer = self.read_sectors_long(sector_address, length)
-    
+
         if error != ErrorNumber.NoError:
             return None, failing_lbas, unknown_lbas
-    
+
         sector_size = len(buffer) // length
         for i in range(length):
             sector = buffer[i * sector_size : (i + 1) * sector_size]
@@ -405,16 +405,16 @@ class CdrdaoRead:
                 unknown_lbas.append(sector_address + i)
             elif sector_status is False:
                 failing_lbas.append(sector_address + i)
-    
+
         if unknown_lbas:
             return None, failing_lbas, unknown_lbas
         return len(failing_lbas) == 0, failing_lbas, unknown_lbas
-    
+
     def get_session_tracks(self, session: Union[Session, int]) -> List[Track]:
         """
         Retrieves a list of tracks for a given session.
         This method is provided for compatibility with multi-session CD operations
-    
+
         :param session: Either a Session object or a session number
         :return: A list of Track objects belonging to the specified session
         """
@@ -432,7 +432,7 @@ class CdrdaoRead:
 
         return ErrorNumber.NotSupported, None
 
-    ''' 
+    '''
     def read_media_tag(self, tag: MediaTagType) -> Tuple[ErrorNumber, Optional[bytes]]:
         """
         Reads a specific media tag from the CD image.
@@ -459,27 +459,27 @@ class CdrdaoRead:
     def validate_subchannel(self, sector_address: int, track: int) -> bool:
         logger.debug(f"Validating subchannel for track {track}, sector {sector_address}")
         error, subchannel_data = self.read_sectors_tag(sector_address, SectorTagType.CdSectorSubchannel, track)
-        
+
         if error != ErrorNumber.NoError or subchannel_data is None:
             logger.warning(f"Failed to read subchannel data: {error}")
             return False
-        
+
         logger.debug(f"Read {len(subchannel_data)} bytes of subchannel data")
-        
+
         if len(subchannel_data) != 96:
             logger.warning(f"Unexpected subchannel data size: {len(subchannel_data)} bytes")
             return False
 
         # Deinterleave the subchannel data
         deinterleaved = Subchannel.deinterleave(subchannel_data)
-        
+
         # Check P subchannel (should be all 0xFF for lead-in)
         p_subchannel = deinterleaved[:12]
         logger.debug(f"P subchannel data: {p_subchannel.hex()}")
         if not all(b == 0xFF for b in p_subchannel):
             logger.warning(f"Invalid P subchannel data: {p_subchannel.hex()}")
             return False
-        
+
         # Check Q subchannel structure
         q_subchannel = deinterleaved[12:24]
         logger.debug(f"Q subchannel data: {q_subchannel.hex()}")
@@ -489,14 +489,13 @@ class CdrdaoRead:
         except Exception as e:
             logger.error(f"Error processing Q subchannel: {str(e)}")
             return False
-        
+
         # Calculate CRC
         calculated_crc = CRC16CCITTContext.calculate(q_subchannel[:10])
         stored_crc = (q_subchannel[10] << 8) | q_subchannel[11]
-        
+
         if calculated_crc != stored_crc:
             logger.warning(f"CRC mismatch: calculated {calculated_crc:04X}, stored {stored_crc:04X}")
             return False
-        
+
         return True
-    

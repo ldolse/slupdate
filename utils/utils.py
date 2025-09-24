@@ -62,7 +62,7 @@ def slupdate_version(__version__):
     Returns the version of the slupdate package
     '''
     return __version__
-    
+
 
 def get_dat_paths(platform, datpaths, sl_dat_map):
     '''
@@ -73,7 +73,7 @@ def get_dat_paths(platform, datpaths, sl_dat_map):
     files = glob.glob(redump_pattern)
     redump_path = files[0]
     return [slpath, redump_path]
-    
+
 def history(search=None):
     '''
     Prints the history of the current session
@@ -196,7 +196,7 @@ def select_directory(filetype=None,start_dir=None):
 def reconfigure_settings(instance: object, settings_list: list[tuple[str, str, str]]):
     """
     Generic function to edit attributes of an object via user selection.
-    
+
     Each setting tuple is in the format:
         (attribute_key, human_readable_name, input_type)
     Supported `input_type` values: "directory", "boolean"

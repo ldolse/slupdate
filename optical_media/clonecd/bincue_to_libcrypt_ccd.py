@@ -24,4 +24,4 @@ def create_combined_image_and_cue(cue: Cue, base_name, combined_image_path):
         print("Finished LSD -> Patching!")
     else:
         print(f"Could not find '{lsd_path}'! Skipping...")
-        
+

@@ -108,8 +108,8 @@ class CDTextOnLeadIn:
             elif pack_type == CDTextOnLeadIn.PackTypeIndicator.BlockSizeInformation:
                 output.append("CD-Text pack contains size block information")
 
-            if pack_type in [CDTextOnLeadIn.PackTypeIndicator.Title, 
-                             CDTextOnLeadIn.PackTypeIndicator.Performer, 
+            if pack_type in [CDTextOnLeadIn.PackTypeIndicator.Title,
+                             CDTextOnLeadIn.PackTypeIndicator.Performer,
                              CDTextOnLeadIn.PackTypeIndicator.Songwriter,
                              CDTextOnLeadIn.PackTypeIndicator.Composer,
                              CDTextOnLeadIn.PackTypeIndicator.Arranger,

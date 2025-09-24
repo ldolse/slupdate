@@ -1,13 +1,14 @@
 #from modules.dat import DAT
 import os
 from dat import RomDat
-from modules.software_list import shift_sibling_comments, convert_xml, build_sl_dict
+from dat.rom_dat import GameEntry as DATGameEntry
 from softwarelist import SoftwareList, Part
 from utils.utils import select_directory
-from media_registry import MediaRegistry
+from rom_management import ZipProcessor, CHD
+from media_registry import MediaRegistry, CDMedia
 from game_metadata import RedumpDB
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 if TYPE_CHECKING:
     from consoles.platform_manager import PlatformManager
     from dat import RomDat
@@ -30,20 +31,13 @@ class Platform:
         self.dat_directories: dict[str, list[RomDat]] = {}
         self.redump_db: RedumpDB = None
         self.mr: MediaRegistry = None
+        self.matched_buildable_media: list[CDMedia] = []
+        self.validated_chds: list[CHD] = []
 
     @property
     def _all_dats(self) -> list[RomDat]:
         """Flatten all DAT instances across directories."""
         return [dat for dats_list in self.dat_directories.values() for dat in dats_list]
-
-    
-    @property
-    def dat_rom_dict(self):
-        dat_rom_dict = {}
-        for dat_instance in self._all_dats:
-            dat_path = dat_instance.path
-            dat_rom_dict[dat_path] = dat_instance.rom_directory
-        return dat_rom_dict
 
     @property
     def total_parts(self):
@@ -65,11 +59,11 @@ class Platform:
         if self.redump_db == None:
             self.redump_db = RedumpDB(self.key)
         self.redump_db.fetch_all
-        
+
     def process_data(self) -> None:
         """
         Wrapper function to run all necessary setup steps for mapping.
-        This orchestrates the complete data processing pipeline.
+        This orchestrates the initial data processing pipeline.
         """
         self.update_dats() # find all DAT files and assign ROM directories
         self.register_dat_media() # register all DAT files to MediaRegistry
@@ -86,24 +80,24 @@ class Platform:
                 print(f"Directory `{dat_directory_path}` does not exist.")
                 return
 
-            dat_files = [f for f in sorted(os.listdir(dat_directory_path)) 
+            dat_files = [f for f in sorted(os.listdir(dat_directory_path))
                         if f.endswith(".xml") or f.endswith(".dat")]
-            
+
             # RomVault: Generate base ROM directory from DAT dir
             rom_dir_base = dat_directory_path.replace(self.pm.datroot, self.pm.romroot, 1)
-            
+
             dats_in_dir = []
-            
+
             for file_name in sorted(dat_files):
                 full_path = os.path.join(dat_directory_path, file_name)
-                
+
                 # Skip DAT files that can't be parsed (e.g., non-XML .dat files)
                 try:
                     dat = RomDat.from_file(full_path)
                 except Exception as e:
                     print(f"Skipping invalid DAT {file_name}: {e}")
                     continue
-                
+
                 if self.pm.romvault and len(dat_files) > 1:
                     # check subdirectory based on DAT metadata name
                     rom_subdir = os.path.join(rom_dir_base, dat.name)
@@ -119,7 +113,7 @@ class Platform:
                         prompt_msg = f"Select ROM directory for DAT: {file_name}"
                         rom_subdir = select_directory(prompt_msg, start_dir=self.pm.romroot)
                         dat.rom_path = rom_subdir
-                
+
                 dats_in_dir.append(dat)
 
             self.dat_directories[dat_directory_path] = dats_in_dir
@@ -147,6 +141,68 @@ class Platform:
                 match_failures.append(part)
         return match_failures
 
+    def validate_matched_entries(self) -> None:
+        """
+        Validate zip files for all matched entries in MediaRegistry
+        """
+        if not self.mr:
+            print("MediaRegistry not initialized")
+            return
+
+        zip_processor = ZipProcessor()
+
+        for media in self.mr.media_directory.values():
+            if not hasattr(media, 'dat_game_entry') or media.dat_game_entry is None or media.softlist_title is None:
+                continue
+
+            # Find ROM directory for this DAT
+            rom_dir = media.dat_game_entry.dat.rom_path
+            if not os.path.isdir(rom_dir):
+                continue
+
+            # Find and validate zip
+            zip_path = zip_processor.find_valid_zip(media.dat_game_entry, rom_dir)
+            if not zip_path:
+                continue
+            else:
+                print(f"✅ Found valid zip for {media.dat_game_entry.name}: {zip_path}")
+                media.zip_path = zip_path
+                self.matched_buildable_media.append(media)
+
+    def build_chds_for_matched(self) -> None:
+        """
+        Convert all matched entries in MediaRegistry to CHD format.
+        """
+        zip_processor = ZipProcessor()
+        for matched in self.matched_buildable_media:
+            # Extract to temp directory
+            temp_dir = zip_processor.extract_to_tempdir(matched.zip_path)
+            if not temp_dir:
+                continue
+
+            # Prepare for CHD conversion
+            toc_file = zip_processor.prepare_for_chd(temp_dir)
+            if not toc_file:
+                continue
+
+            # Convert to CHD
+            chd_base_dir = os.path.join(self.chd_path, matched.softlist_title)
+            os.makedirs(chd_base_dir, exist_ok=True)
+            chd_path = os.path.join(chd_base_dir, f"{matched.dat_game_entry.name}.chd")
+
+            try:
+                chd = CHD(source_file=toc_file, output_path=chd_path)
+                new_chd = chd.create()
+                if new_chd.exists and new_chd.is_valid:
+                    self.validated_chds.append(new_chd)
+                    print(f"Successfully converted {matched.zip_path} to CHD")
+            except Exception as e:
+                error_menu = CHDErrorMenu(chd_path, str(e))
+                next_target = system.navigate_to("chd_error_menu")
+                print(f"CHD creation failed for {matched.zip_path}: {e}")
+
+            # Clean up
+            zip_processor.cleanup()
 
 
 class PlayStationPlatform(Platform):

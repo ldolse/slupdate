@@ -68,7 +68,7 @@ class Comment:
             return "before"
         else:
             return "standalone"
-    
+
     def to_dict(self) -> dict:
         """Convert the comment to a dictionary representation."""
         return {
@@ -79,7 +79,7 @@ class Comment:
     def _split_data_by_discs(self):
         '''
         Splits a comment string into separate disc groups based on presence of toc files.
-        
+
         Returns:
             List[str] - Each element represents one disc's worth of ROM data.
         '''
@@ -118,7 +118,7 @@ class Comment:
         game_discs = []
         if not self.rom_lines:
             return game_discs
-        
+
         if sum(len(self.toc_pattern.findall(line)) for line in self.rom_lines) > 1:
             # Multiple discs entries found
             discs = self._split_data_by_discs()
@@ -127,7 +127,7 @@ class Comment:
         else:
             # Single disc entry found
             game_discs.append(self._xml_to_game_entries('\n'.join(self.rom_lines), name))
-        
+
         return game_discs
 
 
@@ -139,7 +139,7 @@ class Comment:
             root = etree.fromstring(xml_str)
             dat_name = 'Software List'
             dat_group = 'MAME'
-            
+
             for game_elem in root.findall('.//game'):
                 name = game_elem.get('name', '').strip()
                 category = game_elem.findtext('category', default='')
@@ -161,7 +161,7 @@ class Comment:
                     })
                     for r in game_elem.findall('rom')
                 ]
-                
+
                 return GameEntry(name, category, description, roms, dat_name, dat_group)
 
         except etree.XMLSyntaxError:

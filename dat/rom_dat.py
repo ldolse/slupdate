@@ -25,11 +25,10 @@ class Rom:
 
 class GameEntry:
     """Represents a game entry in a DAT file."""
-    def __init__(self, name: str, category: str, description: str, roms=None, dat:str = "", dat_group: str = ""):
+    def __init__(self, name: str, category: str, description: str, roms=None, dat: "RomDat" = None):
         from media_registry import CDMedia
         self.name = name
-        self.dat = dat
-        self.dat_group = dat_group
+        self.dat: RomDat = dat # Reference to parent DAT
         self.category = category
         self.description = description
         self.roms = roms if roms is not None else []
@@ -39,7 +38,8 @@ class GameEntry:
         return {
             "name": self.name,
             "description": self.description,
-            "dat group": self.dat_group,
+            "dat group": self.dat.dat_group,
+            "rom path": self.dat.rom_path,
             "roms": [r.to_dict() for r in self.roms],
             "CDM_ID": self.media.to_dict()
         }
@@ -57,15 +57,13 @@ class RomDat(LogiqxDAT):
     def _parse_games(self, root_element):
         """Parse <game> elements with multiple <rom>s"""
         games = []
-        dat_name = self.name
-        dat_group = self.dat_group
         for game_elem in root_element.findall('.//game'):
             name = game_elem.get('name', '').strip()
 
-            
+
             category = game_elem.findtext('category', default=None)
             description = game_elem.findtext('description', default=None)
-            
+
             roms = [Rom(**{
                 'name': r.attrib['name'],
                 'size': int(r.attrib['size']),
@@ -73,8 +71,8 @@ class RomDat(LogiqxDAT):
                 'md5': r.attrib.get('md5', ''),
                 'sha1': r.attrib.get('sha1', '')
             }) for r in game_elem.findall('rom')]
-            
-            games.append(GameEntry(name, category, description, roms, dat_name, dat_group))
+
+            games.append(GameEntry(name, category, description, roms, self))
         self.games = games
 
     # Override the placeholder method from base class
@@ -85,7 +83,7 @@ class RomDat(LogiqxDAT):
     def register_to_media_registry(self, registry: MediaRegistry):
         for game_entry in self.games:
             registered, matched = registry.get_or_create_media(game_entry)
-            
+
             if registered is not None:
                 game_entry.media = registered  # Store reference to CDMedia
 
