@@ -32,7 +32,8 @@ class Platform:
         self.redump_db: RedumpDB = None
         self.mr: MediaRegistry = None
         self.matched_buildable_media: list[CDMedia] = []
-        self.validated_chds: list[CHD] = []
+        self.validated_chds: set[CHD] = set()
+        self._chd_build_index = 0
 
     @property
     def _all_dats(self) -> list[RomDat]:
@@ -173,36 +174,38 @@ class Platform:
         """
         Convert all matched entries in MediaRegistry to CHD format.
         """
+        media_to_process = self.matched_buildable_media[self._chd_build_index:]
         zip_processor = ZipProcessor()
-        for matched in self.matched_buildable_media:
-            # Extract to temp directory
-            temp_dir = zip_processor.extract_to_tempdir(matched.zip_path)
-            if not temp_dir:
-                continue
-
-            # Prepare for CHD conversion
-            toc_file = zip_processor.prepare_for_chd(temp_dir)
-            if not toc_file:
-                continue
-
-            # Convert to CHD
-            chd_base_dir = os.path.join(self.chd_path, matched.softlist_title)
-            os.makedirs(chd_base_dir, exist_ok=True)
-            chd_path = os.path.join(chd_base_dir, f"{matched.dat_game_entry.name}.chd")
-
+        for matched in media_to_process:
             try:
+                # Extract to temp directory
+                temp_dir = zip_processor.extract_to_tempdir(matched.zip_path)
+                if not temp_dir:
+                    raise Exception(f"Temp directory creation for {matched.dat_game_entry.name} failed")
+
+                # Prepare for CHD conversion
+                toc_file = zip_processor.prepare_for_chd(temp_dir)
+                if not toc_file:
+                    raise Exception(f"toc file not found for {matched.dat_game_entry.name}")
+
+                # Convert to CHD
+                chd_base_dir = os.path.join(self.chd_path, matched.softlist_title)
+                os.makedirs(chd_base_dir, exist_ok=True)
+                chd_path = os.path.join(chd_base_dir, f"{matched.dat_game_entry.name}.chd")
+
                 chd = CHD(source_file=toc_file, output_path=chd_path)
                 new_chd = chd.create()
                 if new_chd.exists and new_chd.is_valid:
                     self.validated_chds.append(new_chd)
                     print(f"Successfully converted {matched.zip_path} to CHD")
+                else:
+                    raise Exception(f"toc file not found for {matched.dat_game_entry.name}")
             except Exception as e:
-                error_menu = CHDErrorMenu(chd_path, str(e))
-                next_target = system.navigate_to("chd_error_menu")
-                print(f"CHD creation failed for {matched.zip_path}: {e}")
-
-            # Clean up
-            zip_processor.cleanup()
+                self._last_chd_error = (chd_path, str(e))
+                raise  # This exits the function, but we know where to resume
+            finally:
+                # Clean up
+                zip_processor.cleanup()
 
 
 class PlayStationPlatform(Platform):
