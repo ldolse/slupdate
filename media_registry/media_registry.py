@@ -39,7 +39,7 @@ class CDMedia:
 
         # Categorize entries by group from _all_dat_references
         for entry in self._all_dat_references.values():
-            group = entry.dat_group if hasattr(entry, 'dat_group') else 'unknown'
+            group = entry.dat.dat_group if hasattr(entry.dat, 'dat_group') else 'unknown'
             result[group].append(entry)
 
         return {g: v for g, v in result.items() if v}
@@ -64,7 +64,7 @@ class CDMedia:
 
     def add_dat_reference(self, game_entry: 'DATGameEntry'):
         """Track a DAT entry reference with priority handling"""
-        if game_entry.dat_group == 'redump':
+        if game_entry.dat.dat_group == 'redump':
             self.confirmed_from_redump = True
             self.dat_game_entry = game_entry
         elif self.dat_game_entry == None:
@@ -84,8 +84,9 @@ class MediaRegistry:
     def __init__(self):
 
         # Maps hash signatures to CDMedia objects
-        self.media_directory: Dict[str, CDMedia] = {}
+        self.media_hashes: Dict[str, CDMedia] = {}
         self.media_id_counter = 0
+        self.media_directory: set[CDMedia] = set()
 
     def get_or_create_media(self, game_entry: DATGameEntry) -> Tuple[CDMedia, bool]:
         """Get or create media for a DAT GameEntry
@@ -103,14 +104,14 @@ class MediaRegistry:
         # Step 1: Find existing media using any available hash
         matched_cdm = None
         for sig in [s for s in (sha1_sig, crc_sig) if s]:
-            if sig not in self.media_directory:
+            if sig not in self.media_hashes:
                 continue
             # Prioritize SHA1 first
-            if sig[1] == 'SHA1' and sig in self.media_directory:
-                matched_cdm = self.media_directory[sig]
+            if sig[1] == 'SHA1' and sig in self.media_hashes:
+                matched_cdm = self.media_hashes[sig]
 
-            elif sig[1] == 'CRC_SHA1' and sig in self.media_directory:
-                existing_media = self.media_directory[sig]
+            elif sig[1] == 'CRC_SHA1' and sig in self.media_hashes:
+                existing_media = self.media_hashes[sig]
                 if matched_cdm is None:  # First match (only CRC available)
                     if existing_media.total_rom_size == size:
                         print(f"Info: CRC only match {game_entry.dat}: {game_entry.name}")
@@ -128,8 +129,8 @@ class MediaRegistry:
         if matched_cdm:
             # Ensure all new signatures point to this CDMedia instance
             for sig in [sig for sig in (sha1_sig, crc_sig) if sig]:
-                if sig not in self.media_directory or self.media_directory[sig] != matched_cdm:
-                    self.media_directory[sig] = matched_cdm
+                if sig not in self.media_hashes or self.media_hashes[sig] != matched_cdm:
+                    self.media_hashes[sig] = matched_cdm
             # Add the current game entry as a reference
             matched_cdm.add_dat_reference(game_entry)
             return matched_cdm, True
@@ -138,9 +139,10 @@ class MediaRegistry:
         if matched_cdm == None:
             cd_media = self._create_media(sha1_sig, crc_sig, size)
             for sig in [sig for sig in (sha1_sig, crc_sig) if sig]:
-                if sig not in self.media_directory:
-                    self.media_directory[sig] = cd_media
-                    self.media_directory[sig].add_dat_reference(game_entry)
+                if sig not in self.media_hashes:
+                    self.media_hashes[sig] = cd_media
+                    self.media_hashes[sig].add_dat_reference(game_entry)
+            self.media_directory.add(cd_media)
             return cd_media, False
 
 
@@ -205,3 +207,12 @@ class MediaRegistry:
         sha1_signature = (sha1_builder.hexdigest(), 'SHA1') if has_sha1 else None
         crc_signature = (crc_builder.hexdigest(), 'CRC_SHA1') if has_crc and rom_count > 0 else None
         return sha1_signature, crc_signature, total_size
+    
+    def to_dict(self):
+        return {
+            "total_media": len(self.media_hashes),
+            # print out the media id with a to_dict for each value in the directory
+            
+            "media": [m.to_dict() for m in self.media_hashes.values()],
+            "more": {mid: media.to_dict() for mid, media in self.media_hashes.items()}
+        }

@@ -19,11 +19,11 @@ class Part:
         self.redump_url: str = ""
         self.game_entry: GameEntry = None
 
-    def extract_rom_sources(self) -> None:
+    def extract_rom_sources(self, dat) -> None:
         """Parse comments into structured data."""
         game_discs = []
         for comment in self.comments:
-            game_discs.extend(comment.parse_rom_entries(self.part_of.name))
+            game_discs.extend(comment.parse_rom_entries(self.part_of.name, dat))
         if len(game_discs) > 1:
             (f'⚠️ [Warning] - Too many source references for {self.part_of.name}, part "{self.name}" using first source')
         if game_discs:

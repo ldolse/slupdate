@@ -137,7 +137,7 @@ class SoftwareList:
             for part_element in software_element.findall("part"):
                 part = Part()
                 part.name = part_element.get("name", "")
-                part.part_of = instance
+                part.part_of = software
                 if part.name == part_base_name and disc_num == 0:
                     pass
                 elif part.name == part_base_name:

@@ -19,21 +19,30 @@ class ZipProcessor:
         zip_path = os.path.join(rom_dir, zip_name)
 
         if not os.path.isfile(zip_path):
+            print(f"Zip file does not exist: {zip_path}")
             return None
 
         try:
             with zipfile.ZipFile(zip_path, 'r') as zip_file:
                 for rom in dat_entry.roms:
-                    # Skip TOC files and special cases
-                    if rom.name.lower().endswith(('.cue', '.gdi')) or rom.name == 'ip.bin':
-                        continue
-
                     if rom.name not in zip_file.namelist():
                         return None
-
                     zip_info = zip_file.getinfo(rom.name)
-                    if hex(zip_info.CRC) != rom.crc:
+                    if rom.crc and zip_info.CRC != int(rom.crc, 16):
                         return None
+                    elif rom.md5 and not rom.crc:
+                        # temporary prompt for MD5 check if CRC not available
+                        user_input = input("   Check Using MD5? (y/n): ").strip().lower()
+                        if user_input != 'y':
+                            return None
+                        # MD5 check if CRC not available
+                        import hashlib
+                        md5_hash = hashlib.md5()
+                        with zip_file.open(rom.name) as f:
+                            for chunk in iter(lambda: f.read(4096), b""):
+                                md5_hash.update(chunk)
+                        if md5_hash.hexdigest().lower() != rom.md5.lower():
+                            return None
 
             return zip_path
         except (zipfile.BadZipFile, KeyError):
@@ -92,7 +101,7 @@ class ZipProcessor:
         # Implementation for special cases (similar to original special_rom_handling)
         pass
 
-    def cleanup(self):
+    def cleanup_tempdir(self):
         """Clean up temporary files"""
         if self.temp_dir and os.path.exists(self.temp_dir):
             shutil.rmtree(self.temp_dir)

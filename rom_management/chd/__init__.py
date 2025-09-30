@@ -1,4 +1,4 @@
-from chd import CHD
+from .chd import CHD
 
 __all__ = ["CHD"]
 

@@ -1,4 +1,4 @@
-from zip_processor import ZipProcessor
+from .zip_processor import ZipProcessor
 
 
 __all__ = ["ZipProcessor"]

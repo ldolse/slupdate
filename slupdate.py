@@ -794,8 +794,8 @@ if __name__ == '__main__':
     system.register(MapStageTwo())
     system.register(MapStageThree())
     system.register(DatMenu())
-    system.register(CHDErrorMenu())
-    system.register(ExistingCHDMenu())
+    #system.register(CHDErrorMenu())
+    #system.register(ExistingCHDMenu())
 
     # Initialize the main menu
     system.navigate_to("main_menu")  # Start at root menu

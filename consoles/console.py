@@ -1,7 +1,6 @@
 #from modules.dat import DAT
 import os
 from dat import RomDat
-from dat.rom_dat import GameEntry as DATGameEntry
 from softwarelist import SoftwareList, Part
 from utils.utils import select_directory
 from rom_management import ZipProcessor, CHD
@@ -33,6 +32,7 @@ class Platform:
         self.mr: MediaRegistry = None
         self.matched_buildable_media: list[CDMedia] = []
         self.validated_chds: set[CHD] = set()
+        self._chd_handling_preference = "ask"  # Can be "ask", "overwrite", or "skip"
         self._chd_build_index = 0
 
     @property
@@ -44,6 +44,9 @@ class Platform:
     def total_parts(self):
         return sum(len(e.parts) for e in self.softwarelist.software_items)
 
+    @property
+    def chd_handling_preference(self) -> str:
+        return self._chd_handling_preference
 
     def register_dat_media(self) -> None:
         self.update_dats()
@@ -110,7 +113,7 @@ class Platform:
                     # Use the base ROM directory for single DATs or manual mode
                     if self.pm.romvault and os.path.exists(rom_dir_base):
                         dat.rom_path = rom_dir_base
-                    elif not self.romvault:
+                    elif not self.pm.romvault:
                         prompt_msg = f"Select ROM directory for DAT: {file_name}"
                         rom_subdir = select_directory(prompt_msg, start_dir=self.pm.romroot)
                         dat.rom_path = rom_subdir
@@ -129,13 +132,13 @@ class Platform:
             if url in self.redump_db.entries_by_url:
                 entry = self.redump_db.entries_by_url[url]
                 hashkey = self.redump_db.entries_by_url[url].site_hash
-                if hashkey in self.mr.media_directory:
-                    dat_entry_name = self.mr.media_directory[hashkey].dat_game_entry.name
+                if hashkey in self.mr.media_hashes:
+                    dat_entry_name = self.mr.media_hashes[hashkey].dat_game_entry.name
                     print(f"✅ Matched existing media: {part.part_of.name} to {dat_entry_name}")
                     if part.game_entry is not None:
                         print('    [Info] replacing existing source references for this part')
-                    part.game_entry = self.mr.media_directory[hashkey].dat_game_entry
-                    part.cdmedia = self.mr.media_directory[hashkey]
+                    part.game_entry = self.mr.media_hashes[hashkey].dat_game_entry
+                    part.cdmedia = self.mr.media_hashes[hashkey]
             else:
                 print(f'{part.redump_url} no longer in redump, removing reference')
                 part.redump_url = ''
@@ -152,21 +155,25 @@ class Platform:
 
         zip_processor = ZipProcessor()
 
-        for media in self.mr.media_directory.values():
-            if not hasattr(media, 'dat_game_entry') or media.dat_game_entry is None or media.softlist_title is None:
+        for media in self.mr.media_directory:
+            print(f"Validating media ID {media.id} for {media.dat_game_entry.name if media.dat_game_entry else 'Unknown Game'}")
+            if not hasattr(media, 'dat_game_entry') or media.dat_game_entry is None or media.softlist_part is None:
+                print("  ⚠️ Skipping - No valid DAT game entry or softlist part reference")
                 continue
 
             # Find ROM directory for this DAT
             rom_dir = media.dat_game_entry.dat.rom_path
             if not os.path.isdir(rom_dir):
+                print(f"  ⚠️ Skipping - ROM directory does not exist: {rom_dir}")
                 continue
 
             # Find and validate zip
             zip_path = zip_processor.find_valid_zip(media.dat_game_entry, rom_dir)
             if not zip_path:
+                print(f"  ⚠️ No valid zip found for {media.dat_game_entry.name} in {rom_dir}")
                 continue
             else:
-                print(f"✅ Found valid zip for {media.dat_game_entry.name}: {zip_path}")
+                print(f"  ✅ Found valid zip for {media.dat_game_entry.name}: {zip_path}")
                 media.zip_path = zip_path
                 self.matched_buildable_media.append(media)
 
@@ -175,37 +182,47 @@ class Platform:
         Convert all matched entries in MediaRegistry to CHD format.
         """
         media_to_process = self.matched_buildable_media[self._chd_build_index:]
-        zip_processor = ZipProcessor()
         for matched in media_to_process:
+            title = matched.softlist_part.part_of.name if matched.softlist_part and matched.softlist_part.part_of else "Unknown"
             try:
-                # Extract to temp directory
-                temp_dir = zip_processor.extract_to_tempdir(matched.zip_path)
-                if not temp_dir:
-                    raise Exception(f"Temp directory creation for {matched.dat_game_entry.name} failed")
+                # initialize CHD object
+                print(f"Converting {matched.zip_path} to CHD")
+                print(f"  Media ID {matched.id} for {matched.dat_game_entry.name if matched.dat_game_entry else 'Unknown Game'}")
+                print(f"  softlist title: {title}")
+                matched_chd = CHD(source=matched, base_path=self.chd_path)
 
-                # Prepare for CHD conversion
-                toc_file = zip_processor.prepare_for_chd(temp_dir)
-                if not toc_file:
-                    raise Exception(f"toc file not found for {matched.dat_game_entry.name}")
+                if matched_chd.preexisting:
+                    print(f"⚠️  CHD already exists for {matched.dat_game_entry.name} at {matched_chd.path}")
 
-                # Convert to CHD
-                chd_base_dir = os.path.join(self.chd_path, matched.softlist_title)
-                os.makedirs(chd_base_dir, exist_ok=True)
-                chd_path = os.path.join(chd_base_dir, f"{matched.dat_game_entry.name}.chd")
+                    if self.chd_handling_preference == "skip":
+                        print("   Skipping as per user preference")
+                        self.validated_chds.append(matched_chd)
+                        continue
+                    elif self.chd_handling_preference == "ask":
+                        user_input = input("   Overwrite existing CHD? (y/n): ").strip().lower()
+                        if user_input != 'y':
+                            print("   Skipping conversion")
+                            self.validated_chds.append(matched_chd)
+                            continue
+                    # If overwrite, proceed to create new CHD
+                    elif self.chd_handling_preference == "overwrite":
+                        print("   Overwriting existing CHD as per user preference")
 
-                chd = CHD(source_file=toc_file, output_path=chd_path)
-                new_chd = chd.create()
-                if new_chd.exists and new_chd.is_valid:
-                    self.validated_chds.append(new_chd)
+                if matched_chd.exists and matched_chd.is_valid:
+                    self.validated_chds.append(matched_chd)
                     print(f"Successfully converted {matched.zip_path} to CHD")
-                else:
-                    raise Exception(f"toc file not found for {matched.dat_game_entry.name}")
+
             except Exception as e:
-                self._last_chd_error = (chd_path, str(e))
+                self._last_chd_error = (str(e))
                 raise  # This exits the function, but we know where to resume
-            finally:
-                # Clean up
-                zip_processor.cleanup()
+
+
+class CHDAlreadyExistsException(Exception):
+    def __init__(self, chd_path: str, chd_version: Optional[str] = None):
+        self.chd_path = chd_path
+        self.chd_version = chd_version
+        super().__init__(f"CHD already exists at {chd_path}")
+
 
 
 class PlayStationPlatform(Platform):

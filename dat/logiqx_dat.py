@@ -55,6 +55,7 @@ class LogiqxDAT:
             'redump': ('redump.org',),
             'no-intro': ('no-intro.org',),
             'tosec': ('tosecdev.org',),
+            'MAME': ('mamedev.org',),
             'mameredump': ('github.com/MetalSlug/MAMERedump',),
         }
 

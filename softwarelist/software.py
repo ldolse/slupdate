@@ -48,10 +48,14 @@ class Software:
 
     def extract_rom_sources(self) -> None:
         """Parse comments into structured data."""
+        # create a stub dat object for group reference
+        from dat.rom_dat import RomDat
+        dat = RomDat()
+        dat.url = 'http://mamedev.org/'
         for comment in self.comments:
-            self.game_entries.extend(comment.parse_rom_entries(self.name))
+            self.game_entries.extend(comment.parse_rom_entries(self.name, dat))
         for part in self.parts:
-            part.extract_rom_sources()
+            part.extract_rom_sources(dat)
 
         # shift any parsed items from the software entry to the individual parts
         self._map_items_to_parts(self.game_entries, 'game_entry')

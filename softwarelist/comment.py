@@ -113,7 +113,7 @@ class Comment:
         return discs
 
 
-    def parse_rom_entries(self, name: str) -> list[GameEntry]:
+    def parse_rom_entries(self, name: str, dat) -> list[GameEntry]:
         """Parse all <rom> entries from this comment into GameEntry objects."""
         game_discs = []
         if not self.rom_lines:
@@ -123,15 +123,15 @@ class Comment:
             # Multiple discs entries found
             discs = self._split_data_by_discs()
             for disc in discs:
-                game_discs.append(self._xml_to_game_entries(disc, name))
+                game_discs.append(self._xml_to_game_entries(disc, name, dat))
         else:
             # Single disc entry found
-            game_discs.append(self._xml_to_game_entries('\n'.join(self.rom_lines), name))
+            game_discs.append(self._xml_to_game_entries('\n'.join(self.rom_lines), name, dat))
 
         return game_discs
 
 
-    def _xml_to_game_entries(self, game_lines, name) -> list[GameEntry]:
+    def _xml_to_game_entries(self, game_lines, name, dat) -> list[GameEntry]:
         # Wrap in minimal XML structure for parsing
         escaped_comment = re.sub(r'&','&amp;',game_lines)
         xml_str = f"<datafile><game name='{name}'>\n{escaped_comment}\n</game></datafile>"
@@ -162,7 +162,7 @@ class Comment:
                     for r in game_elem.findall('rom')
                 ]
 
-                return GameEntry(name, category, description, roms, dat_name, dat_group)
+                return GameEntry(name, category, description, roms, dat)
 
         except etree.XMLSyntaxError:
             print(f"⚠️  Invalid XML in comment: {xml_str}")
