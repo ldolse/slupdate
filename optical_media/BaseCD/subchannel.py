@@ -1,5 +1,5 @@
 import logging
-from modules.checksums import CRC16CCITTContext
+from optical_media.utils import CRC16CCITTContext
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)

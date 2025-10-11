@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from lxml import etree
 from softwarelist.software import Software
 from softwarelist.part import Part

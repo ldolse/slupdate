@@ -1,5 +1,6 @@
 from dat.logiqx_dat import LogiqxDAT
 from typing import Optional
+from media_registry import MediaRegistry
 
 class Rom:
     """Represents a ROM entry in a DAT file."""
@@ -49,7 +50,6 @@ class GameEntry:
 
 class RomDat(LogiqxDAT):
     """Represents a Redump/TOSEC style DAT file containing Game & ROM entries."""
-    from media_registry import MediaRegistry
     def __init__(self):
         super().__init__()
         self.games = []
@@ -78,7 +78,6 @@ class RomDat(LogiqxDAT):
     # Override the placeholder method from base class
     def _custom_parse(self, root_element):
         self._parse_games(root_element)
-
 
     def register_to_media_registry(self, registry: MediaRegistry):
         for game_entry in self.games:

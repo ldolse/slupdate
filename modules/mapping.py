@@ -215,7 +215,7 @@ def libcrypt_report(psx_dict):
     Parameters:
     psx_dict (dict): The PSX dictionary
     '''
-    from consoles.psx.libcrypt import libcrypt_titles
+    from rom_management.handlers.libcrypt_handler import libcrypt_titles
     for soft, soft_data in psx_dict.items():
         if 'serial' in soft_data:
             for serial in soft_data['serial']:

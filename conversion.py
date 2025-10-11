@@ -6,7 +6,7 @@ from modules.error_number import ErrorNumber
 from optical_media.BaseCD.subchannel import Subchannel
 from optical_media.BaseCD.fulltoc import FullTOC
 from optical_media.BaseCD.cd_types import enum_name, SectorTagType, MediaType, MetadataMediaType, TrackType, TrackSubchannelType
-from optical_media.cd_utils.checksums import CRC16CCITTContext
+from optical_media.utils import CRC16CCITTContext
 
 def initialize_plugins():
     register = PluginRegister.get_instance()

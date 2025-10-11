@@ -1,4 +1,4 @@
-from .console import Platform, PlayStationPlatform
+from consoles.console import Platform
 from utils.utils import select_directory
 import os
 from typing import Optional
@@ -30,6 +30,8 @@ class PlatformManager:
         self.datroot: Optional[str] = None
         self.romroot: Optional[str] = None
         self.chdroot: Optional[str] = None
+        self.tmpdsk: Optional[str] = None
+        self.last_dat_dir: Optional[str] = None
         self.mame_hash_dir: Optional[str] = None
         self.romvault: bool = True
 
@@ -52,10 +54,31 @@ class PlatformManager:
             self.mame_hash_dir = select_directory('MAME Hash', start_dir=self.datroot)
         if not self.chdroot:
             print("CHD Root directory...")
-            self.chdroot = select_directory('CHD Folder', start_dir=self.romroot)
+            self.chdroot = select_directory('CHD', start_dir=self.romroot)
+        if not self.tmpdsk:
+            print("Tempfile Directory (RAMdisk Recommended)...")
+            self.tmpdsk = select_directory('Tempfile')
         if not hasattr(self, 'romvault'):
             romvault_answer = inquirer.confirm("Are you using RomVault?")
             self.romvault = romvault_answer
+
+    def add_dat_function(self):
+        """Select and Configure DAT and ROM directories for a platform."""
+        if not self.current_platform:
+            print("No platform selected. Please select a platform first.")
+            return
+        if self.last_dat_dir:
+            dat_directory_path = select_directory("DAT", start_dir=self.last_dat_dir)
+            self.last_dat_dir = os.path.dirname(dat_directory_path)
+        else:
+            dat_directory_path = select_directory("DAT", start_dir=self.datroot)
+            self.last_dat_dir = os.path.dirname(dat_directory_path)
+
+        # Process DAT files in directory
+        self.add_platform_dat_directory(
+            self.current_platform.key,
+            dat_directory_path
+        )
 
     def add_platform_dat_directory(
         self,
@@ -63,7 +86,8 @@ class PlatformManager:
         dat_directory_path: str,
     ):
         """
-        Process all DAT files under `dat_directory_path`, creating DAT instances and assigning ROM directories.
+        Process all DAT files under `dat_directory_path`, creating DAT instances
+        and assigning ROM directories.
         - For RomVault: Maps based on directory structure + DAT metadata name
         - For manual mode: User selects a single ROM directory for each DAT
         """
@@ -87,11 +111,8 @@ class PlatformManager:
             )
             softlist_xml_path = os.path.join(self.mame_hash_dir, f"{key}.xml")
             chd_path = os.path.join(self.chdroot, key)
-            # Create the appropriate subclass based on platform key
-            if key == 'psx':
-                platform = PlayStationPlatform(key=key, name=name_from_consoles, softlist_xml_path=softlist_xml_path, chd_path=chd_path)
-            else:
-                platform = Platform(key=key, name=name_from_consoles, softlist_xml_path=softlist_xml_path, chd_path=chd_path)
+            # Create the platform based on the platform key
+            platform = Platform(key=key, name=name_from_consoles, softlist_xml_path=softlist_xml_path, chd_path=chd_path)
             platform.pm = self  # Link back to this manager
             self.platforms[key] = platform
         return self.platforms[key]
@@ -146,7 +167,8 @@ class PlatformManager:
             'chdroot': self.chdroot,
             'mame_hash_dir': self.mame_hash_dir,
             'romroot': self.romroot,
-            'datroot': self.datroot
+            'datroot': self.datroot,
+            'tmpdsk': self.tmpdsk
         }
 
         platforms_data = {}
@@ -193,6 +215,7 @@ class PlatformManager:
         pm.mame_hash_dir = global_data.get('mame_hash_dir')
         pm.romroot = global_data.get('romroot')
         pm.datroot = global_data.get('datroot')
+        pm.tmpdsk = global_data.get('tmpdsk')
 
         # Rebuild platform-specific data
         for key, info in platform_data.items():

@@ -2,6 +2,7 @@ from .bincue_to_libcrypt_ccd import create_combined_image_and_cue
 from .clonecd import CloneCD
 from .clonecd_filter import CloneCDFilter
 from .subchannel_patch import create_sub_channel, lsd_to_sub
+from .ccd import ccd_2_cue
 
 __all__ = [
     "create_combined_image_and_cue",
@@ -9,4 +10,5 @@ __all__ = [
     "CloneCDFilter",
     "create_sub_channel",
     "lsd_to_sub",
+    "ccd_2_cue",
 ]

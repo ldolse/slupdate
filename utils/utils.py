@@ -63,17 +63,6 @@ def slupdate_version(__version__):
     '''
     return __version__
 
-
-def get_dat_paths(platform, datpaths, sl_dat_map):
-    '''
-    Returns the paths to the dat files for the specified platform
-    '''
-    slpath = datpaths['sl']+sl_dat_map[platform]['mame']
-    redump_pattern = datpaths['redump']+sl_dat_map[platform]['redump']
-    files = glob.glob(redump_pattern)
-    redump_path = files[0]
-    return [slpath, redump_path]
-
 def history(search=None):
     '''
     Prints the history of the current session
@@ -143,6 +132,10 @@ def get_start_dir(filetype=None):
     start_path = None
 
     while not start_path:
+        if filetype:
+            filetype = filetype + " Directory"
+        else:
+            filetype = "Starting"
         path_query = [
             inquirer.Path(name='path', message=filetype+" Path (or starting point to browse filesystem)")]
         path_entry = inquirer.prompt(path_query)
@@ -192,7 +185,6 @@ def select_directory(filetype=None,start_dir=None):
             os.chdir(origin_path)
             current_path = origin_path
 
-
 def reconfigure_settings(instance: object, settings_list: list[tuple[str, str, str]]):
     """
     Generic function to edit attributes of an object via user selection.
@@ -204,7 +196,7 @@ def reconfigure_settings(instance: object, settings_list: list[tuple[str, str, s
 
     def update_directory(setting_key: str):
         current_value = getattr(instance, setting_key)
-        new_value = select_directory(start_dir=current_value)
+        new_value = select_directory(setting_key, start_dir=current_value)
         if new_value and new_value != current_value:
             setattr(instance, setting_key, new_value)
 

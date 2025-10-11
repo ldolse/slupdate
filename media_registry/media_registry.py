@@ -1,16 +1,15 @@
 import hashlib
-from dat.rom_dat import GameEntry as DATGameEntry
 from softwarelist import Software, Part
 from typing import Dict, Optional, Tuple
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-
-    from dat import GameEntry
+    from dat import GameEntry as DATGameEntry
 
 class CDMedia:
-    def __init__(self):
+    def __init__(self, platform_key: str = None):
         self.id = None  # Will be set by MediaRegistry
+        self.platform: str = platform_key
 
         # Core hash information
         self.sha1_signature: Optional[str] = ""
@@ -33,7 +32,7 @@ class CDMedia:
         self.processing_status: str = "pending"  # pending, processing, complete, failed
 
     @property
-    def dat_entries(self) -> list["GameEntry"]:
+    def dat_entries(self) -> list["DATGameEntry"]:
         """Returns a dict of {group: [DATGameEntries]} for all groups."""
         result = {g: [] for g in ['redump', 'tosec', 'no-intro', 'other', 'MAME']}
 
@@ -81,14 +80,15 @@ class CDMedia:
         self.softlist_part = part_obj
 
 class MediaRegistry:
-    def __init__(self):
+    def __init__(self, platform_key: Optional[str] = None):
 
         # Maps hash signatures to CDMedia objects
         self.media_hashes: Dict[str, CDMedia] = {}
         self.media_id_counter = 0
         self.media_directory: set[CDMedia] = set()
+        self.platform_key = platform_key
 
-    def get_or_create_media(self, game_entry: DATGameEntry) -> Tuple[CDMedia, bool]:
+    def get_or_create_media(self, game_entry: 'DATGameEntry') -> Tuple[CDMedia, bool]:
         """Get or create media for a DAT GameEntry
 
         Returns:
@@ -149,7 +149,7 @@ class MediaRegistry:
 
     def _create_media(self, sha1_sig: str, crc_sig: str, size: int) -> CDMedia:
         """Create a new media entry with the given signature"""
-        new_media = CDMedia()
+        new_media = CDMedia(self.platform_key)
         new_media.sha1_signature = sha1_sig
         new_media.crc_signature = crc_sig
         new_media.total_rom_size = size
@@ -163,7 +163,7 @@ class MediaRegistry:
         self.media_id_counter += 1
         media.id = f"{self.media_id_counter:08d}"
 
-    def _calculate_hashes(self, game_entry: DATGameEntry) -> Tuple[Tuple, Tuple, int]:
+    def _calculate_hashes(self, game_entry: 'DATGameEntry') -> Tuple[Tuple, Tuple, int]:
         """Generate hash signatures using the exact algorithm from original code"""
         if not game_entry.roms:
             return "", None, 0

@@ -115,6 +115,8 @@ class MenuSystem:
         if not isinstance(menu, BaseMenu):
             raise TypeError("Only instances of BaseMenu can be registered")
         self.menus[menu.name] = menu
+        # Inject PlatformManager into menu
+        menu.platform_manager = self.platform_manager
 
     @property
     def current_menu(self) -> BaseMenu:

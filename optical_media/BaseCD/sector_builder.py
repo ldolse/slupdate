@@ -1,6 +1,6 @@
 import logging
 from typing import Tuple
-from BaseCD.cd_types import TrackType
+from .cd_types import TrackType
 
 
 logging.basicConfig(level=logging.DEBUG)

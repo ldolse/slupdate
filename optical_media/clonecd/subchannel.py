@@ -1,6 +1,6 @@
 import struct
 from math import floor
-from cd_utils import crc16
+from optical_media.utils import crc16
 
 # creates an empty subchannel file
 

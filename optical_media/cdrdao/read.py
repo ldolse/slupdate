@@ -1,15 +1,20 @@
 from io import BytesIO
 from enum import IntEnum
 from typing import Tuple, Optional, List, Union
-from .utilities import *
-from .constants import *
+from .utilities import swap_audio_endianness, calculate_track_flags
+from .constants import (
+    CDRDAO_TRACK_TYPE_AUDIO, CDRDAO_TRACK_TYPE_MODE1,
+    CDRDAO_TRACK_TYPE_MODE1_RAW, CDRDAO_TRACK_TYPE_MODE2,
+    CDRDAO_TRACK_TYPE_MODE2_FORM1, CDRDAO_TRACK_TYPE_MODE2_FORM2,
+    CDRDAO_TRACK_TYPE_MODE2_MIX, CDRDAO_TRACK_TYPE_MODE2_RAW
+)
 from .structs import CdrdaoTrack, CdrdaoTrackFile
 from modules.error_number import ErrorNumber
 from ..BaseCD.subchannel import Subchannel
 from ..BaseCD.sector import Sector
 from ..BaseCD.sector_builder import SectorBuilder
 from ..BaseCD.cd_checksums import CdChecksums
-from optical_media.cd_utils.checksums import CRC16CCITTContext
+from optical_media.utils.checksums import CRC16CCITTContext
 from ..BaseCD.cd_types import (
     TrackType, TrackSubchannelType, SectorTagType, MediaType,
     MediaTagType, MetadataMediaType, CdFlags,

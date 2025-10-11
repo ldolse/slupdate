@@ -2,7 +2,7 @@
 
 import struct
 from typing import List, Optional, Tuple
-from cd_utils.checksums import CRC16CCITTContext
+from optical_media.utils import CRC16CCITTContext
 
 import logging
 logging.basicConfig(level=logging.DEBUG)

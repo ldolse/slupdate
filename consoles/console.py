@@ -1,13 +1,14 @@
-#from modules.dat import DAT
 import os
 from dat import RomDat
 from softwarelist import SoftwareList, Part
-from utils.utils import select_directory
+from utils import select_directory
 from rom_management import ZipProcessor, CHD
+from optical_media.utils import OpticalMediaProcessor
+from rom_management.handlers import registry, SpecialHandler
 from media_registry import MediaRegistry, CDMedia
 from game_metadata import RedumpDB
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, List
 if TYPE_CHECKING:
     from consoles.platform_manager import PlatformManager
     from dat import RomDat
@@ -30,10 +31,19 @@ class Platform:
         self.dat_directories: dict[str, list[RomDat]] = {}
         self.redump_db: RedumpDB = None
         self.mr: MediaRegistry = None
-        self.matched_buildable_media: list[CDMedia] = []
+        self.matched_buildable_media: set[CDMedia] = set()
         self.validated_chds: set[CHD] = set()
-        self._chd_handling_preference = "ask"  # Can be "ask", "overwrite", or "skip"
+        self._chd_handling_preference = None  # Can be "ask", "overwrite", or "skip", set via Exception
         self._chd_build_index = 0
+        self.handler_registry = registry
+
+    def get_relevant_handlers(self, media: CDMedia, file_data: OpticalMediaProcessor) -> List[SpecialHandler]:
+        """Get all relevant handlers for a media item"""
+        return self.handler_registry.get_relevant_handlers(media, file_data)
+
+    @property
+    def _media_to_process(self) -> list[CDMedia]:
+        return list(self.matched_buildable_media)[self._chd_build_index:]
 
     @property
     def _all_dats(self) -> list[RomDat]:
@@ -48,9 +58,10 @@ class Platform:
     def chd_handling_preference(self) -> str:
         return self._chd_handling_preference
 
+
     def register_dat_media(self) -> None:
         self.update_dats()
-        self.mr = MediaRegistry()
+        self.mr = MediaRegistry(self.key)
         for dat_instance in self._all_dats:
             dat_instance.register_to_media_registry(self.mr)
 
@@ -175,47 +186,83 @@ class Platform:
             else:
                 print(f"  ✅ Found valid zip for {media.dat_game_entry.name}: {zip_path}")
                 media.zip_path = zip_path
-                self.matched_buildable_media.append(media)
+                self.matched_buildable_media.add(media)
 
     def build_chds_for_matched(self) -> None:
         """
         Convert all matched entries in MediaRegistry to CHD format.
         """
-        media_to_process = self.matched_buildable_media[self._chd_build_index:]
-        for matched in media_to_process:
-            title = matched.softlist_part.part_of.name if matched.softlist_part and matched.softlist_part.part_of else "Unknown"
+        for media in self._media_to_process:
+            title = media.softlist_part.part_of.name if media.softlist_part and media.softlist_part.part_of else None
+            if not title:
+                print(f"  ⚠️ Skipping - No valid softlist part or title for media ID {media.id}")
+                continue
+
+            file_data = OpticalMediaProcessor(media, tmpdsk=self.pm.tmpdsk)
+
             try:
                 # initialize CHD object
-                print(f"Converting {matched.zip_path} to CHD")
-                print(f"  Media ID {matched.id} for {matched.dat_game_entry.name if matched.dat_game_entry else 'Unknown Game'}")
+                print(f"Converting {media.zip_path} to CHD")
                 print(f"  softlist title: {title}")
-                matched_chd = CHD(source=matched, base_path=self.chd_path)
+
+                # Extract the ROM to a temp directory
+                file_data.extract_and_process()
+                
+                if not file_data.temp_dir.exists():
+                    raise Exception(f"Temp directory creation for {media.dat_game_entry.name} failed")
+ 
+                # Get and apply handlers
+                handlers = self.get_relevant_handlers(media, file_data)
+
+                for handler in handlers:
+                    if not handler.validate_preconditions(media, file_data):
+                        continue
+
+                    result = handler.handle(media, file_data)
+                    if not result.get('success', True):
+                        print(f"Handler {handler.name} failed: {result.get('error')}")
+
+                # Prepare for CHD conversion
+                toc_source = file_data.current_toc
+
+                matched_chd = CHD(source=media, base_path=self.chd_path, toc_source=toc_source)
 
                 if matched_chd.preexisting:
-                    print(f"⚠️  CHD already exists for {matched.dat_game_entry.name} at {matched_chd.path}")
+                    print(f"⚠️  CHD already exists for {media.dat_game_entry.name} at {matched_chd.path}")
+                    if not self.chd_handling_preference in ["ask", "skip", "overwrite"]:
+                        raise CHDAlreadyExistsException(matched_chd.path)
 
-                    if self.chd_handling_preference == "skip":
+                    elif self.chd_handling_preference == "skip":
                         print("   Skipping as per user preference")
-                        self.validated_chds.append(matched_chd)
+                        self.validated_chds.add(matched_chd)
                         continue
                     elif self.chd_handling_preference == "ask":
                         user_input = input("   Overwrite existing CHD? (y/n): ").strip().lower()
                         if user_input != 'y':
                             print("   Skipping conversion")
-                            self.validated_chds.append(matched_chd)
+                            self.validated_chds.add(matched_chd)
                             continue
+                        else:
+                            print("   Overwriting existing CHD as per user input")
+                            # delete the existing CHD before creating new one
+                            os.remove(matched_chd.path)
+                            matched_chd = CHD(source=media, base_path=self.chd_path, tmpdsk=self.pm.tmpdsk)
+
+
                     # If overwrite, proceed to create new CHD
                     elif self.chd_handling_preference == "overwrite":
                         print("   Overwriting existing CHD as per user preference")
 
                 if matched_chd.exists and matched_chd.is_valid:
-                    self.validated_chds.append(matched_chd)
-                    print(f"Successfully converted {matched.zip_path} to CHD")
+                    self.validated_chds.add(matched_chd)
+                    print(f"✅ Converted {media.zip_path} to CHD")
 
             except Exception as e:
                 self._last_chd_error = (str(e))
                 raise  # This exits the function, but we know where to resume
-
+            finally:
+                if file_data:
+                    file_data.cleanup()
 
 class CHDAlreadyExistsException(Exception):
     def __init__(self, chd_path: str, chd_version: Optional[str] = None):
@@ -224,9 +271,3 @@ class CHDAlreadyExistsException(Exception):
         super().__init__(f"CHD already exists at {chd_path}")
 
 
-
-class PlayStationPlatform(Platform):
-    def handle_chd_special_cases(self, source_rom_path: str, chd_path: str) -> bool:
-        from .psx.libcrypt import libcrypt_titles
-        # PlayStation-specific CHD handling logic here
-        pass

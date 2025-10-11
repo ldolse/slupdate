@@ -1,6 +1,6 @@
 import os
 import shutil
-from cd_utils import MSFToSector, SectorToMSF, GetSectorsBySize, NumberToStrMSF, crc16
+from optical_media.utils import MSFToSector, SectorToMSF, GetSectorsBySize, NumberToStrMSF
 
 
 class Cue:

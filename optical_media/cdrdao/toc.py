@@ -2,15 +2,14 @@ import re
 import os
 import io
 import struct
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 from .structs import CdrdaoDisc, CdrdaoTrack, CdrdaoTrackFile
-from .constants import *
-from .utilities import *
+from .utilities import cdrdao_track_type_to_cooked_bytes_per_sector
 from ..BaseCD.fulltoc import FullTOC, TrackDataDescriptor, CDFullTOC
 from modules.ifilter import IFilter
 
 from modules.error_number import ErrorNumber
-from ..BaseCD.cd_types import MediaType, TrackType
+from ..BaseCD.cd_types import MediaType
 from .constants import *
 from .utilities import process_track_gaps, process_track_indexes, lba_to_msf
 
@@ -201,7 +200,7 @@ def parse_toc_file(image_filter: IFilter) -> Tuple[ErrorNumber, Optional[CdrdaoD
 
         for line_number, line in enumerate(lines, 1):
             line = line.strip()
-            
+
             match_comment = regex_comment.match(line)
             match_disk_type = regex_disk_type.match(line)
             match_mcn = regex_mcn.match(line)
@@ -268,7 +267,7 @@ def parse_toc_file(image_filter: IFilter) -> Tuple[ErrorNumber, Optional[CdrdaoD
                 current_track.sequence = current_track_number
                 current_track.start_sector = current_sector
                 current_track.tracktype = match_track.group("type")
-                
+
                 # Adjust bps bytes per sector based on track type
                 if current_track.tracktype in ["AUDIO", "MODE1_RAW", "MODE2_RAW"]:
                     current_track.bps = 2352
@@ -443,14 +442,14 @@ def parse_toc_file(image_filter: IFilter) -> Tuple[ErrorNumber, Optional[CdrdaoD
                     indexes={},
                     pregap=0
                 )
-                in_track = True              
+                in_track = True
                 subchan = match_track.group("subchan")
                 logger.debug(f"Found TRACK type '{match_track.group('type')}' {'with no subchannel' if not subchan else f'subchannel {subchan}'} at line {line_number}")
 
                 current_track.sequence = current_track_number
                 current_track.start_sector = current_sector
                 current_track.tracktype = match_track.group("type")
-                
+
                 if match_track.group("type") == "AUDIO":
                     current_track.bps = 2352
                 elif match_track.group("type") in ["MODE1", "MODE2_FORM1"]:

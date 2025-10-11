@@ -1,7 +1,10 @@
 import re
 from softwarelist.part import Part
 from softwarelist.comment import Comment
-from dat.rom_dat import GameEntry
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from dat.rom_dat import GameEntry
 
 class Software:
     def __init__(self, platform: str = "") -> None:

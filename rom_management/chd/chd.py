@@ -2,10 +2,9 @@ import os
 import pathlib
 import re
 import subprocess
-from rom_management import ZipProcessor
 from media_registry import CDMedia
 
-from typing import List, Optional
+from typing import Optional, Dict
 
 class CHDCreationException(Exception):
     def __init__(self, chd_path: str, error_message: str):
@@ -21,17 +20,16 @@ class CHD:
     with properties that are set either during creation or by parsing an existing CHD.
     """
 
-    def __init__(self, chd_path=None, source: CDMedia = None, base_path=None):
+    def __init__(self, chd_path=None, source: CDMedia = None, base_path=None, check_chdman: bool = False, toc_source: Optional[str] = None):
         """
         Initialize a CHD object.
 
         Args:
             chd_path (str): Path to an existing CHD file for reading
-            source_archive (str): Source file path when creating a new CHD
             output_path (str): Output path for the created CHD
         """
         # Properties set during initialization or by parsing existing CHD
-        self.path = None  # Path to the CHD file
+        self.path = ''  # Path to the CHD file
         self.name = None  # Name of the CHD (without extension)
         self.extension = '.chd'  # File extension
         self.size = 0  # Size in bytes
@@ -41,25 +39,30 @@ class CHD:
         self.compression = None  # Compression type used
         self.error = None  # Error message if any issues arise
         self.source: CDMedia = source  # Source DAT game entry if applicable
-        self.source_archive = None  # Source file for CHD creation
         self.toc_source = None  # TOC source, required for CD-based CHDs
         self._base_path = base_path  # Base path to create the softlist title directory
         self.output_path = None  # Output path for CHD creation based on base_path and softlist title
         self.preexisting = False  # Flag indicating if CHD already exists
+        self.chdman_version = 280  # chdman version as integer (e.g., 280 for 0.280)
 
         if chd_path and os.path.exists(chd_path):
             # Initialize from existing CHD file
             self._initialize_from_existing(chd_path)
-        elif source and base_path:
+        elif source and toc_source and base_path:
             self.source = source
+            self.toc_source = toc_source
             self.title = self.source.softlist_part.part_of.name if self.source.softlist_part and self.source.softlist_part.part_of else None
             if not self.title:
                 raise ValueError("Source must have a softlist title for CHD creation")
             self.output_path = pathlib.Path(base_path) / self.title
             # Initialize for CHD creation
             self._initialize_for_creation()
+        elif check_chdman:
+            info = self._get_chd_info(check_chdman=True)
+            if 'chdman_version' not in info:
+                raise EnvironmentError("chdman not found or not working")
         else:
-            raise ValueError("Either provide chd_path for reading or both source_archive and output_path for creation")
+            raise ValueError("Either provide chd_path for reading or both toc source and output_path for creation")
 
     def _initialize_from_existing(self, chd_path):
         """
@@ -87,34 +90,42 @@ class CHD:
         Initialize CHD object for creation.
 
         Args:
-            source_archive (str): Path to the source file (CUE, ISO, etc.)
             output_path (str): Path where the CHD will be created
         """
-        self.source_archive = pathlib.Path(self.source.zip_path)
-        if not self.source_archive or not self.source_archive.exists():
-            raise ValueError("Source archive does not exist")
         if not self._base_path:
             raise ValueError("Base path must be provided for CHD creation")
         self.output_path = pathlib.Path(self._base_path) / self.title
-        self.name = self.source.dat_game_entry.name
+        self.name = self.source.softlist_part.disk_name # use mame disk name
+        if not self.name:
+            raise ValueError("Source must have a filename name for CHD creation")
         self.path = f"{self.output_path}/{self.name}.chd"
 
         self._create()
 
-    def _get_chd_info(self):
+    @property
+    def chdman_uptodate(self):
+        version_string = self._get_chd_info(check_chdman=True).get('chdman_version', '0.0')
+        v = list(map(int, version_string.split('.')))
+        v_target = [0, self.chdman_version]
+        return all(x >= y for x, y in zip(v, v_target))
+
+    def _get_chd_info(self, check_chdman=False) -> Dict[str, str]:
         """
         Get comprehensive information about the CHD file using chdman.
 
         Returns:
             dict: Dictionary containing all CHD information from chdman output
         """
-        if not os.path.exists(self.path):
+        if not os.path.exists(self.path) and not check_chdman:
             return {"error": "CHD file does not exist"}
+
+        command = ['chdman']
+        if not check_chdman:
+            command += ['info', '-i', str(self.path)]
 
         info = {}
 
         try:
-            command = ['chdman', 'info', '-i', str(self.path)]
             proc = subprocess.Popen(command, stdout=subprocess.PIPE)
             output = proc.stdout.read().decode('ascii').split('\n')
 
@@ -192,18 +203,6 @@ class CHD:
             self.preexisting = True
             self._initialize_from_existing(str(self.path))
         else:
-            if not hasattr(self, 'source_archive') or not self.source_archive:
-                print("No source file specified for CHD creation")
-
-            zip_processor = ZipProcessor()
-            # Extract the ROM to a temp directory
-            temp_dir = zip_processor.extract_to_tempdir(self.source_archive)
-            if not temp_dir:
-                raise Exception(f"Temp directory creation for {self.source.dat_game_entry.name} failed")
-
-            # Prepare for CHD conversion
-            self.toc_source = zip_processor.prepare_for_chd(temp_dir)
-
             if not self.toc_source:
                 raise Exception(f"toc file not found for {self.source.dat_game_entry.name}")
 
@@ -226,8 +225,6 @@ class CHD:
                 raise CHDCreationException(str(self.path), str(e))
                 # print(f'CHD creation failed: {e}')
 
-            finally:
-                zip_processor.cleanup_tempdir()
 
     def delete(self):
         """

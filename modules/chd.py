@@ -1,4 +1,3 @@
-import pathlib
 import re
 import os
 import shutil
@@ -8,6 +7,7 @@ import zipfile
 import logging
 import builtins
 import inquirer
+from optical_media.clonecd import ccd_2_cue
 
 '''
 functions for working with chds and ROM/Zip files are defined in this module
@@ -22,11 +22,6 @@ else:
 
 # set environment to include script directory directory in addition to path - for chdman placed with script
 env_with_script_dir = {**os.environ, 'PATH': script_dir + ':' + os.environ['PATH']}
-
-def is_greater_than_0_176(version_string):
-    v = list(map(int, version_string.split('.')))
-    v_target = [0, 176]
-    return all(x >= y for x, y in zip(v, v_target))
 
 def chdman_info(chd=None):
     '''
@@ -250,139 +245,6 @@ def create_chd_from_zip(zip_path, chd_path, settings, special_info=None):
 
     os.chdir(original_path)
     shutil.rmtree(temp_dir)
-
-def convert__bincue_to_chd(chd_file_path: pathlib.Path, output_cue_file_path: pathlib.Path, show_command_output: bool):
-    # Use temporary directory for the chdman output files to keep those separate from the binmerge output files:
-    with tempfile.TemporaryDirectory() as chdman_output_folder_path_name:
-        chdman_cue_file_path = pathlib.Path(chdman_output_folder_path_name, output_cue_file_path.name)
-
-        logging.debug(f'Converting "{chd_file_path.name}" to .bin/.cue format')
-        chdman_result = subprocess.run(["chdman", "createcd", "--input", str(chd_file_path), "--output", str(chdman_cue_file_path)], stdout=None if show_command_output else subprocess.DEVNULL, env=env_with_script_dir)
-        if chdman_result.returncode != 0:
-            # chdman provides useful progress output on stderr so we don't want to capture stderr when running it. That means we can't provide actual error output to the exception, but I can't find a way around that.
-            raise Exception("Failed to convert .chd using chdman", chd_file_path, None)
-
-
-def find_rom_zips(dat,soft_entry_data,dathashdict,dat_rom_map):
-    zips = []
-    zip_matches = False
-    for disc, disc_info in soft_entry_data['parts'].items():
-        if 'source_sha' in disc_info and disc_info['source_sha'] in dathashdict:
-            dat_game_entry = dathashdict[disc_info['source_sha']]
-            try:
-                # check the entry from the dat against the directory the DAT points to
-                goodzip = check_valid_zips(dat_game_entry,dat_rom_map[dat])
-            except:
-                print('key error for '+disc+', dat: '+dat)
-                continue
-            if goodzip:
-                dat_game_entry.update({'source_rom':goodzip})
-                disc_info.update({'source_rom':goodzip})
-                zips.append(os.path.basename(goodzip))
-                zip_matches = True
-            else:
-                zips.append('No Valid Zip')
-    if zip_matches:
-        return zips
-    else:
-        return None
-
-
-def check_valid_zips(dat_entry,rom_folder):
-    '''
-    Checks the ZIP contents to ensure it's a valid dat match, returns valid matches
-    TODO - add 7zip support
-    '''
-    name_with_zip = dat_entry['name'] + '.zip'
-    #print('checking '+name_with_zip+' in folder '+rom_folder)
-    zip_path = os.path.join(rom_folder, name_with_zip)
-    if os.path.isfile(zip_path):
-        with zipfile.ZipFile(zip_path, 'r') as zip_file:
-            matches = True
-            for filename, file_data in dat_entry['file_list'].items():
-                if not matches:
-                    break
-                if filename not in zip_file.namelist():
-                    matches = False
-                    break
-                zip_info = zip_file.getinfo(filename)
-                if zip_info.CRC != int(file_data['@crc'], 16):
-                    matches = False
-                    break
-            if matches:
-                return zip_path
-            else:
-                return None
-
-def ConfigSectionMap(Config, section):
-    dict1 = {}
-    options = Config.options(section)
-    for option in options:
-        try:
-            dict1[option] = Config.get(section, option)
-            if dict1[option] == -1:
-                print("skip: %s" % option)
-        except:
-            print("exception on %s!" % option)
-            dict1[option] = None
-    return dict1
-
-def ccd_2_cue(ccd_sheet):
-    import configparser
-    filename = os.path.splitext(ccd_sheet)
-    cue_sheet = os.path.join(filename[0]+'.cue')
-    imagetype=('.img','.bin','.iso')
-    imgfile = ''
-    files = [f for f in os.listdir('.') if os.path.isfile(f)]
-    for f in files:
-        if os.path.splitext(f)[1] in imagetype:
-            imgfile = f
-
-    Config = configparser.ConfigParser()
-    Config.read(ccd_sheet)
-    try:
-        cuefile = open(cue_sheet, 'wb') # write binary
-    except FileNotFoundError:
-        print('could not create cue file')
-        return None
-
-    track_counter = 0
-    BEGIN = False
-
-    cuefile.write(("FILE \"%s\" BINARY\r\n" % (imgfile)).encode())
-    for item in Config.sections():
-        if 'Entry' not in item:
-            continue
-
-        trackinfo = {}
-        tracktype = ConfigSectionMap(Config,item)['control']
-        trackindex = int(ConfigSectionMap(Config,item)['session'])
-        trackinfo['minute'] = int(ConfigSectionMap(Config, item)['pmin'])
-        trackinfo['second'] = int(ConfigSectionMap(Config,item)['psec'])
-        trackinfo['frame'] = int(ConfigSectionMap(Config,item)['pframe'])
-
-        if int(ConfigSectionMap(Config,item)['plba']) == 0:
-            BEGIN = True
-
-        if BEGIN is True:
-            track_counter += 1
-            if trackinfo['second'] == 0:
-                if trackinfo['minute'] >= 1:
-                    trackinfo['minute'] -= 1
-                    trackinfo['second'] = 60
-                else:
-                    trackinfo['minute'] = 0
-                    trackinfo['second'] = 0
-            trackinfo['second'] -= 2
-            cuefile.write(("  TRACK %02d %s\r\n" \
-                  "    INDEX %02d %02d:%02d:%02d\r\n" % (track_counter,
-                                               "MODE1/2352" if tracktype == '0x04' else 'AUDIO',
-                                               trackindex,
-                                               trackinfo['minute'],
-                                               trackinfo['second'],
-                                               trackinfo['frame'],)).encode())
-    print(f'cuefile is {cuefile.name}')
-    return cuefile.name
 
 
 def get_imgs_from_bin(cue):

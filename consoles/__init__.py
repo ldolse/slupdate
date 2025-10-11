@@ -1,5 +1,5 @@
 from consoles.platform_manager import PlatformManager
-from consoles.console import Platform, PlayStationPlatform
+from consoles.console import Platform
 
 
-__all__ = ["PlatformManager", "Platform", "PlayStationPlatform"]
+__all__ = ["PlatformManager", "Platform"]

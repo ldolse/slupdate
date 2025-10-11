@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from typing import List, Dict
 import struct
 from typing import Optional
-from BaseCD.cd_types import TocControl, TocAdr, MediaTagType, SectorTagType, Track, TrackType, CdFlags
+from .cd_types import TocControl, TocAdr, MediaTagType, SectorTagType, Track, TrackType, CdFlags
 
 import logging
 logger = logging.getLogger(__name__)

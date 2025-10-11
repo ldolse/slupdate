@@ -1,6 +1,10 @@
 from lxml import etree
 import re
-from dat.rom_dat import GameEntry, Rom
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from dat.rom_dat import GameEntry
+
 
 class Comment:
     def __init__(self, element: etree._Element):
@@ -113,7 +117,7 @@ class Comment:
         return discs
 
 
-    def parse_rom_entries(self, name: str, dat) -> list[GameEntry]:
+    def parse_rom_entries(self, name: str, dat) -> list['GameEntry']:
         """Parse all <rom> entries from this comment into GameEntry objects."""
         game_discs = []
         if not self.rom_lines:
@@ -131,7 +135,8 @@ class Comment:
         return game_discs
 
 
-    def _xml_to_game_entries(self, game_lines, name, dat) -> list[GameEntry]:
+    def _xml_to_game_entries(self, game_lines, name, dat) -> 'GameEntry':
+        from dat.rom_dat import GameEntry, Rom
         # Wrap in minimal XML structure for parsing
         escaped_comment = re.sub(r'&','&amp;',game_lines)
         xml_str = f"<datafile><game name='{name}'>\n{escaped_comment}\n</game></datafile>"
