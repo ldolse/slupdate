@@ -173,16 +173,8 @@ class PlatformManager:
         for key, platform in self.platforms.items():
             # Save state using PlatformState
             platform_state = platform.save_state()
-
-            # Convert to serializable format
             platforms_data[key] = {
-                'dat_directories': platform_state.dat_directories,
-                'redump_db': platform_state.redump_db,
-                '_chd_build_index': platform_state._chd_build_index,
-                'matched_media_sigs': platform_state.matched_media_sigs,
-                '_chd_handling_preference': platform_state._chd_handling_preference,
-                'validated_chds_paths': platform_state.validated_chds_paths,
-                'directory_status': platform_state.directory_status
+                'platform_state': platform_state,
             }
 
         data_to_save = {
@@ -216,18 +208,8 @@ class PlatformManager:
         for key, info in platform_data.items():
             platform = pm.get_platform(key)
 
-            # Create PlatformState from loaded data
-            state = PlatformState(
-                dat_directories=info.get('dat_directories', []),
-                redump_db=info.get('redump_db'),
-                _chd_build_index=info.get('_chd_build_index', 0),
-                matched_media_sigs=info.get('matched_media_sigs', []),
-                _chd_handling_preference=info.get('_chd_handling_preference'),
-                validated_chds_paths=info.get('validated_chds_paths', []),
-                directory_status=info.get('directory_status', {})
-            )
-
-            # Load state into platform
-            platform.load_state(state)
+            # Load the entire PlatformState object directly
+            if 'platform_state' in info:
+                platform.load_state(info['platform_state'])
 
         return pm, True

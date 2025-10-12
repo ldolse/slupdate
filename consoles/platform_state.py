@@ -18,17 +18,6 @@ class PlatformState:
     # Redump DB - this is already serializable in current implementation
     redump_db: Optional[Dict[str, Any]] = None
 
-    # Directory availability tracking
-    directory_status: Dict[str, str] = field(default_factory=dict)  # {path: "available" | "unavailable"}
-
-    def mark_directory_status(self, path: str, status: str):
-        """Mark a directory as available or unavailable"""
-        self.directory_status[path] = status
-
-    def is_directory_available(self, path: str) -> bool:
-        """Check if a directory is marked as available"""
-        return self.directory_status.get(path, "available") == "available"
-
     def add_validated_chd_path(self, chd_path: str):
         """Add a CHD path to the validated list"""
         if chd_path not in self.validated_chds_paths:

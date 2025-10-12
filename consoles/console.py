@@ -70,17 +70,14 @@ class Platform:
         """Load state from PlatformState object"""
         self.state = state
 
-        # Restore directory paths
+        # restore dat directories
         for path in self.state.dat_directories:
             if path not in self.dat_directories:
-                    self.dat_directories[path] = []
+                self.dat_directories[path] = []
 
         # Restore processing state
         self._chd_build_index = self.state._chd_build_index
         self._chd_handling_preference = self.state._chd_handling_preference
-
-        # Restore validated CHDs (will be recreated during processing)
-        self.validated_chds = set()  # Will be rebuilt during validate_matched_entrie
 
     def get_relevant_handlers(self, media: CDMedia, file_data: OpticalMediaProcessor) -> List[SpecialHandler]:
         """Get all relevant handlers for a media item"""
@@ -138,12 +135,8 @@ class Platform:
         for dat_directory_path in self.dat_directories.keys():
             if not os.path.exists(dat_directory_path) or not os.path.isdir(dat_directory_path):
                 print(f"Directory `{dat_directory_path}` does not exist or is not a directory.")
-                # Mark as unavailable but don't remove
-                self.state.mark_directory_status(dat_directory_path, "unavailable")
                 continue
 
-            # mark as available and process
-            self.state.mark_directory_status(dat_directory_path, "available")
             dat_files = [f for f in sorted(os.listdir(dat_directory_path))
                         if f.endswith(".xml") or f.endswith(".dat")]
 
