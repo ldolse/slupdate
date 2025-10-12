@@ -1,6 +1,7 @@
 import hashlib
 from softwarelist import Software, Part
 from typing import Dict, Optional, Tuple
+from collections import OrderedDict
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -85,7 +86,7 @@ class MediaRegistry:
         # Maps hash signatures to CDMedia objects
         self.media_hashes: Dict[str, CDMedia] = {}
         self.media_id_counter = 0
-        self.media_directory: set[CDMedia] = set()
+        self.media_directory: OrderedDict[CDMedia, None] = OrderedDict()
         self.platform_key = platform_key
 
     def get_or_create_media(self, game_entry: 'DATGameEntry') -> Tuple[CDMedia, bool]:
@@ -142,7 +143,7 @@ class MediaRegistry:
                 if sig not in self.media_hashes:
                     self.media_hashes[sig] = cd_media
                     self.media_hashes[sig].add_dat_reference(game_entry)
-            self.media_directory.add(cd_media)
+            self.media_directory[cd_media] = None
             return cd_media, False
 
 

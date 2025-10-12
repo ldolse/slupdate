@@ -1,4 +1,5 @@
 from consoles.console import Platform
+from consoles.platform_state import PlatformState
 from utils.utils import select_directory
 import os
 from typing import Optional
@@ -6,6 +7,15 @@ import inquirer
 import pickle
 
 class PlatformManager:
+    # Define the global variables structure once as a class attribute
+    GLOBAL_VAR_KEYS = [
+        'romvault',
+        'chdroot',
+        'mame_hash_dir',
+        'romroot',
+        'datroot',
+        'tmpdsk'
+    ]
     def __init__(self):
         self.platforms = {}
         self._current_key: Optional[str] = None  # Tracks currently selected platform
@@ -27,13 +37,10 @@ class PlatformManager:
                    'Sony Playstation' : 'psx',
                                 '3DO' : '3do_m2'
         }
-        self.datroot: Optional[str] = None
-        self.romroot: Optional[str] = None
-        self.chdroot: Optional[str] = None
-        self.tmpdsk: Optional[str] = None
+        for key in self.GLOBAL_VAR_KEYS:
+            setattr(self, key, None)
         self.last_dat_dir: Optional[str] = None
-        self.mame_hash_dir: Optional[str] = None
-        self.romvault: bool = True
+        self.romvault: bool = True  # Default value
 
     @property
     def current_platform(self) -> Optional[Platform]:
@@ -158,73 +165,69 @@ class PlatformManager:
         return self.get_platform(answer)
 
     def save(self):
-        """
-        Saves only the necessary configuration state (directories, redump_db).
-        This avoids pickling all platform objects.
-        """
-        global_vars = {
-            'romvault': self.romvault,
-            'chdroot': self.chdroot,
-            'mame_hash_dir': self.mame_hash_dir,
-            'romroot': self.romroot,
-            'datroot': self.datroot,
-            'tmpdsk': self.tmpdsk
-        }
+        """Save all platform states using shared PlatformState structure"""
+        # Use the class attribute to get global vars
+        global_vars = {key: getattr(self, key) for key in self.GLOBAL_VAR_KEYS}
 
         platforms_data = {}
         for key, platform in self.platforms.items():
-            # Only save directory paths (not DAT objects)
-            dat_dirs = list(platform.dat_directories.keys())
-            redump_db = getattr(platform, 'redump_db', None)
+            # Save state using PlatformState
+            platform_state = platform.save_state()
 
-            if dat_dirs or redump_db is not None:
-                platforms_data[key] = {
-                    'dat_directories': dat_dirs,
-                    'redump_db': redump_db
-                }
+            # Convert to serializable format
+            platforms_data[key] = {
+                'dat_directories': platform_state.dat_directories,
+                'redump_db': platform_state.redump_db,
+                '_chd_build_index': platform_state._chd_build_index,
+                'matched_media_sigs': platform_state.matched_media_sigs,
+                '_chd_handling_preference': platform_state._chd_handling_preference,
+                'validated_chds_paths': platform_state.validated_chds_paths,
+                'directory_status': platform_state.directory_status
+            }
 
         data_to_save = {
             'global_vars': global_vars,
             'platforms': platforms_data
         }
 
-        # Save using your utility (assumed to use pickle)
         with open('pm.pkl', 'wb') as f:
             pickle.dump(data_to_save, f)
         print("[INFO] Configuration saved.")
 
     @classmethod
     def load(cls):
-        """
-        Load from saved configuration file.
-        Rebuilds PlatformManager, platforms, and restores expensive data.
-        """
+        """Load from saved configuration using shared PlatformState structure"""
         try:
             with open('pm.pkl', 'rb') as f:
                 loaded_data = pickle.load(f)
         except (FileNotFoundError, EOFError) as e:
-            return cls(), False # Return empty manager if no save exists
+            return cls(), False
 
         pm = cls()
         global_data = loaded_data.get('global_vars', {})
         platform_data = loaded_data.get('platforms', {})
 
-        # Restore global settings
-        pm.romvault = global_data.get('romvault', True)
-        pm.chdroot = global_data.get('chdroot')
-        pm.mame_hash_dir = global_data.get('mame_hash_dir')
-        pm.romroot = global_data.get('romroot')
-        pm.datroot = global_data.get('datroot')
-        pm.tmpdsk = global_data.get('tmpdsk')
+        # Restore global settings using the class attribute
+        for key in cls.GLOBAL_VAR_KEYS:
+            if key in global_data:
+                setattr(pm, key, global_data[key])
 
-        # Rebuild platform-specific data
+        # Rebuild platform-specific data using PlatformState
         for key, info in platform_data.items():
             platform = pm.get_platform(key)
 
-            if 'redump_db' in info:
-                platform.redump_db = info['redump_db']
+            # Create PlatformState from loaded data
+            state = PlatformState(
+                dat_directories=info.get('dat_directories', []),
+                redump_db=info.get('redump_db'),
+                _chd_build_index=info.get('_chd_build_index', 0),
+                matched_media_sigs=info.get('matched_media_sigs', []),
+                _chd_handling_preference=info.get('_chd_handling_preference'),
+                validated_chds_paths=info.get('validated_chds_paths', []),
+                directory_status=info.get('directory_status', {})
+            )
 
-            for dir_path in info.get('dat_directories', []):
-                pm.add_platform_dat_directory(key, dir_path)
+            # Load state into platform
+            platform.load_state(state)
 
-        return pm, True # Return the PlatformManager instance and a flag indicating success
+        return pm, True

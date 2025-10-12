@@ -20,7 +20,6 @@ class ZipProcessor:
         zip_path = os.path.join(rom_dir, zip_name)
 
         if not os.path.isfile(zip_path):
-            print(f"Zip file does not exist: {zip_path}")
             return None
 
         try:

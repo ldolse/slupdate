@@ -7,6 +7,8 @@ from optical_media.utils import OpticalMediaProcessor
 from rom_management.handlers import registry, SpecialHandler
 from media_registry import MediaRegistry, CDMedia
 from game_metadata import RedumpDB
+from collections import OrderedDict
+from .platform_state import PlatformState
 
 from typing import TYPE_CHECKING, Optional, List
 if TYPE_CHECKING:
@@ -31,11 +33,54 @@ class Platform:
         self.dat_directories: dict[str, list[RomDat]] = {}
         self.redump_db: RedumpDB = None
         self.mr: MediaRegistry = None
-        self.matched_buildable_media: set[CDMedia] = set()
+        self.matched_buildable_media: OrderedDict[CDMedia, None] = OrderedDict()
         self.validated_chds: set[CHD] = set()
         self._chd_handling_preference = None  # Can be "ask", "overwrite", or "skip", set via Exception
         self._chd_build_index = 0
         self.handler_registry = registry
+        self.state = PlatformState()
+
+    def save_state(self) -> PlatformState:
+        """Save current state to PlatformState object"""
+        # Update directory status and sync with current dat_directories keys
+        self.state.dat_directories = list(self.dat_directories.keys())  # Sync with current keys
+
+        # Update processing state
+        self.state._chd_build_index = self._chd_build_index
+
+        # Update matched media signatures
+        self.state.matched_media_sigs = [
+            media.sha1_signature or media.crc_signature
+            for media in self.matched_buildable_media.keys()
+        ]
+
+        # Update CHD handling preference
+        self.state._chd_handling_preference = self._chd_handling_preference
+
+        # Update validated CHD paths
+        self.state.validated_chds_paths = [chd.path for chd in self.validated_chds]
+
+        # Save Redump DB if it exists
+        if self.redump_db:
+            self.state.redump_db = self.redump_db.to_dict()
+
+        return self.state
+
+    def load_state(self, state: PlatformState):
+        """Load state from PlatformState object"""
+        self.state = state
+
+        # Restore directory paths
+        for path in self.state.dat_directories:
+            if path not in self.dat_directories:
+                    self.dat_directories[path] = []
+
+        # Restore processing state
+        self._chd_build_index = self.state._chd_build_index
+        self._chd_handling_preference = self.state._chd_handling_preference
+
+        # Restore validated CHDs (will be recreated during processing)
+        self.validated_chds = set()  # Will be rebuilt during validate_matched_entrie
 
     def get_relevant_handlers(self, media: CDMedia, file_data: OpticalMediaProcessor) -> List[SpecialHandler]:
         """Get all relevant handlers for a media item"""
@@ -43,7 +88,7 @@ class Platform:
 
     @property
     def _media_to_process(self) -> list[CDMedia]:
-        return list(self.matched_buildable_media)[self._chd_build_index:]
+        return list(self.matched_buildable_media.keys())[self._chd_build_index:]
 
     @property
     def _all_dats(self) -> list[RomDat]:
@@ -92,9 +137,13 @@ class Platform:
         """
         for dat_directory_path in self.dat_directories.keys():
             if not os.path.exists(dat_directory_path) or not os.path.isdir(dat_directory_path):
-                print(f"Directory `{dat_directory_path}` does not exist.")
-                return
+                print(f"Directory `{dat_directory_path}` does not exist or is not a directory.")
+                # Mark as unavailable but don't remove
+                self.state.mark_directory_status(dat_directory_path, "unavailable")
+                continue
 
+            # mark as available and process
+            self.state.mark_directory_status(dat_directory_path, "available")
             dat_files = [f for f in sorted(os.listdir(dat_directory_path))
                         if f.endswith(".xml") or f.endswith(".dat")]
 
@@ -159,6 +208,7 @@ class Platform:
     def validate_matched_entries(self) -> None:
         """
         Validate zip files for all matched entries in MediaRegistry
+        Skip validation if media signature is already in validated state
         """
         if not self.mr:
             print("MediaRegistry not initialized")
@@ -166,37 +216,89 @@ class Platform:
 
         zip_processor = ZipProcessor()
 
-        for media in self.mr.media_directory:
-            print(f"Validating media ID {media.id} for {media.dat_game_entry.name if media.dat_game_entry else 'Unknown Game'}")
-            if not hasattr(media, 'dat_game_entry') or media.dat_game_entry is None or media.softlist_part is None:
-                print("  ⚠️ Skipping - No valid DAT game entry or softlist part reference")
+        for media in self.mr.media_directory.keys():
+            # Skip if this media signature is already validated
+            media_sig = media.sha1_signature or media.crc_signature
+            if media_sig in self.state.matched_media_sigs:
+                print(f". ✅ {media.dat_game_entry.name} already validated, skipping zip check")
+                # Add to matched_buildable_media since we know it's valid
+                self.matched_buildable_media[media] = None
+                continue
+
+            if not media.dat_game_entry.name:
+                print(f"  ⚠️  Media ID: {media.id} - skipping, No DAT Game name")
+                continue
+
+            if media.dat_game_entry is None or media.softlist_part is None:
+                print(f"  ⚠️  {media.dat_game_entry.name}: Skipping - No valid DAT game entry or softlist part reference")
                 continue
 
             # Find ROM directory for this DAT
             rom_dir = media.dat_game_entry.dat.rom_path
             if not os.path.isdir(rom_dir):
-                print(f"  ⚠️ Skipping - ROM directory does not exist: {rom_dir}")
+                print(f"  ⚠️  {media.dat_game_entry.name}: Skipping - ROM directory does not exist: {rom_dir}")
                 continue
 
             # Find and validate zip
             zip_path = zip_processor.find_valid_zip(media.dat_game_entry, rom_dir)
             if not zip_path:
-                print(f"  ⚠️ No valid zip found for {media.dat_game_entry.name} in {rom_dir}")
+                print(f"  ⚠️  {media.dat_game_entry.name}: No valid zip found for  in {rom_dir}")
                 continue
             else:
-                print(f"  ✅ Found valid zip for {media.dat_game_entry.name}: {zip_path}")
+                print(f"  ✅ {media.dat_game_entry.name}: Found valid zip")
                 media.zip_path = zip_path
-                self.matched_buildable_media.add(media)
+                self.matched_buildable_media[media] = None # Value doesn't matter, using key as an ordered set
+
 
     def build_chds_for_matched(self) -> None:
         """
         Convert all matched entries in MediaRegistry to CHD format.
+        Skip if CHD already exists and is validated
         """
         for media in self._media_to_process:
+            # Check if CHD already exists and is validated
             title = media.softlist_part.part_of.name if media.softlist_part and media.softlist_part.part_of else None
             if not title:
                 print(f"  ⚠️ Skipping - No valid softlist part or title for media ID {media.id}")
                 continue
+
+            # Check if this CHD is already validated
+            expected_chd_path = os.path.join(self.chd_path, title, f"{media.softlist_part.disk_name}.chd")
+            if expected_chd_path in self.state.validated_chds_paths and os.path.exists(expected_chd_path):
+                existing_chd = CHD(chd_path=expected_chd_path)
+                if existing_chd.is_valid:
+                    print(f"✅ CHD already validated for {media.dat_game_entry.name}, skipping")
+                    self.validated_chds.add(existing_chd)
+                    continue
+                else:
+                    # will try to rebuild if it's not reported as valid
+                    os.remove(expected_chd_path)
+
+            elif os.path.exists(expected_chd_path):
+                print(f"⚠️  CHD already exists for {media.dat_game_entry.name} at {matched_chd.path}")
+                if not self.chd_handling_preference in ["ask", "skip", "overwrite"]:
+                    raise CHDAlreadyExistsException(matched_chd.path)
+
+                elif self.chd_handling_preference == "skip":
+                    print("   Skipping as per user preference")
+                    self.validated_chds.add(matched_chd)
+                    continue
+                elif self.chd_handling_preference == "ask":
+                    user_input = input("   Overwrite existing CHD? (y/n): ").strip().lower()
+                    if user_input != 'y':
+                        print("   Skipping conversion")
+                        self.validated_chds.add(matched_chd)
+                        continue
+                    else:
+                        print("   Overwriting existing CHD as per user input")
+                        # delete the existing CHD before creating new one
+                        os.remove(matched_chd.path)
+                        matched_chd = CHD(source=media, base_path=self.chd_path, tmpdsk=self.pm.tmpdsk)
+
+
+                # If overwrite, proceed to create new CHD
+                elif self.chd_handling_preference == "overwrite":
+                    print("   Overwriting existing CHD as per user preference")
 
             file_data = OpticalMediaProcessor(media, tmpdsk=self.pm.tmpdsk)
 
@@ -207,10 +309,10 @@ class Platform:
 
                 # Extract the ROM to a temp directory
                 file_data.extract_and_process()
-                
+
                 if not file_data.temp_dir.exists():
                     raise Exception(f"Temp directory creation for {media.dat_game_entry.name} failed")
- 
+
                 # Get and apply handlers
                 handlers = self.get_relevant_handlers(media, file_data)
 
@@ -227,34 +329,9 @@ class Platform:
 
                 matched_chd = CHD(source=media, base_path=self.chd_path, toc_source=toc_source)
 
-                if matched_chd.preexisting:
-                    print(f"⚠️  CHD already exists for {media.dat_game_entry.name} at {matched_chd.path}")
-                    if not self.chd_handling_preference in ["ask", "skip", "overwrite"]:
-                        raise CHDAlreadyExistsException(matched_chd.path)
-
-                    elif self.chd_handling_preference == "skip":
-                        print("   Skipping as per user preference")
-                        self.validated_chds.add(matched_chd)
-                        continue
-                    elif self.chd_handling_preference == "ask":
-                        user_input = input("   Overwrite existing CHD? (y/n): ").strip().lower()
-                        if user_input != 'y':
-                            print("   Skipping conversion")
-                            self.validated_chds.add(matched_chd)
-                            continue
-                        else:
-                            print("   Overwriting existing CHD as per user input")
-                            # delete the existing CHD before creating new one
-                            os.remove(matched_chd.path)
-                            matched_chd = CHD(source=media, base_path=self.chd_path, tmpdsk=self.pm.tmpdsk)
-
-
-                    # If overwrite, proceed to create new CHD
-                    elif self.chd_handling_preference == "overwrite":
-                        print("   Overwriting existing CHD as per user preference")
-
                 if matched_chd.exists and matched_chd.is_valid:
                     self.validated_chds.add(matched_chd)
+                    self.state.add_validated_chd_path(matched_chd.path)
                     print(f"✅ Converted {media.zip_path} to CHD")
 
             except Exception as e:

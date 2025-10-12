@@ -34,7 +34,6 @@ class MainMenu(BaseMenu):
             )
         ]
 
-    @staticmethod
     def _save_settings(self, platform_manager):
         """Method that will be called with the platform manager when selected"""
         return platform_manager.save()
