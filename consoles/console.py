@@ -3,6 +3,7 @@ from dat import RomDat
 from softwarelist import SoftwareList, Part
 from utils import select_directory
 from rom_management import ZipProcessor, CHD
+from rom_management.exceptions import HandlerException, UserActionRequiredException, SkipCurrentItemException
 from optical_media.utils import OpticalMediaProcessor
 from rom_management.handlers import registry, SpecialHandler
 from media_registry import MediaRegistry, CDMedia
@@ -235,7 +236,7 @@ class Platform:
             # Find and validate zip
             zip_path = zip_processor.find_valid_zip(media.dat_game_entry, rom_dir)
             if not zip_path:
-                print(f"  ⚠️  {media.dat_game_entry.name}: No valid zip found for  in {rom_dir}")
+                print(f"  ⚠️  {media.dat_game_entry.name}: No valid zip found")
                 continue
             else:
                 print(f"  ✅ {media.dat_game_entry.name}: Found valid zip")
@@ -243,10 +244,10 @@ class Platform:
                 self.matched_buildable_media[media] = None # Value doesn't matter, using key as an ordered set
 
 
-    def build_chds_for_matched(self) -> None:
+    def build_chds_for_matched(self) -> dict:
         """
         Convert all matched entries in MediaRegistry to CHD format.
-        Skip if CHD already exists and is validated
+        Returns navigation info with payload if exception occurs
         """
         for media in self._media_to_process:
             # Check if CHD already exists and is validated
@@ -268,30 +269,16 @@ class Platform:
                     os.remove(expected_chd_path)
 
             elif os.path.exists(expected_chd_path):
-                print(f"⚠️  CHD already exists for {media.dat_game_entry.name} at {matched_chd.path}")
-                if not self.chd_handling_preference in ["ask", "skip", "overwrite"]:
-                    raise CHDAlreadyExistsException(matched_chd.path)
+                matched_chd = CHD(chd_path=expected_chd_path)
+                print(f"⚠️  CHD already exists for {media.dat_game_entry.name} at {expected_chd_path}")
 
-                elif self.chd_handling_preference == "skip":
-                    print("   Skipping as per user preference")
-                    self.validated_chds.add(matched_chd)
-                    continue
-                elif self.chd_handling_preference == "ask":
-                    user_input = input("   Overwrite existing CHD? (y/n): ").strip().lower()
-                    if user_input != 'y':
-                        print("   Skipping conversion")
-                        self.validated_chds.add(matched_chd)
-                        continue
-                    else:
-                        print("   Overwriting existing CHD as per user input")
-                        # delete the existing CHD before creating new one
-                        os.remove(matched_chd.path)
-                        matched_chd = CHD(source=media, base_path=self.chd_path, tmpdsk=self.pm.tmpdsk)
+                # Create exception with existing version info
+                from rom_management.exceptions import CHDAlreadyExistsException
+                existing_version = matched_chd._get_chd_info().get('file_version') if matched_chd.is_valid else None
+                exception = CHDAlreadyExistsException(expected_chd_path, existing_version)
 
-
-                # If overwrite, proceed to create new CHD
-                elif self.chd_handling_preference == "overwrite":
-                    print("   Overwriting existing CHD as per user preference")
+                # Return navigation info with exception as payload
+                return {"menu": "existing_chd_menu", "payload": exception}
 
             file_data = OpticalMediaProcessor(media, tmpdsk=self.pm.tmpdsk)
 
@@ -310,12 +297,16 @@ class Platform:
                 handlers = self.get_relevant_handlers(media, file_data)
 
                 for handler in handlers:
-                    if not handler.validate_preconditions(media, file_data):
+                    try:
+                        result = handler.handle(media, file_data)
+                        if not result.get('success', True):
+                            raise HandlerException(f"Handler {handler.name} failed: {result.get('error')}")
+                    except SkipCurrentItemException:
+                        print(f"Skipping item due to handler request")
                         continue
-
-                    result = handler.handle(media, file_data)
-                    if not result.get('success', True):
-                        print(f"Handler {handler.name} failed: {result.get('error')}")
+                    except UserActionRequiredException as e:
+                        # Return navigation info with exception as payload
+                        return {"menu": "handler_error_menu", "payload": e}
 
                 # Prepare for CHD conversion
                 toc_source = file_data.current_toc
@@ -327,17 +318,19 @@ class Platform:
                     self.state.add_validated_chd_path(matched_chd.path)
                     print(f"✅ Converted {media.zip_path} to CHD")
 
+            except HandlerException as e:
+                # Return navigation info with exception as payload
+                return {"menu": "handler_error_menu", "payload": e}
             except Exception as e:
-                self._last_chd_error = (str(e))
-                raise  # This exits the function, but we know where to resume
+                print(f"Unexpected error processing {media.dat_game_entry.name}: {e}")
+                continue
             finally:
-                if file_data:
+                # Clean up temp directory only if we're not retrying
+                if 'file_data' in locals() and file_data:
                     file_data.cleanup()
 
-class CHDAlreadyExistsException(Exception):
-    def __init__(self, chd_path: str, chd_version: Optional[str] = None):
-        self.chd_path = chd_path
-        self.chd_version = chd_version
-        super().__init__(f"CHD already exists at {chd_path}")
+        # Return success navigation if all processing completes
+        return {"menu": "chd_build_menu", "payload": None}
+
 
 

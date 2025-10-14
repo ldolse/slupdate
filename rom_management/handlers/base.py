@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from ..exceptions import UserActionRequiredException, SkipCurrentItemException, HandlerException
 from media_registry import CDMedia
 from optical_media.utils import OpticalMediaProcessor
 
@@ -7,10 +8,35 @@ class SpecialHandler(ABC):
         self.name = name
 
     @abstractmethod
-    def handle(self, media: CDMedia, file_data: OpticalMediaProcessor) -> dict:
-        """Handle special case processing"""
+    def _handle(self, media: CDMedia, file_data: OpticalMediaProcessor) -> dict:
+        """Handle special case processing, override in subclasses"""
         pass
+
+    def handle(self, media: CDMedia, file_data: OpticalMediaProcessor) -> dict:
+        """Handle special processing with exception-based error handling"""
+        try:
+            return self._handle(media, file_data)
+        except Exception as e:
+            # Convert specific exceptions to our handler exception hierarchy
+            if self._requires_user_intervention(e):
+                raise UserActionRequiredException(
+                    f"Handler {self.name} requires user action: {str(e)}",
+                    menu_name="handler_error_menu"
+                )
+            elif self._should_skip_item(e):
+                raise SkipCurrentItemException(f"Handler {self.name} skipping item: {str(e)}")
+            else:
+                raise HandlerException(f"Handler {self.name} failed: {str(e)}")
 
     def validate_preconditions(self, media: CDMedia, file_data: OpticalMediaProcessor) -> bool:
         """Check if this handler should be applied"""
         return True
+        return True
+
+    def _requires_user_intervention(self, error: Exception) -> bool:
+        """Override in subclasses to determine if user intervention is needed"""
+        return False
+
+    def _should_skip_item(self, error: Exception) -> bool:
+        """Override in subclasses to determine if item should be skipped"""
+        return False

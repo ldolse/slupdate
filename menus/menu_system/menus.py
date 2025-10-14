@@ -17,12 +17,11 @@ class MenuItem:
         self.requires_platform = requires_platform
         self.is_back = is_back  # Indicates if this option is a "back" action
 
-    def execute(self, menu_system: "MenuSystem") -> str:
+    def execute(self, menu_system: "MenuSystem") -> dict:
         """Execute option logic and return next target."""
         # Handle back action
         if self.is_back:
-            menu_system.navigate_back()
-            return None
+            return {"menu": menu_system.navigate_back(), "payload": None}
 
         current_platform = menu_system.current_platform_obj
         try:
@@ -37,7 +36,7 @@ class MenuItem:
                     selected_platform = menu_system.platform_manager.select_platform()
                     if not selected_platform:
                         print("No platform selected. Action requires a configured platform.")
-                        return self.target_name  # Stay on the same menu
+                        return {"menu": self.target_name, "payload": None}  # Return dict
 
                     current_platform = selected_platform
                 args.append(current_platform)
@@ -52,24 +51,27 @@ class MenuItem:
 
         except Exception as e:
             print(f"Error preparing arguments for {self.text}: {e}")
-            return self.target_name  # Default to target
+            return {"menu": self.target_name, "payload": None}  # Return dict
 
         try:
             result = None
             if self.action:
                 result = self.action(*args)
 
+            # Handle different return types - THIS IS THE KEY FIX
+            if isinstance(result, dict):
+                return result  # {"menu": "error_menu", "payload": exception}
+            elif isinstance(result, tuple):
+                return {"menu": result[0], "payload": result[1]}
+            elif isinstance(result, str):
+                return {"menu": result, "payload": None}
+            else:
+                # Handle None or other types - default to target_name
+                return {"menu": self.target_name, "payload": None}
+
         except TypeError as te:
             print(f"[ERROR] TypeError in action: {te}. Using default.")
-
-        next_target = (
-            result
-            if isinstance(result, str) and result != ""
-            else self.target_name  # Fallback to target name
-        )
-
-        return next_target
-
+            return {"menu": self.target_name, "payload": None}
 
 class BaseMenu:
     """Base class for all menus"""
@@ -77,6 +79,11 @@ class BaseMenu:
         self.name = name
         self.message = f"Message not set - should be defined by subclass {name}"
         self._options = []
+        self.payload = None  # Add payload storage
+
+    def set_payload(self, payload):
+        """Set the payload for this menu"""
+        self.payload = payload
 
     @property
     def options(self) -> list[MenuItem]:
@@ -122,8 +129,15 @@ class MenuSystem:
     def current_menu(self) -> BaseMenu:
         return self.menus.get(self.current_menu_name)
 
-    def navigate_to(self, target: str) -> None:
+    def navigate_to(self, navigation_info: dict) -> None:
         """Pushes current menu to stack and navigates"""
+        target = navigation_info["menu"]
+        payload = navigation_info.get("payload")
+
+        # Inject payload into menu if it supports it
+        if payload and hasattr(self.menus[target], 'set_payload'):
+            self.menus[target].set_payload(payload)
+
         # Only add previous state to stack if current menu exists (not initial run)
         if self.current_menu_name:
             if self.current_menu_name != target:

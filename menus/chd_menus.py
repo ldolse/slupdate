@@ -3,6 +3,7 @@ import os, sys, traceback
 import inquirer
 from consoles import Platform
 from rom_management import CHD
+from rom_management.exceptions import HandlerException, UserActionRequiredException, CHDAlreadyExistsException
 from modules.software_list import update_softlist_chd_sha1s
 from modules.chd import (
     create_chd_from_zip,
@@ -63,12 +64,12 @@ def chd_builder(platform: Platform) -> None:
                             special_logic.update(game_entry)
                         elif dat_group == 'redump':
                             libcrypt = False
-                            if platform == 'psx' and 'serial' in soft_data: 
-                                ''' 
+                            if platform == 'psx' and 'serial' in soft_data:
+                                '''
                                 in refactor, psx is a subclass of consoles.platform to move this logic to
-                                psx class needs to look at the serial number, which is in the 
-                                SoftwareList.Software object (but not guaranteed in all cases) and redump 
-                                db entry object, which is guaranteed - 
+                                psx class needs to look at the serial number, which is in the
+                                SoftwareList.Software object (but not guaranteed in all cases) and redump
+                                db entry object, which is guaranteed -
                                 note we can only apply libcrypt logic to Redump dumps
                                 '''
                                 for serial in soft_data['serial']:
@@ -83,10 +84,10 @@ def chd_builder(platform: Platform) -> None:
                                      4. Patch the empty subchannel file with the LSD data
                                      5. Convert the CloneCD + Subchannel to CDRDAO, as CHDMAN doesn't support CloneCD
                                      6. Convert CDRDAO to CHD
-                                     
+
                                      Note Steps 1-4 are already in the codebase 100% working but not hooked up
                                      Step 5 has code translated from C# to python from the Aaru project but is not yet working.
-                                     Step 6 really just involves recognizing a CDRDAO file in the TOC identification function, 
+                                     Step 6 really just involves recognizing a CDRDAO file in the TOC identification function,
                                      which likely already works.
                                     '''
                                     print('This Title uses Libcrypt')
@@ -181,28 +182,70 @@ class CHDBuildMenu(BaseMenu):
         platform.validate_matched_entries()
 
     @staticmethod
-    def _chd_builder(platform: Platform) -> None:
+    def _chd_builder(platform: Platform) -> dict:
         # check chdman version
         check = CHD(check_chdman=True)
         if not check.chdman_uptodate:
             print('Outdated Chdman, please upgrade to a recent version')
-            return None
+            return {"menu": "chd_build_menu", "payload": None}
         if len(platform.matched_buildable_media) == 0:
             print('No valid media found, please check source ROMs and DAT files, and ensure mapping is complete.')
-            return None
+            return {"menu": "chd_build_menu", "payload": None}
         build = inquirer.confirm('Begin Creating CHDs?', default=False)
         if build:
-            platform.build_chds_for_matched()
+            try:
+                result = platform.build_chds_for_matched()
+                return result  # This will be a dict with menu and payload
+            except HandlerException as e:
+                # Let the menu system handle this by returning navigation info
+                return {"menu": "handler_error_menu", "payload": e}
+        else:
+            return {"menu": "chd_build_menu", "payload": None}
+
+class HandlerErrorMenu(BaseMenu):
+    def __init__(self, name: str = "handler_error_menu"):
+        super().__init__(name)
+        self.message = f"Handler Error"
+        self.options = [
+            MenuItem(text="Retry", action_func=self.retry),
+            MenuItem(text="Skip this item", action_func=self.skip),
+            MenuItem(text="Stop processing", action_func=self.stop)
+        ]
+
+    def set_payload(self, payload):
+        """Set the exception payload and update message"""
+        self.payload = payload
+        if payload:
+            self.message = f"Handler Error: {payload}"
+
+    @staticmethod
+    def retry() -> str:
+        return "retry_current_item"
+
+    @staticmethod
+    def skip() -> str:
+        return "skip_current_item"
+
+    @staticmethod
+    def stop() -> str:
+        return "stop_processing"
+
 
 class CHDErrorMenu(BaseMenu):
-    def __init__(self, chd_path: str, error_message: str):
-        super().__init__("chd_error_menu")
-        self.message = f"Error processing {chd_path}: {error_message}"
+    def __init__(self, name: str = "chd_error_menu"):
+        super().__init__(name)
+        self.message = f"Error processing CHD"
         self.options = [
             MenuItem(text="Skip this CHD and continue", action_func=self.skip),
             MenuItem(text="Stop processing all CHDs", action_func=self.stop),
             MenuItem(text="Retry this CHD", action_func=self.retry)
         ]
+
+    def set_payload(self, payload):
+        """Set the error payload and update message"""
+        self.payload = payload
+        if payload:
+            self.message = f"Error processing {payload.chd_path}: {payload.error_message}"
 
     @staticmethod
     def skip() -> str:
@@ -216,16 +259,24 @@ class CHDErrorMenu(BaseMenu):
     def retry() -> str:
         return "retry_current_chd"
 
+
 class ExistingCHDMenu(BaseMenu):
-    def __init__(self, chd_path: str, existing_version: str, current_version: str):
-        super().__init__("existing_chd_menu")
-        self.message = f"CHD already exists at {chd_path}\nExisting version: {existing_version}, Current version: {current_version}"
+    def __init__(self, name: str = "existing_chd_menu"):
+        super().__init__(name)
+        self.message = f"CHD already exists"
         self.options = [
             MenuItem(text="Overwrite this CHD", action_func=self.overwrite),
             MenuItem(text="Skip this CHD", action_func=self.skip),
             MenuItem(text="Always overwrite older CHDs for this session", action_func=self.set_overwrite_preference),
             MenuItem(text="Always skip existing CHDs for this session", action_func=self.set_skip_preference)
         ]
+
+    def set_payload(self, payload):
+        """Set the exception payload and update message"""
+        self.payload = payload
+        if payload:
+            existing_version = payload.existing_version or "Unknown"
+            self.message = f"CHD already exists at {payload.chd_path}\nExisting version: {existing_version}"
 
     @staticmethod
     def overwrite(platform: Platform) -> str:
