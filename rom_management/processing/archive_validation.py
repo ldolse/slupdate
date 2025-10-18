@@ -73,37 +73,40 @@ class ArchiveValidationProcess(BaseProcess):
 
     def _validate_single_media(self, media) -> dict:
         """Validate a single media item"""
-        # Skip if this media signature is already validated
-        media_sig = media.sha1_signature or media.crc_signature
-        if media_sig in self.platform.state.matched_media_sigs:
-            print(f". ✅ {media.dat_game_entry.name} already validated, skipping zip check")
-            return {'success': True}
+        # check if the media has both a part at a dat_game_entry
+        if (hasattr(media, 'softlist_part') and media.softlist_part is not None and                                                                                                                                     
+        hasattr(media, 'dat_game_entry') and media.dat_game_entry is not None): 
+            # Skip if this media signature is already validated
+            media_sig = media.sha1_signature or media.crc_signature
+            if media_sig in self.platform.state.matched_media_sigs:
+                print(f". ✅ {media.dat_game_entry.name} already validated, skipping zip check")
+                return {'success': True}
 
-        if not media.dat_game_entry.name:
-            print(f"  ⚠️  Media ID: {media.id} - skipping, No DAT Game name")
+            if not media.dat_game_entry.name:
+                print(f"  ⚠️  Media ID: {media.id} - skipping, No DAT Game name")
 
-        if media.dat_game_entry is None or media.softlist_part is None:
-            print(f"  ⚠️  {media.dat_game_entry.name}: Skipping - No valid DAT game entry or softlist part reference")
 
-        # Find ROM directory for this DAT
-        rom_dir = media.dat_game_entry.dat.rom_path
-        if not os.path.isdir(rom_dir):
-            print(f"  ⚠️  {media.dat_game_entry.name}: Skipping - ROM directory does not exist: {rom_dir}")
+            # Find ROM directory for this DAT
+            rom_dir = media.dat_game_entry.dat.rom_path
+            if not os.path.isdir(rom_dir):
+                print(f"  ⚠️  {media.dat_game_entry.name}: Skipping - ROM directory does not exist: {rom_dir}")
 
-        # Find and validate zip
-        try:
-            zip_path = self.zip_processor.find_valid_zip(media.dat_game_entry, rom_dir)
-        except MD5ScanRequiredException as e:
-            # Re-raise the exception to be caught by execute_step
-            raise e
-            
-        if not zip_path:
-            print(f"  ⚠️  {media.dat_game_entry.name}: No valid zip found")
-            return {'success': False, 'payload': Exception(f"No valid zip found for {media.dat_game_entry.name}")}
+            # Find and validate zip
+            try:
+                zip_path = self.zip_processor.find_valid_zip(media.dat_game_entry, rom_dir)
+            except MD5ScanRequiredException as e:
+                # Re-raise the exception to be caught by execute_step
+                raise e
+                
+            if not zip_path:
+                print(f"  ⚠️  {media.dat_game_entry.name}: No valid zip found")
+                return {'success': False, 'payload': Exception(f"No valid zip found for {media.dat_game_entry.name}")}
+            else:
+                print(f"  ✅ {media.dat_game_entry.name}: Found valid zip")
+                media.zip_path = zip_path
+                return {'success': True}
         else:
-            print(f"  ✅ {media.dat_game_entry.name}: Found valid zip")
-            media.zip_path = zip_path
-            return {'success': True}
+            print(f"  ⚠️  {media.dat_game_entry.name}: Skipping - No valid DAT game entry or softlist part reference")
 
     def handle_user_action(self, action: str) -> dict:
         if action == 'retry':
