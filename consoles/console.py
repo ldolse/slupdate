@@ -113,7 +113,7 @@ class Platform:
         """Total number of individual discs that contain source references"""
         count = 0
         for entry in self.softwarelist.software_items:
-            for part in entry.parts.values():
+            for part in entry.parts:
                 if hasattr(part, 'disk_sha1') and part.disk_sha1:
                     count += 1
         return count
@@ -123,7 +123,7 @@ class Platform:
         """Number of software list entries that have at least one part with a source match"""
         count = 0
         for entry in self.softwarelist.software_items:
-            if any(hasattr(part, 'game_entry') and part.game_entry for part in entry.parts.values()):
+            if any(hasattr(part, 'game_entry') and part.game_entry for part in entry.parts):
                 count += 1
         return count
 
@@ -132,7 +132,7 @@ class Platform:
         """Number of parts that have a 'source_dat' entry (matched to DAT)"""
         count = 0
         for entry in self.softwarelist.software_items:
-            for part in entry.parts.values():
+            for part in entry.parts:
                 if hasattr(part, 'game_entry') and part.game_entry:
                     count += 1
         return count
@@ -145,11 +145,7 @@ class Platform:
     @property
     def total_source_rom(self) -> int:
         """Number of parts that have a valid zip file"""
-        count = 0
-        for media in self.matched_buildable_media.keys():
-            if hasattr(media, 'zip_path') and media.zip_path:
-                count += 1
-        return count
+        return len(self.matched_buildable_media)
 
     def register_dat_media(self) -> None:
         self.update_dats()
