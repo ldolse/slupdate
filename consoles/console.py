@@ -103,6 +103,53 @@ class Platform:
     def chd_handling_preference(self) -> str:
         return self._chd_handling_preference
 
+    @property
+    def total_softlist_entries(self) -> int:
+        """Total number of software list entries (titles)"""
+        return len(self.softwarelist.software_items)
+
+    @property
+    def total_source_ref(self) -> int:
+        """Total number of individual discs that contain source references"""
+        count = 0
+        for entry in self.softwarelist.software_items:
+            for part in entry.parts.values():
+                if hasattr(part, 'disk_sha1') and part.disk_sha1:
+                    count += 1
+        return count
+
+    @property
+    def total_source_found(self) -> int:
+        """Number of software list entries that have at least one part with a source match"""
+        count = 0
+        for entry in self.softwarelist.software_items:
+            if any(hasattr(part, 'game_entry') and part.game_entry for part in entry.parts.values()):
+                count += 1
+        return count
+
+    @property
+    def total_source_dat(self) -> int:
+        """Number of parts that have a 'source_dat' entry (matched to DAT)"""
+        count = 0
+        for entry in self.softwarelist.software_items:
+            for part in entry.parts.values():
+                if hasattr(part, 'game_entry') and part.game_entry:
+                    count += 1
+        return count
+
+    @property
+    def chd_count(self) -> int:
+        """Number of CHDs that have been validated"""
+        return len(self.validated_chds)
+
+    @property
+    def total_source_rom(self) -> int:
+        """Number of parts that have a valid zip file"""
+        count = 0
+        for media in self.matched_buildable_media.keys():
+            if hasattr(media, 'zip_path') and media.zip_path:
+                count += 1
+        return count
 
     def register_dat_media(self) -> None:
         self.update_dats()
@@ -346,6 +393,3 @@ class Platform:
 
         # Return success navigation if all processing completes
         return {"menu": "chd_build_menu", "payload": None}
-
-
-
