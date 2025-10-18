@@ -109,6 +109,9 @@ class ArchiveValidationProcess(BaseProcess):
             return {'complete': True, 'stopped_early': True}
         elif action == 'skip_all':
             self.user_preference = 'skip_all'
+            # Advance index when skipping
+            self.state['failed_count'] += 1
+            self.state['current_index'] += 1
             return {'continue': True}
         elif action == 'continue_all':
             self.user_preference = 'continue_all'
