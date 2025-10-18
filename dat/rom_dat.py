@@ -34,6 +34,10 @@ class GameEntry:
         self.description = description
         self.roms = roms if roms is not None else []
         self.media: Optional[CDMedia] = None
+    
+    @property
+    def dat_group(self):
+        return self.dat.dat_group
 
     def to_dict(self):
         return {
@@ -89,7 +93,8 @@ class RomDat(LogiqxDAT):
                 if matched:
                     print(f"✅ Matched existing media: {game_entry.dat}: {game_entry.name}")
                 else:
-                    print(f"🆕 Created new media for: {game_entry.dat}: {game_entry.name}, hash:{registered.sha1_signature}")
+                    pass
+                    #print(f"🆕 Created new media for: {game_entry.dat}: {game_entry.name}, hash:{registered.sha1_signature}")
             else:
                 print(f"❌ Could not register media for: {game_entry.dat}: {game_entry.name}")
 

@@ -55,8 +55,10 @@ class LogiqxDAT:
             'redump': ('redump.org',),
             'no-intro': ('no-intro.org',),
             'tosec': ('tosecdev.org',),
-            'MAME': ('mamedev.org',),
+            'MAME-Comment': ('mamedev.org',),
             'mameredump': ('github.com/MetalSlug/MAMERedump',),
+            'MAME-Slupdate': ('slupdate',),
+
         }
 
         try:
@@ -64,8 +66,7 @@ class LogiqxDAT:
             for group, patterns in DAT_GROUPS.items():
                 if any(pattern in url for pattern in patterns):
                     return group
-                else:
-                    return 'other'
+            return 'other'
 
         except Exception as e:
             print(f"DAT Group Detection Error: {e} for DAT '{self.file_path}'")

@@ -1,6 +1,6 @@
 from softwarelist.comment import Comment
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 if TYPE_CHECKING:
     from softwarelist import Software
     from dat import GameEntry
@@ -18,6 +18,15 @@ class Part:
         self.cdmedia: CDMedia = None # CdMedia object from MediaRegistry
         self.redump_url: str = ""
         self.game_entry: GameEntry = None
+
+    @property
+    def source_group(self) -> Optional[str]:
+        """Returns the source group from the associated GameEntry if it exists, otherwise None."""
+        if hasattr(self, 'cdmedia') and self.cdmedia is not None:
+            if (hasattr(self.cdmedia, 'softlist_part') and self.cdmedia.softlist_part is not None and 
+            hasattr(self.cdmedia, 'dat_game_entry') and self.cdmedia.dat_game_entry is not None): 
+                return self.cdmedia.dat_game_entry.dat_group
+        return None
 
     def extract_rom_sources(self, dat) -> None:
         """Parse comments into structured data."""
