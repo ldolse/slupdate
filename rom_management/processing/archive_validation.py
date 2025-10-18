@@ -30,83 +30,89 @@ class ArchiveValidationProcess(BaseProcess):
         # Get current media item
         media = self.state['items_to_process'][self.state['current_index']]
 
-        try:
-            # Validate this media item
-            result = self._validate_single_media(media)
+        # check if the media has both a part at a dat_game_entry
+        if (hasattr(media, 'softlist_part') and media.softlist_part is not None and                                                                                                                                     
+        hasattr(media, 'dat_game_entry') and media.dat_game_entry is not None): 
+            try:
+                # Validate this media item
+                result = self._validate_single_media(media)
 
-            if result.get('success'):
-                self.state['processed_count'] += 1
-                # Add to matched_buildable_media since we know it's valid
-                self.platform.matched_buildable_media[media] = None
+                if result.get('success'):
+                    self.state['processed_count'] += 1
+                    # Add to matched_buildable_media since we know it's valid
+                    self.platform.matched_buildable_media[media] = None
 
-                # Only increment index if successful
-                self.state['current_index'] += 1
-                return {'continue': True}
-            else:
+                    # Only increment index if successful
+                    self.state['current_index'] += 1
+                    return {'continue': True}
+                else:
+                    # Check if we have a "skip all" preference
+                    if self.user_preference == 'skip_all':
+                        self.state['failed_count'] += 1
+                        self.state['current_index'] += 1
+                        return {'continue': True}
+                    # Store exception payload and pause processing for user input
+                    self.state['exception_payload'] = result.get('payload')
+                    return {'needs_user_input': True, 'payload': result['payload']}
+
+            except MD5ScanRequiredException as e:
+                # Check if we have a "skip all" preference for MD5 scan required exceptions
+                if self.user_preference == 'skip_all':
+                    self.state['failed_count'] += 1
+                    self.state['current_index'] += 1
+                    return {'continue': True}
+                # Store exception payload and pause processing for user input
+                self.state['exception_payload'] = e
+                return {'needs_user_input': True, 'payload': e}
+            except Exception as e:
                 # Check if we have a "skip all" preference
                 if self.user_preference == 'skip_all':
                     self.state['failed_count'] += 1
                     self.state['current_index'] += 1
                     return {'continue': True}
                 # Store exception payload and pause processing for user input
-                self.state['exception_payload'] = result.get('payload')
-                return {'needs_user_input': True, 'payload': result['payload']}
-
-        except MD5ScanRequiredException as e:
-            # Check if we have a "skip all" preference for MD5 scan required exceptions
-            if self.user_preference == 'skip_all':
-                self.state['failed_count'] += 1
-                self.state['current_index'] += 1
-                return {'continue': True}
-            # Store exception payload and pause processing for user input
-            self.state['exception_payload'] = e
-            return {'needs_user_input': True, 'payload': e}
-        except Exception as e:
-            # Check if we have a "skip all" preference
-            if self.user_preference == 'skip_all':
-                self.state['failed_count'] += 1
-                self.state['current_index'] += 1
-                return {'continue': True}
-            # Store exception payload and pause processing for user input
-            self.state['exception_payload'] = e
-            return {'needs_user_input': True, 'payload': e}
+                self.state['exception_payload'] = e
+                return {'needs_user_input': True, 'payload': e}
+        else:
+            print(f"  ⚠️  {media.dat_game_entry.name}: Skipping - missing DAT + Softwarelist part reference")
+            self.state['failed_count'] += 1
+            self.state['current_index'] += 1
+            return {'continue': True}
 
     def _validate_single_media(self, media) -> dict:
         """Validate a single media item"""
-        # check if the media has both a part at a dat_game_entry
-        if (hasattr(media, 'softlist_part') and media.softlist_part is not None and                                                                                                                                     
-        hasattr(media, 'dat_game_entry') and media.dat_game_entry is not None): 
-            # Skip if this media signature is already validated
-            media_sig = media.sha1_signature or media.crc_signature
-            if media_sig in self.platform.state.matched_media_sigs:
-                print(f". ✅ {media.dat_game_entry.name} already validated, skipping zip check")
-                return {'success': True}
+        # Skip if this media signature is already validated
+        media_sig = media.sha1_signature or media.crc_signature
+        if media_sig in self.platform.state.matched_media_sigs:
+            print(f". ✅ {media.dat_game_entry.name} already validated, skipping zip check")
+            return {'success': True}
 
-            if not media.dat_game_entry.name:
-                print(f"  ⚠️  Media ID: {media.id} - skipping, No DAT Game name")
+        if not media.dat_game_entry.name:
+            print(f"  ⚠️  Media ID: {media.id} - skipping, No DAT Game name")
+            return {'success': True}
 
 
-            # Find ROM directory for this DAT
-            rom_dir = media.dat_game_entry.dat.rom_path
-            if not os.path.isdir(rom_dir):
-                print(f"  ⚠️  {media.dat_game_entry.name}: Skipping - ROM directory does not exist: {rom_dir}")
+        # Find ROM directory for this DAT
+        rom_dir = media.dat_game_entry.dat.rom_path
+        if not os.path.isdir(rom_dir):
+            print(f"  ⚠️  {media.dat_game_entry.name}: Skipping - ROM directory does not exist: {rom_dir}")
+            return {'success': True}
 
-            # Find and validate zip
-            try:
-                zip_path = self.zip_processor.find_valid_zip(media.dat_game_entry, rom_dir)
-            except MD5ScanRequiredException as e:
-                # Re-raise the exception to be caught by execute_step
-                raise e
-                
-            if not zip_path:
-                print(f"  ⚠️  {media.dat_game_entry.name}: No valid zip found")
-                return {'success': False, 'payload': Exception(f"No valid zip found for {media.dat_game_entry.name}")}
-            else:
-                print(f"  ✅ {media.dat_game_entry.name}: Found valid zip")
-                media.zip_path = zip_path
-                return {'success': True}
+        # Find and validate zip
+        try:
+            zip_path = self.zip_processor.find_valid_zip(media.dat_game_entry, rom_dir)
+        except MD5ScanRequiredException as e:
+            # Re-raise the exception to be caught by execute_step
+            raise e
+            
+        if not zip_path:
+            print(f"  ⚠️  {media.dat_game_entry.name}: No valid zip found")
+            return {'success': False, 'payload': Exception(f"No valid zip found for {media.dat_game_entry.name}")}
         else:
-            print(f"  ⚠️  {media.dat_game_entry.name}: Skipping - No valid DAT game entry or softlist part reference")
+            print(f"  ✅ {media.dat_game_entry.name}: Found valid zip")
+            media.zip_path = zip_path
+            return {'success': True}
+
 
     def handle_user_action(self, action: str) -> dict:
         if action == 'retry':
