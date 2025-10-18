@@ -1,4 +1,5 @@
 from typing import Dict, List, Any, TYPE_CHECKING
+import os
 from .base_process import BaseProcess
 from rom_management.archive.zip_processor import ZipProcessor, MD5ScanRequiredException
 
