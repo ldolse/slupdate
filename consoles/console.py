@@ -82,6 +82,27 @@ class Platform:
         self._chd_build_index = self.state._chd_build_index
         self._chd_handling_preference = self.state._chd_handling_preference
 
+    def reset(self) -> None:
+        """Reset platform state while preserving DAT directories"""
+        # Save current dat_directories
+        saved_dat_dirs = self.dat_directories.copy()
+        
+        # Reset state by creating new PlatformState with preserved dat_directories
+        self.state = PlatformState()
+        self.state.dat_directories = list(saved_dat_dirs.keys())
+        
+        # Reset all other attributes to initial state
+        self.softwarelist = None
+        self.redump_db = None
+        self.mr = None
+        self.matched_buildable_media = OrderedDict()
+        self.validated_chds = set()
+        self._chd_handling_preference = None
+        self._chd_build_index = 0
+        
+        # Recreate process manager with reset state
+        self.process_manager = ProcessManager(self)
+
     def get_relevant_handlers(self, media: CDMedia, file_data: OpticalMediaProcessor) -> List[SpecialHandler]:
         """Get all relevant handlers for a media item"""
         return self.handler_registry.get_relevant_handlers(media, file_data)
