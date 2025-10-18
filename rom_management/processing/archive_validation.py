@@ -53,10 +53,20 @@ class ArchiveValidationProcess(BaseProcess):
                 return {'needs_user_input': True, 'payload': result['payload']}
 
         except MD5ScanRequiredException as e:
+            # Check if we have a "skip all" preference for MD5 scan required exceptions
+            if self.user_preference == 'skip_all':
+                self.state['failed_count'] += 1
+                self.state['current_index'] += 1
+                return {'continue': True}
             # Store exception payload and pause processing for user input
             self.state['exception_payload'] = e
             return {'needs_user_input': True, 'payload': e}
         except Exception as e:
+            # Check if we have a "skip all" preference
+            if self.user_preference == 'skip_all':
+                self.state['failed_count'] += 1
+                self.state['current_index'] += 1
+                return {'continue': True}
             # Store exception payload and pause processing for user input
             self.state['exception_payload'] = e
             return {'needs_user_input': True, 'payload': e}
