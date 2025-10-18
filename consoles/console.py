@@ -3,6 +3,7 @@ from dat import RomDat
 from softwarelist import SoftwareList, Part
 from utils import select_directory
 from rom_management import ZipProcessor, CHD
+from rom_management.processing import ProcessManager
 from rom_management.exceptions import HandlerException, UserActionRequiredException, SkipCurrentItemException
 from optical_media.utils import OpticalMediaProcessor
 from rom_management.handlers import registry, SpecialHandler
@@ -40,6 +41,7 @@ class Platform:
         self._chd_build_index = 0
         self.handler_registry = registry
         self.state = PlatformState()
+        self.process_manager = ProcessManager(self)
 
     def save_state(self) -> PlatformState:
         """Save current state to PlatformState object"""
@@ -198,6 +200,19 @@ class Platform:
                 part.redump_url = ''
                 match_failures.append(part)
         return match_failures
+
+    def start_validation_process(self) -> dict:
+        """Start the validation process through ProcessManager"""
+        if not self.process_manager:
+            raise Exception("ProcessManager not initialized")
+        return self.process_manager.start_validation()
+
+    def start_chd_build_process(self) -> dict:
+        """Start the CHD build process through ProcessManager"""
+        if not self.process_manager:
+            raise Exception("ProcessManager not initialized")
+        return self.process_manager.start_chd_build()
+
 
     def validate_matched_entries(self) -> None:
         """

@@ -179,7 +179,7 @@ class CHDBuildMenu(BaseMenu):
 
     @staticmethod
     def _validate_roms(platform: Platform) -> None:
-        platform.validate_matched_entries()
+        return platform.start_validation_process()
 
     @staticmethod
     def _chd_builder(platform: Platform) -> dict:
@@ -194,8 +194,8 @@ class CHDBuildMenu(BaseMenu):
         build = inquirer.confirm('Begin Creating CHDs?', default=False)
         if build:
             try:
-                result = platform.build_chds_for_matched()
-                return result  # This will be a dict with menu and payload
+                return platform.start_chd_build_process()
+
             except HandlerException as e:
                 # Let the menu system handle this by returning navigation info
                 return {"menu": "handler_error_menu", "payload": e}

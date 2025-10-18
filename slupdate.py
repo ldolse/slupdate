@@ -11,7 +11,7 @@ import inquirer
 from consoles import PlatformManager, Platform
 from utils.utils import get_script_path
 from menus.menu_system import MenuSystem
-from menus import MainMenu, SettingsMenu, DatMenu, MapMenu, MapStageTwo, MapStageThree, CHDBuildMenu, CHDErrorMenu, ExistingCHDMenu, HandlerErrorMenu
+from menus import MainMenu, SettingsMenu, DatMenu, MapMenu, MapStageTwo, MapStageThree, CHDBuildMenu, CHDErrorMenu, ExistingCHDMenu, ValidationProgressMenu
 from modules.mapping import get_source_stats
 from modules.mapping import print_source_stats
 
@@ -178,9 +178,10 @@ if __name__ == '__main__':
     system.register(MapStageThree())
     system.register(DatMenu())
     system.register(CHDBuildMenu())
-    system.register(HandlerErrorMenu())
+    #system.register(HandlerErrorMenu())
     system.register(CHDErrorMenu())
     system.register(ExistingCHDMenu())
+    system.register(ValidationProgressMenu())
 
     # Initialize the main menu
     system.navigate_to({"menu": "main_menu", "payload": None})  # Start at root menu

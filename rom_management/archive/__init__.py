@@ -1,6 +1,6 @@
-from .zip_processor import ZipProcessor
+from .zip_processor import ZipProcessor, MD5ScanRequiredException
 
 
-__all__ = ["ZipProcessor"]
+__all__ = ["ZipProcessor", "MD5ScanRequiredException"]
 
 __version__ = "0.1.0"
