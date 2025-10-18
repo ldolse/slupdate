@@ -168,6 +168,41 @@ class Platform:
         """Number of parts that have a valid zip file"""
         return len(self.matched_buildable_media)
 
+    def get_source_stats(self) -> dict:
+        """
+        Builds a dictionary with the total number of dumps attributed to each source group.
+        
+        Returns:
+            dict: A dictionary with the total number of dumps per source group
+        """
+        from collections import defaultdict
+        counts = defaultdict(int)
+        
+        for entry in self.softwarelist.software_items:
+            for part in entry.parts:
+                if hasattr(part, 'source_group') and part.source_group:
+                    counts[part.source_group] += 1
+                    
+        return dict(counts)
+
+    def print_source_stats(self):
+        """
+        Prints the source group statistics as percentages.
+        Uses total_source_ref as the denominator for percentage calculations.
+        """
+        stats = self.get_source_stats()
+        known_sum = 0
+        for group, count in stats.items():
+            known_sum += count
+            percentage = (count / self.total_source_ref) * 100 if self.total_source_ref > 0 else 0
+            print(f"  {group}: {percentage:.1f}%")
+        
+        if self.total_source_ref > 0:
+            other_percent = ((self.total_source_ref - known_sum) / self.total_source_ref) * 100
+            print(f"  Unknown: {other_percent:.1f}%")
+        else:
+            print("  No source references found")
+
     def register_dat_media(self) -> None:
         self.update_dats()
         self.mr = MediaRegistry(self.key)
