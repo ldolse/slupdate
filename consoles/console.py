@@ -175,6 +175,13 @@ class Platform:
         self.update_dats() # find all DAT files and assign ROM directories
         self.register_dat_media() # register all DAT files to MediaRegistry
         self.register_softlist() # load and register software list to MediaRegistry
+        
+        # Print statistics after processing
+        print(f'found:\n  {self.total_source_ref} / {self.total_parts} individual discs contain source references')
+        print(f'  {self.total_source_dat} individual discs can be matched to dat sources')
+        print(f'  {self.total_source_found} / {self.total_softlist_entries} Software List Entries have DAT matches')
+        print(f'  {self.total_source_rom} valid zip files')
+        print(f'  {self.chd_count} chds already exist in the destination directory\n')
 
     def update_dats(self):
         """
