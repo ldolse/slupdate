@@ -34,8 +34,7 @@ class ArchiveValidationProcess(BaseProcess):
             return {'complete': True}
 
         # Get current media item
-        media: CDMedia = None
-        media = self.state['items_to_process'][self.state['current_index']]
+        media: CDMedia = self.state['items_to_process'][self.state['current_index']]
 
         # check media with softwarelist & dat matches
         if media.matched:
@@ -48,39 +47,19 @@ class ArchiveValidationProcess(BaseProcess):
                     # Add to matched_buildable_media since we know it's valid
                     self.platform.matched_buildable_media[media] = None
 
-                    # Only increment index if successful
-                    self.state['current_index'] += 1
-                    return {'continue': True}
-                else:
-                    # Check if we have a "skip all" preference
-                    if self.user_preference == 'skip_all':
-                        self.state['failed_count'] += 1
-                        self.state['current_index'] += 1
-                        return {'continue': True}
-                    # Store exception payload and pause processing for user input
-                    self.state['exception_payload'] = result.get('payload')
-                    return {'needs_user_input': True, 'payload': result['payload']}
-
+                # Always increment counter after processing
+                self.state['current_index'] += 1
+                return {'continue': True}
             except MD5ScanRequiredException as e:
-                # Check if we have a "skip all" preference for MD5 scan required exceptions
-                if self.user_preference == 'skip_all':
-                    self.state['failed_count'] += 1
-                    self.state['current_index'] += 1
-                    return {'continue': True}
                 # Store exception payload and pause processing for user input
                 self.state['exception_payload'] = e
                 return {'needs_user_input': True, 'payload': e}
             except Exception as e:
-                # Check if we have a "skip all" preference
-                if self.user_preference == 'skip_all':
-                    self.state['failed_count'] += 1
-                    self.state['current_index'] += 1
-                    return {'continue': True}
                 # Store exception payload and pause processing for user input
                 self.state['exception_payload'] = e
                 return {'needs_user_input': True, 'payload': e}
         else:
-            #print(f"  ⚠️  {media.dat_game_entry.name}: Skipping - missing DAT + Softwarelist part reference")
+            # Skip unmatched media
             self.state['failed_count'] += 1
             self.state['current_index'] += 1
             return {'continue': True}
@@ -126,17 +105,15 @@ class ArchiveValidationProcess(BaseProcess):
             self.user_preference = None  # Reset preference
             return {'continue': True}
         elif action == 'skip':
+            # Don't advance index here - will be done in execute_step
             self.state['failed_count'] += 1
-            # Advance index when skipping
-            self.state['current_index'] += 1
             return {'continue': True}
         elif action == 'stop':
             return {'complete': True, 'stopped_early': True}
         elif action == 'skip_all':
             self.user_preference = 'skip_all'
-            # Advance index when skipping
+            # Don't advance index here - will be done in execute_step
             self.state['failed_count'] += 1
-            self.state['current_index'] += 1
             return {'continue': True}
         elif action == 'continue_all':
             self.user_preference = 'continue_all'
@@ -156,8 +133,7 @@ class ArchiveValidationProcess(BaseProcess):
                 except Exception as e:
                     print(f"MD5 scan failed: {e}")
                     self.state['failed_count'] += 1
-            # Advance index after processing
-            self.state['current_index'] += 1
+            # Don't advance index here - will be done in execute_step
             return {'continue': True}
         elif action == 'scan_all_md5':
             self.user_preference = 'scan_all_md5'

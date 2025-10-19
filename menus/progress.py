@@ -17,10 +17,16 @@ class ValidationProgressMenu(BaseMenu):
     def set_payload(self, process: ArchiveValidationProcess):
         self.payload = process
         progress = process.get_progress()
+        
+        # Get current item for filename display
+        current_item = process.get_current_item()
+        file_name = ""
+        if current_item and hasattr(current_item, 'dat_game_entry') and current_item.dat_game_entry:
+            file_name = f" ({current_item.dat_game_entry.name})"
 
         # Update message based on preference and exception type
         if isinstance(process.state['exception_payload'], MD5ScanRequiredException):
-            self.message = f"MD5 scan required: {process.state['exception_payload'].message}"
+            self.message = f"MD5 scan required{file_name}: {process.state['exception_payload'].message}"
         elif process.user_preference == 'skip_all':
             self.message = f"Skipping all remaining bad ROMs: {progress['failed']}/{progress['total']} skipped"
         elif process.user_preference == 'continue_all':
