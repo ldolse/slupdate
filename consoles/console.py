@@ -86,11 +86,11 @@ class Platform:
         """Reset platform state while preserving DAT directories"""
         # Save current dat_directories
         saved_dat_dirs = self.dat_directories.copy()
-        
+
         # Reset state by creating new PlatformState with preserved dat_directories
         self.state = PlatformState()
         self.state.dat_directories = list(saved_dat_dirs.keys())
-        
+
         # Reset all other attributes to initial state
         self.softwarelist = None
         self.redump_db = None
@@ -99,7 +99,7 @@ class Platform:
         self.validated_chds = set()
         self._chd_handling_preference = None
         self._chd_build_index = 0
-        
+
         # Recreate process manager with reset state
         self.process_manager = ProcessManager(self)
 
@@ -135,7 +135,7 @@ class Platform:
         count = 0
         for entry in self.softwarelist.software_items:
             for part in entry.parts:
-                if hasattr(part, 'disk_sha1') and part.disk_sha1:
+                if hasattr(part, 'game_entry') and part.game_entry is not None:
                     count += 1
         return count
 
@@ -144,7 +144,7 @@ class Platform:
         """Number of software list entries that have at least one part with a source match"""
         count = 0
         for entry in self.softwarelist.software_items:
-            if any(hasattr(part, 'game_entry') and part.game_entry for part in entry.parts):
+            if any(hasattr(part, 'matched') and part.matched for part in entry.parts):
                 count += 1
         return count
 
@@ -154,7 +154,7 @@ class Platform:
         count = 0
         for entry in self.softwarelist.software_items:
             for part in entry.parts:
-                if hasattr(part, 'game_entry') and part.game_entry:
+                if hasattr(part, 'matched') and part.matched:
                     count += 1
         return count
 
@@ -171,18 +171,18 @@ class Platform:
     def get_source_stats(self) -> dict:
         """
         Builds a dictionary with the total number of dumps attributed to each source group.
-        
+
         Returns:
             dict: A dictionary with the total number of dumps per source group
         """
         from collections import defaultdict
         counts = defaultdict(int)
-        
+
         for entry in self.softwarelist.software_items:
             for part in entry.parts:
                 if hasattr(part, 'source_group') and part.source_group:
                     counts[part.source_group] += 1
-                    
+
         return dict(counts)
 
     def print_source_stats(self):
@@ -192,16 +192,18 @@ class Platform:
         """
         stats = self.get_source_stats()
         known_sum = 0
+        print("Details by DAT Group:")
         for group, count in stats.items():
             known_sum += count
             percentage = (count / self.total_source_ref) * 100 if self.total_source_ref > 0 else 0
             print(f"  {group}: {percentage:.1f}%")
-        
+
         if self.total_source_ref > 0:
             other_percent = ((self.total_source_ref - known_sum) / self.total_source_ref) * 100
             print(f"  Unknown: {other_percent:.1f}%")
         else:
             print("  No source references found")
+        print("\n")
 
     def register_dat_media(self) -> None:
         self.update_dats()
@@ -228,7 +230,7 @@ class Platform:
         self.register_dat_media() # register all DAT files to MediaRegistry
         self.register_softlist() # load and register software list to MediaRegistry
         self.print_stats()
-        
+
 
     def print_stats(self, zip=False, chd=False):
         # Print statistics after processing
@@ -239,6 +241,8 @@ class Platform:
             print(f'  {self.total_source_rom} valid zip files')
         if chd:
             print(f'  {self.chd_count} chds already exist in the destination directory\n')
+        print('\n')
+        self.print_source_stats()
 
     def update_dats(self):
         """
@@ -337,6 +341,7 @@ class Platform:
         zip_processor = ZipProcessor()
 
         for media in self.mr.media_directory.keys():
+            zip_path = None
             # Skip if this media signature is already validated
             media_sig = media.sha1_signature or media.crc_signature
             if media_sig in self.state.matched_media_sigs:
@@ -358,16 +363,24 @@ class Platform:
             if not os.path.isdir(rom_dir):
                 print(f"  ⚠️  {media.dat_game_entry.name}: Skipping - ROM directory does not exist: {rom_dir}")
                 continue
+            from rom_management.archive import MD5ScanRequiredException
+            try:
+                # Find and validate zip
+                zip_path = zip_processor.find_valid_zip(media.dat_game_entry, rom_dir)
+            except MD5ScanRequiredException:
+                user_input = input("   Check Using MD5? (y/n): ").strip().lower()
+                if user_input != 'y':
+                    continue
+                else:
+                    zip_path = zip_processor.find_valid_zip(media.dat_game_entry, rom_dir, md5=True)
 
-            # Find and validate zip
-            zip_path = zip_processor.find_valid_zip(media.dat_game_entry, rom_dir)
-            if not zip_path:
-                print(f"  ⚠️  {media.dat_game_entry.name}: No valid zip found")
-                continue
-            else:
+            if zip_path is not None:
                 print(f"  ✅ {media.dat_game_entry.name}: Found valid zip")
                 media.zip_path = zip_path
                 self.matched_buildable_media[media] = None # Value doesn't matter, using key as an ordered set
+            else:
+                print(f"  ⚠️  {media.dat_game_entry.name}: No valid zip found")
+                continue
 
 
     def build_chds_for_matched(self) -> dict:

@@ -3,7 +3,7 @@ from softwarelist.comment import Comment
 from typing import TYPE_CHECKING, Optional
 if TYPE_CHECKING:
     from softwarelist import Software
-    from dat import GameEntry
+    from dat import GameEntry, RomDat
     from media_registry import CDMedia
 
 class Part:
@@ -18,6 +18,13 @@ class Part:
         self.cdmedia: CDMedia = None # CdMedia object from MediaRegistry
         self.redump_url: str = ""
         self.game_entry: GameEntry = None
+    
+    @property
+    def matched(self) -> bool:
+        """Returns True if part has a DAT match"""
+        if self.cdmedia is not None and self.cdmedia.dat_game_entry.dat.dat_group != "MAME-Comment":
+            return True
+        return False
 
     @property
     def source_group(self) -> Optional[str]:
@@ -28,7 +35,7 @@ class Part:
                 return self.cdmedia.dat_game_entry.dat_group
         return None
 
-    def extract_rom_sources(self, dat) -> None:
+    def extract_rom_sources(self, dat: 'RomDat') -> None:
         """Parse comments into structured data."""
         game_discs = []
         for comment in self.comments:

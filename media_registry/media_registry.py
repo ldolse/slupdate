@@ -43,12 +43,15 @@ class CDMedia:
             result[group].append(entry)
 
         return {g: v for g, v in result.items() if v}
+
     @property
     def matched(self) -> bool:
-        if self.dat_game_entry and self.softlist_part is not None:
+        if self.dat_game_entry:
+            dat_group = self.dat_game_entry.dat.dat_group
+        if self.softlist_part is not None and dat_group != "MAME-Comment":
             return True
-        else:
-            return False
+
+        return False
 
     def to_dict(self):
         return {
@@ -208,12 +211,12 @@ class MediaRegistry:
         sha1_signature = (sha1_builder.hexdigest(), 'SHA1') if has_sha1 else None
         crc_signature = (crc_builder.hexdigest(), 'CRC_SHA1') if has_crc and rom_count > 0 else None
         return sha1_signature, crc_signature, total_size
-    
+
     def to_dict(self):
         return {
             "total_media": len(self.media_hashes),
             # print out the media id with a to_dict for each value in the directory
-            
+
             "media": [m.to_dict() for m in self.media_hashes.values()],
             "more": {mid: media.to_dict() for mid, media in self.media_hashes.items()}
         }

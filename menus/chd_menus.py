@@ -166,6 +166,10 @@ class CHDBuildMenu(BaseMenu):
                 action_func = self._validate_roms,
             ),
             MenuItem(
+                text = "a. Validate source ROMs (old method)",
+                action_func = self._validate_roms_old,
+            ),
+            MenuItem(
                 text = "b. Build CHDs from ROMs",
                 action_func = self._chd_builder,
                 requires_platform = True
@@ -180,6 +184,10 @@ class CHDBuildMenu(BaseMenu):
     @staticmethod
     def _validate_roms(platform: Platform) -> None:
         return platform.start_validation_process()
+    
+    @staticmethod
+    def _validate_roms_old(platform: Platform) -> None:
+        return platform.validate_matched_entries()
 
     @staticmethod
     def _chd_builder(platform: Platform) -> dict:

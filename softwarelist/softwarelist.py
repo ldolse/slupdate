@@ -7,7 +7,7 @@ from softwarelist.comment import Comment
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from media_registry import MediaRegistry
+    from media_registry import MediaRegistry, CDMedia
     from dat import GameEntry
 
 class SoftwareList:
@@ -43,14 +43,14 @@ class SoftwareList:
             if len(parts) == 1:
                 # If there's only one part, ensure it's named correctly
                 if parts[0].name != basename:
-                    print(f"WARNING: {software.name} has invalid part name '{parts[0].name}'. Changed to '{basename}'")
+                    print(f"⚠️  WARNING: {software.name} has invalid part name '{parts[0].name}'. Changed to '{basename}'")
                     parts[0].name = basename
             else:
                 for idx, part in enumerate(parts):
                     #print(f"Validating part {idx}: {part.name}")
                     expected_name = f"{basename}{idx+1}"
                     if part.name != expected_name:
-                        print(f"WARNING: {software.name} has invalid part name '{part.name}'. Changed to '{expected_name}'")
+                        print(f"⚠️  WARNING: {software.name} has invalid part name '{part.name}'. Changed to '{expected_name}'")
                         part.name = expected_name
 
         def validate_software_names(items: list["Software"]) -> None:
@@ -214,20 +214,28 @@ class SoftwareList:
         iterate through all software items and parse their comments.
         This is useful for extracting URLs or other data from comments.
         """
+        # create a stub dat object for group reference
+        from dat.rom_dat import RomDat
+        dat = RomDat()
+        dat.url = 'http://mamedev.org/'
         for software in self.software_items:
-            software.extract_rom_sources()
+            software.extract_rom_sources(dat)
             software.extract_redump_urls()
 
-    def _register_entry(self, registry: MediaRegistry, game_entry: GameEntry, software_item: Software, part: Part = None):
+    def _register_entry(self, registry: MediaRegistry, game_entry: GameEntry, software_item: Software, part: Part = None) -> None:
+        registered: CDMedia = None
+        matched: bool = False
         if getattr(game_entry, 'media', None) is None:
             registered, matched = registry.get_or_create_media(game_entry)
             if registered:
                 game_entry.media = registered
                 if matched and registered.dat_game_entry:
-                    print(f"✅ Matched existing media: {software_item.name} to {registered.dat_game_entry.name}")
-                    if part and registered.dat_game_entry.dat != 'Software List':
+                    if part and registered.dat_game_entry.dat.dat_group != 'MAME-Comment':
+                        print(f"✅ Matched existing media: {software_item.name} to {registered.dat_game_entry.name}")
                         registered.softlist_part = part
                         part.cdmedia = registered
+                    else:
+                        print(f"⚠️  MAME comment for {software_item.name} matched against a duplicate soflist record: {registered.dat_game_entry.name}")
                 elif not matched:
                     print(f"🆕 No Match, created new media record for: {software_item.name}, hash {registered.sha1_signature}")
             elif registered == None:

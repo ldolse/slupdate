@@ -4,7 +4,7 @@ from softwarelist.comment import Comment
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from dat.rom_dat import GameEntry
+    from dat.rom_dat import GameEntry, RomDat
 
 class Software:
     def __init__(self, platform: str = "") -> None:
@@ -49,12 +49,8 @@ class Software:
         """Processes raw serial string into a clean, normalized list of serial numbers"""
         return self._process_serial(self._serial)
 
-    def extract_rom_sources(self) -> None:
+    def extract_rom_sources(self, dat: 'RomDat') -> None:
         """Parse comments into structured data."""
-        # create a stub dat object for group reference
-        from dat.rom_dat import RomDat
-        dat = RomDat()
-        dat.url = 'http://mamedev.org/'
         for comment in self.comments:
             self.game_entries.extend(comment.parse_rom_entries(self.name, dat))
         for part in self.parts:

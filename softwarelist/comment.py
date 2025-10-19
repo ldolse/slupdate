@@ -3,8 +3,7 @@ import re
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from dat.rom_dat import GameEntry
-
+    from dat.rom_dat import GameEntry, RomDat
 
 class Comment:
     def __init__(self, element: etree._Element):
@@ -117,7 +116,7 @@ class Comment:
         return discs
 
 
-    def parse_rom_entries(self, name: str, dat) -> list['GameEntry']:
+    def parse_rom_entries(self, name: str, dat: 'RomDat' ) -> list['GameEntry']:
         """Parse all <rom> entries from this comment into GameEntry objects."""
         game_discs = []
         if not self.rom_lines:
@@ -134,17 +133,13 @@ class Comment:
 
         return game_discs
 
-
-    def _xml_to_game_entries(self, game_lines, name, dat) -> 'GameEntry':
+    def _xml_to_game_entries(self, game_lines, name, dat: 'RomDat') -> 'GameEntry':
         from dat.rom_dat import GameEntry, Rom
         # Wrap in minimal XML structure for parsing
         escaped_comment = re.sub(r'&','&amp;',game_lines)
         xml_str = f"<datafile><game name='{name}'>\n{escaped_comment}\n</game></datafile>"
         try:
             root = etree.fromstring(xml_str)
-            dat_name = 'Software List'
-            dat_group = 'MAME'
-
             for game_elem in root.findall('.//game'):
                 name = game_elem.get('name', '').strip()
                 category = game_elem.findtext('category', default='')
@@ -170,6 +165,6 @@ class Comment:
                 return GameEntry(name, category, description, roms, dat)
 
         except etree.XMLSyntaxError:
-            print(f"⚠️  Invalid XML in comment: {xml_str}")
+            print(f"⚠️  Invalid XML in {name} comment: {xml_str}")
             return None
 

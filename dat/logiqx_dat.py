@@ -10,6 +10,7 @@ class LogiqxDAT:
         self.clrmamepro = False
         # Header attributes will be set dynamically
         self.header = {}
+        self.url = self.header.get('url', '').lower()
         self.file_path = None
         self.rom_path = None # set by platform
 
@@ -62,9 +63,8 @@ class LogiqxDAT:
         }
 
         try:
-            url = self.header.get('url', '').lower()
             for group, patterns in DAT_GROUPS.items():
-                if any(pattern in url for pattern in patterns):
+                if any(pattern in self.url for pattern in patterns):
                     return group
             return 'other'
 

@@ -3,16 +3,21 @@ import os
 from .base_process import BaseProcess
 from rom_management.archive.zip_processor import ZipProcessor, MD5ScanRequiredException
 
+if TYPE_CHECKING:
+    from media_registry import CDMedia
+
 class ArchiveValidationProcess(BaseProcess):
     """Process for validating matched entries"""
 
     def initialize(self):
+        self.md5 = False
         # Initialize with all media from MediaRegistry
         if not self.platform.mr:
             raise Exception("MediaRegistry not initialized")
 
         # Get all media items to process
         self.state['items_to_process'] = list(self.platform.mr.media_directory.keys())
+        orig_length = len(self.state['items_to_process'])
 
         # Filter out already validated items
         self.state['items_to_process'] = [
@@ -21,6 +26,7 @@ class ArchiveValidationProcess(BaseProcess):
         ]
 
         self.state['total_items'] = len(self.state['items_to_process'])
+        print(f"{self.state['total_items'] } to process, excluding {orig_length - self.state['total_items']}")
         self.zip_processor = ZipProcessor()
 
     def execute_step(self) -> dict:
@@ -28,11 +34,11 @@ class ArchiveValidationProcess(BaseProcess):
             return {'complete': True}
 
         # Get current media item
+        media: CDMedia = None
         media = self.state['items_to_process'][self.state['current_index']]
 
-        # check if the media has both a part at a dat_game_entry
-        if (hasattr(media, 'softlist_part') and media.softlist_part is not None and                                                                                                                                     
-        hasattr(media, 'dat_game_entry') and media.dat_game_entry is not None): 
+        # check media with softwarelist & dat matches
+        if media.matched:
             try:
                 # Validate this media item
                 result = self._validate_single_media(media)
@@ -74,7 +80,7 @@ class ArchiveValidationProcess(BaseProcess):
                 self.state['exception_payload'] = e
                 return {'needs_user_input': True, 'payload': e}
         else:
-            print(f"  ⚠️  {media.dat_game_entry.name}: Skipping - missing DAT + Softwarelist part reference")
+            #print(f"  ⚠️  {media.dat_game_entry.name}: Skipping - missing DAT + Softwarelist part reference")
             self.state['failed_count'] += 1
             self.state['current_index'] += 1
             return {'continue': True}
@@ -95,7 +101,7 @@ class ArchiveValidationProcess(BaseProcess):
         # Find ROM directory for this DAT
         rom_dir = media.dat_game_entry.dat.rom_path
         if not os.path.isdir(rom_dir):
-            print(f"  ⚠️  {media.dat_game_entry.name}: Skipping - ROM directory does not exist: {rom_dir}")
+            print(f"  ⚠️  ROM directory does not exist for {media.dat_game_entry.name}: Skipping - {rom_dir}")
             return {'success': True}
 
         # Find and validate zip
@@ -104,12 +110,12 @@ class ArchiveValidationProcess(BaseProcess):
         except MD5ScanRequiredException as e:
             # Re-raise the exception to be caught by execute_step
             raise e
-            
+
         if not zip_path:
-            print(f"  ⚠️  {media.dat_game_entry.name}: No valid zip found")
+            print(f"  ⚠️  No valid zip found: {media.dat_game_entry.name}")
             return {'success': False, 'payload': Exception(f"No valid zip found for {media.dat_game_entry.name}")}
         else:
-            print(f"  ✅ {media.dat_game_entry.name}: Found valid zip")
+            print(f"  ✅ Found valid zip: {media.dat_game_entry.name}")
             media.zip_path = zip_path
             return {'success': True}
 
