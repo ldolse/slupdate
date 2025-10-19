@@ -368,7 +368,7 @@ class Platform:
                 # Find and validate zip
                 zip_path = zip_processor.find_valid_zip(media.dat_game_entry, rom_dir)
             except MD5ScanRequiredException:
-                user_input = input("   Check Using MD5? (y/n): ").strip().lower()
+                user_input = input(f"   {media.dat_game_entry.name} requires full scan, Check Using MD5 (slow)? (y/n): ").strip().lower()
                 if user_input != 'y':
                     continue
                 else:

@@ -5,12 +5,12 @@ from rom_management.archive import MD5ScanRequiredException
 class ValidationProgressMenu(BaseMenu):
     def __init__(self):
         super().__init__("validation_progress_menu")
-        self.message = "Validating ROMs"
+        self.message = "Full Scan Required for Media"
         self.options = [
             MenuItem(text="Skip current item", action_func=self.skip),
             MenuItem(text="Scan this archive with MD5 (slow)", action_func=self.scan_md5),
-            MenuItem(text="Skip all remaining items", action_func=self.skip_all),
-            MenuItem(text="Scan all with MD5 (slow)", action_func=self.scan_all_md5),
+            MenuItem(text="Skip all archives requiring MD5 scanning", action_func=self.skip_all),
+            MenuItem(text="Scan all archives requiring MD5 scanning", action_func=self.scan_all_md5),
             MenuItem(text="Stop validation", action_func=self.stop)
         ]
 
