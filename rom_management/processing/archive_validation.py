@@ -66,6 +66,7 @@ class ArchiveValidationProcess(BaseProcess):
 
                 return {'success': True}
             except MD5ScanRequiredException as e:
+                print("hit the md5 exception")
                 # Store exception payload and pause processing for user input
                 self.state['exception_payload'] = e
                 return {'needs_user_input': True, 'payload': e}

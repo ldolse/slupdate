@@ -59,6 +59,7 @@ class ProcessManager:
                 self.current_process = None
                 return {'menu': 'main_menu', 'payload': result}
             elif result.get('needs_user_input'):
+                print("need user input triggered")
                 # Get the appropriate menu from the handler system
                 return {
                     'menu': result['menu'],
@@ -66,7 +67,7 @@ class ProcessManager:
                 }
             else:
                 # Continue processing - but only if not in exception handling state
-                return result  # Return the direct result instead of recursing
+                return self.execute_current_step()
         except RecursionError:
             # Handle recursion error by stopping the process
             self.current_process = None
