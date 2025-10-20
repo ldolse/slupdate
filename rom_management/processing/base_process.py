@@ -44,8 +44,8 @@ class BaseProcess(ABC):
             # If successful, advance to next item
             if result.get('success'):
                 self.state['current_index'] += 1
-                
-            return {'continue': True}
+
+            return result
             
         except Exception as e:
             # Handle exceptions using the handler system
