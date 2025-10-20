@@ -49,7 +49,7 @@ class ZipProcessor:
                         else:
                             # Instead of prompting here, raise an exception
                             raise MD5ScanRequiredException(
-                                f"MD5 scan required for {dat_entry.name} in zip {os.path.basename(zip_path)}"
+                                f"MD5 scan required for {dat_entry.name}"
                             )
 
             return zip_path

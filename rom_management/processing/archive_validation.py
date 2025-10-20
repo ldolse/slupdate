@@ -9,6 +9,29 @@ if TYPE_CHECKING:
 class ArchiveValidationProcess(BaseProcess):
     """Process for validating matched entries"""
 
+    @property
+    def progress(self) -> dict:
+        """Return current progress information"""
+        success_count = 0
+        failure_count = 0
+
+        for i, item in enumerate(self.state['items_to_process']):
+            if i < self.state['current_index']:
+                # Check if this item was processed successfully
+                media = self.state['items_to_process'][i]
+                if media in self.platform.matched_buildable_media:
+                    success_count += 1
+                else:
+                    failure_count += 1
+
+        return {
+            'current': self.state['current_index'],
+            'total': self.state['total_items'],
+            'processed': success_count,
+            'failed': failure_count,
+            'percentage': self._calculate_progress_percentage()
+        }
+
     def initialize(self):
         self.md5 = False
         # Initialize with all media from MediaRegistry
@@ -29,21 +52,15 @@ class ArchiveValidationProcess(BaseProcess):
         print(f"{self.state['total_items'] } to process, excluding {orig_length - self.state['total_items']}")
         self.zip_processor = ZipProcessor()
 
-    def execute_step(self) -> dict:
-        if self.state['current_index'] >= self.state['total_items']:
-            return {'complete': True}
-
+    def _execute_step(self) -> dict:
         # Get current media item
-        media: CDMedia = self.state['items_to_process'][self.state['current_index']]
+        media: 'CDMedia' = self.current_item
 
-        # check media with softwarelist & dat matches
         if media.matched:
             try:
                 # Validate this media item
                 result = self._validate_single_media(media)
-
                 if result.get('success'):
-                    self.state['processed_count'] += 1
                     # Add to matched_buildable_media since we know it's valid
                     self.platform.matched_buildable_media[media] = None
 
@@ -60,11 +77,10 @@ class ArchiveValidationProcess(BaseProcess):
                 return {'needs_user_input': True, 'payload': e}
         else:
             # Skip unmatched media
-            self.state['failed_count'] += 1
             self.state['current_index'] += 1
             return {'continue': True}
 
-    def _validate_single_media(self, media) -> dict:
+    def _validate_single_media(self, media: 'CDMedia') -> dict:
         """Validate a single media item"""
         # Skip if this media signature is already validated
         media_sig = media.sha1_signature or media.crc_signature
@@ -72,27 +88,22 @@ class ArchiveValidationProcess(BaseProcess):
             print(f". ✅ {media.dat_game_entry.name} already validated, skipping zip check")
             return {'success': True}
 
-        if not media.dat_game_entry.name:
-            print(f"  ⚠️  Media ID: {media.id} - skipping, No DAT Game name")
-            return {'success': True}
-
-
         # Find ROM directory for this DAT
         rom_dir = media.dat_game_entry.dat.rom_path
         if not os.path.isdir(rom_dir):
             print(f"  ⚠️  ROM directory does not exist for {media.dat_game_entry.name}: Skipping - {rom_dir}")
-            return {'success': True}
+            return {'continue': True}
 
         # Find and validate zip
         try:
-            zip_path = self.zip_processor.find_valid_zip(media.dat_game_entry, rom_dir)
+            zip_path = self.zip_processor.find_valid_zip(media.dat_game_entry, rom_dir, md5=self.md5)
         except MD5ScanRequiredException as e:
             # Re-raise the exception to be caught by execute_step
             raise e
 
         if not zip_path:
             print(f"  ⚠️  No valid zip found: {media.dat_game_entry.name}")
-            return {'success': False, 'payload': Exception(f"No valid zip found for {media.dat_game_entry.name}")}
+            return {'continue': True}
         else:
             print(f"  ✅ Found valid zip: {media.dat_game_entry.name}")
             media.zip_path = zip_path
@@ -106,33 +117,31 @@ class ArchiveValidationProcess(BaseProcess):
             return {'continue': True}
         elif action == 'skip':
             # Don't advance index here - will be done in execute_step
-            self.state['failed_count'] += 1
             return {'continue': True}
         elif action == 'stop':
             return {'complete': True, 'stopped_early': True}
         elif action == 'skip_all':
             self.user_preference = 'skip_all'
-            # Don't advance index here - will be done in execute_step
-            self.state['failed_count'] += 1
             return {'continue': True}
         elif action == 'continue_all':
             self.user_preference = 'continue_all'
+            self.md5 = True
             return {'continue': True}
         elif action == 'scan_md5':
             # Perform MD5 scan for current item
-            media = self.get_current_item()
+            media: 'CDMedia' = self.current_item
             if media:
                 try:
                     # Try to validate with MD5 scan
                     zip_path = self.zip_processor.find_valid_zip(media.dat_game_entry, media.dat_game_entry.dat.rom_path, md5=True)
                     if zip_path:
                         media.zip_path = zip_path
-                        self.state['processed_count'] += 1
+                        return {'success': True}
                     else:
-                        self.state['failed_count'] += 1
+                        return {'continue': True}
                 except Exception as e:
                     print(f"MD5 scan failed: {e}")
-                    self.state['failed_count'] += 1
+                    return {'continue': True}
             # Don't advance index here - will be done in execute_step
             return {'continue': True}
         elif action == 'scan_all_md5':
