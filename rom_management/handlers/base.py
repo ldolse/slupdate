@@ -31,7 +31,6 @@ class SpecialHandler(ABC):
     def validate_preconditions(self, media: CDMedia, file_data: OpticalMediaProcessor) -> bool:
         """Check if this handler should be applied"""
         return True
-        return True
 
     def _requires_user_intervention(self, error: Exception) -> bool:
         """Override in subclasses to determine if user intervention is needed"""
@@ -40,3 +39,7 @@ class SpecialHandler(ABC):
     def _should_skip_item(self, error: Exception) -> bool:
         """Override in subclasses to determine if item should be skipped"""
         return False
+        
+    def get_menu_name(self) -> str:
+        """Get the menu name associated with this handler for user interaction"""
+        return "handler_error_menu"

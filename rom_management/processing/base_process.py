@@ -32,13 +32,12 @@ class BaseProcess(ABC):
         pass
 
     def execute_step(self) -> dict:
-        """Execute one step of the proces, base function"""
+        """Execute one step of the process, base function"""
         if self.state['current_index'] >= self.state['total_items']:
             return {'complete': True}
         self.set_current_item()
         result = self._execute_step()
         return result
-
 
     @abstractmethod
     def handle_user_action(self, action: str) -> dict:
