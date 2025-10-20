@@ -8,6 +8,8 @@ from rom_management.archive.zip_processor import MD5ScanRequiredException
 if TYPE_CHECKING:
     from consoles import Platform
     from menus.menu_system import MenuSystem
+    from media_registry import CDMedia
+    from rom_management.handlers import SpecialHandler
 
 class ProcessManager:
     """Manages long-running processes with user interaction"""
@@ -27,7 +29,7 @@ class ProcessManager:
         from rom_management.handlers.md5_handler import MD5ScanHandler
         self.handler_registry.register_special_handler('md5_scan', MD5ScanHandler)
 
-    def get_handler_for_exception(self, exception: Exception, media: 'CDMedia') -> Optional[SpecialHandler]:
+    def get_handler_for_exception(self, exception: Exception, media: 'CDMedia') -> Optional['SpecialHandler']:
         """Find a handler that can handle this exception"""
         # Get all special handlers
         special_handlers = self.handler_registry.get_special_handlers()

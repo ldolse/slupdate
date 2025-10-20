@@ -8,9 +8,10 @@ from .base import SpecialHandler
 class HandlerRegistry:
     def __init__(self):
         self.handlers = {
-            'platform': {},      # Platform-specific handlers
-            'format': {},        # File format handlers (e.g., CCD, CUE)
-            'dat_group': {}      # DAT group-specific handlers (e.g., redump, no-intro)
+            'platform': {},         # Platform-specific handlers
+            'format': {},           # File format handlers (e.g., CCD, CUE)
+            'dat_group': {},        # DAT group-specific handlers (e.g., redump, no-intro)
+            'special_handlers' : {} # Common special handling cases
         }
 
     def get_relevant_handlers(self, media: CDMedia, file_data: file_data) -> List[SpecialHandler]:
