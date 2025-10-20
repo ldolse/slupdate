@@ -134,6 +134,10 @@ class MenuSystem:
         target = navigation_info["menu"]
         payload = navigation_info.get("payload")
 
+        # If target is None, don't navigate
+        if target is None:
+            return
+
         # Inject payload into menu if it supports it
         if payload and hasattr(self.menus[target], 'set_payload'):
             self.menus[target].set_payload(payload)
