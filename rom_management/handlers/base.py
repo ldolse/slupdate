@@ -9,14 +9,14 @@ class SpecialHandler(ABC):
         self.menu = menu  # Associated menu for user interaction
 
     @abstractmethod
-    def _handle(self, media: CDMedia, file_data: OpticalMediaProcessor) -> dict:
+    def _handle(self, exception: Exception, process) -> dict:
         """Handle special case processing, override in subclasses"""
         pass
 
-    def handle(self, media: CDMedia, file_data: OpticalMediaProcessor) -> dict:
+    def handle(self, exception: Exception, process) -> dict:
         """Handle special processing with exception-based error handling"""
         try:
-            return self._handle(media, file_data)
+            return self._handle(exception, process)
         except Exception as e:
             # Convert specific exceptions to our handler exception hierarchy
             if self._requires_user_intervention(e):

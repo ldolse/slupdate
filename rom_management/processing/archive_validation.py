@@ -9,6 +9,10 @@ if TYPE_CHECKING:
 class ArchiveValidationProcess(BaseProcess):
     """Process for validating matched entries"""
 
+    def __init__(self, platform: 'Platform'):
+        super().__init__(platform)
+        self.zip_processor = ZipProcessor()
+
     @property
     def progress(self) -> dict:
         """Return current progress information"""
@@ -33,7 +37,6 @@ class ArchiveValidationProcess(BaseProcess):
         }
 
     def initialize(self):
-        self.md5 = False
         # Initialize with all media from MediaRegistry
         if not self.platform.mr:
             raise Exception("MediaRegistry not initialized")
@@ -50,7 +53,14 @@ class ArchiveValidationProcess(BaseProcess):
 
         self.state['total_items'] = len(self.state['items_to_process'])
         print(f"{self.state['total_items']} to process, excluding {orig_length - self.state['total_items']}")
-        self.zip_processor = ZipProcessor()
+        
+        # Register handlers
+        self.register_handlers()
+
+    def register_handlers(self):
+        """Register handlers for this process"""
+        from rom_management.handlers.md5_handler import MD5ScanHandler
+        self.handlers[MD5ScanRequiredException] = MD5ScanHandler()
 
     def _execute_step(self) -> dict:
         # Get current media item
@@ -66,7 +76,6 @@ class ArchiveValidationProcess(BaseProcess):
 
                 return {'success': True}
             except MD5ScanRequiredException as e:
-                print("hit the md5 exception")
                 # Store exception payload and pause processing for user input
                 self.state['exception_payload'] = e
                 return {'needs_user_input': True, 'payload': e}
@@ -114,49 +123,9 @@ class ArchiveValidationProcess(BaseProcess):
 
     def handle_user_action(self, action: str) -> dict:
         """Handle user actions from menus"""
-        if action == 'retry':
-            # Retry current item - don't advance index
-            self.user_preference = None  # Reset preference
-            return {'success': False}
-        elif action == 'skip':
-            # Skip current item and advance index
-            self.state['current_index'] += 1
-            return {'success': False}
-        elif action == 'stop':
-            return {'complete': True, 'stopped_early': True}
-        elif action == 'skip_all':
-            # Set preference to skip all future MD5 scans
-            self.state['user_preferences']['skip_md5'] = True
-            self.state['current_index'] += 1
-            return {'success': False}
-        elif action == 'continue_all':
-            # Set preference to scan all items with MD5
-            self.state['user_preferences']['use_md5'] = True
-            return {'success': False}
-        elif action == 'scan_md5':
-            # Scan current item with MD5
-            media: 'CDMedia' = self.current_item
-            if media:
-                try:
-                    zip_path = self.zip_processor.find_valid_zip(
-                        media.dat_game_entry, 
-                        media.dat_game_entry.dat.rom_path, 
-                        md5=True
-                    )
-                    if zip_path:
-                        media.zip_path = zip_path
-                        return {'success': True}
-                    else:
-                        return {'success': False}
-                except Exception as e:
-                    print(f"MD5 scan failed: {e}")
-                    return {'success': False}
-            # Don't advance index here - will be done in execute_step
-            return {'success': False}
-        elif action == 'scan_all_md5':
-            # Set preference to scan all items with MD5
-            self.state['user_preferences']['use_md5'] = True
-            return {'success': False}
+        # Delegate to handler system for exception-related actions
+        if self.state.get('exception_payload'):
+            return super().handle_user_action(action)
         
-        # Default case - don't advance index
-        return {'success': False}
+        # Handle default actions (not tied to exceptions)
+        return self._handle_default_user_action(action)

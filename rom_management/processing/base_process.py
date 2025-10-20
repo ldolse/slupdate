@@ -20,10 +20,16 @@ class BaseProcess(ABC):
         }
         self.current_item = None
         self._handling_exception = False
+        self.handlers = {}  # Exception type -> handler mapping
 
     @abstractmethod
     def initialize(self):
         """Initialize the process - should be overridden"""
+        pass
+
+    @abstractmethod
+    def register_handlers(self):
+        """Register handlers for this process type - should be overridden"""
         pass
 
     @abstractmethod
@@ -61,13 +67,13 @@ class BaseProcess(ABC):
         self._handling_exception = True
         
         try:
-            # Find a handler for this exception
-            handler = self.platform.process_manager.get_handler_for_exception(exception, self.current_item)
+            # Find a handler for this exception type
+            handler = self.handlers.get(type(exception))
             
             if handler:
                 try:
-                    # Let the handler try to resolve the exception
-                    result = handler.handle(self.current_item, None)
+                    # Let the handler deal with this exception
+                    result = handler.handle(exception, self)
                     
                     if isinstance(result, dict):
                         return result
@@ -90,8 +96,23 @@ class BaseProcess(ABC):
             self._handling_exception = False
 
     def handle_user_action(self, action: str) -> dict:
-        """Handle user actions from menus - should be overridden by subclasses"""
-        raise NotImplementedError("Subclasses must implement handle_user_action")
+        """Handle user actions from menus"""
+        # Get current exception if any
+        current_exception = self.state.get('exception_payload')
+        
+        if current_exception and type(current_exception) in self.handlers:
+            # Delegate to handler for this exception type
+            return self.handlers[type(current_exception)].handle_user_action(action, self)
+        else:
+            # Default handling for actions not tied to specific exceptions
+            return self._handle_default_user_action(action)
+
+    def _handle_default_user_action(self, action: str) -> dict:
+        """Handle user actions not tied to specific exceptions"""
+        if action == 'stop':
+            return {'complete': True, 'stopped_early': True}
+        # Default behavior - don't advance index
+        return {'success': False}
 
     def get_progress(self) -> dict:
         """Return current progress information"""
