@@ -41,3 +41,20 @@ class HandlerRegistry:
 
     def register_dat_group_handler(self, dat_group: str, handler_class: Type[SpecialHandler]):
         self.handlers['dat_group'][dat_group] = handler_class
+
+    def register_special_handler(self, name: str, handler_class: Type[SpecialHandler]):
+        """Register a special case handler"""
+        # Special handlers are stored separately and checked in ProcessManager
+        if not hasattr(self, 'special_handlers'):
+            self.special_handlers = {}
+        self.special_handlers[name] = handler_class
+
+    def get_special_handlers(self) -> List[SpecialHandler]:
+        """Get all registered special handlers"""
+        if not hasattr(self, 'special_handlers'):
+            return []
+        
+        handlers = []
+        for handler_class in self.special_handlers.values():
+            handlers.append(handler_class())
+        return handlers

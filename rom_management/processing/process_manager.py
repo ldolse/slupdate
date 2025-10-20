@@ -2,6 +2,7 @@ from typing import Dict, Optional, TYPE_CHECKING
 from .base_process import BaseProcess
 from .archive_validation import ArchiveValidationProcess
 from .chd_build_process import ChdBuildProcess
+from rom_management.handlers.registry import HandlerRegistry
 
 if TYPE_CHECKING:
     from consoles import Platform
@@ -10,20 +11,20 @@ if TYPE_CHECKING:
 class ProcessManager:
     """Manages long-running processes with user interaction"""
 
-    # Navigation constants
-    VALIDATION_MENU = "validation_progress_menu"
-    CHD_BUILD_MENU = "chd_build_progress_menu"
-    HANDLER_ERROR_MENU = "handler_error_menu"
-    EXISTING_CHD_MENU = "existing_chd_menu"
-
     def __init__(self, platform: 'Platform'):
         self.platform = platform
         self.current_process: Optional[BaseProcess] = None
         self.menu_system: Optional["MenuSystem"] = None
+        self.handler_registry = HandlerRegistry()
 
     def set_menu_system(self, menu_system: "MenuSystem"):
         """Set the menu system for navigation"""
         self.menu_system = menu_system
+
+    def initialize_handlers(self):
+        """Initialize the handler registry with default handlers"""
+        from rom_management.handlers.md5_handler import MD5ScanHandler
+        self.handler_registry.register_special_handler('md5_scan', MD5ScanHandler)
 
     def start_validation(self) -> dict:
         """Start the CHD validation process"""
@@ -39,8 +40,25 @@ class ProcessManager:
                 self.current_process = None
                 return {'menu': 'main_menu', 'payload': result}
             elif result.get('needs_user_input'):
-                # Return menu for user input
-                return {'menu': self.VALIDATION_MENU, 'payload': self.current_process}
+                # Get the appropriate menu from the handler system
+                exception = self.current_process.state['exception_payload']
+                
+                # Get handlers that can handle this exception
+                handlers = self.handler_registry.get_relevant_handlers(
+                    self.current_process.current_item,
+                    None  # No file_data for this case
+                )
+                
+                # Find handler that can handle this exception
+                for handler in handlers:
+                    try:
+                        if handler.validate_preconditions(self.current_process.current_item, None):
+                            return {'menu': handler.get_menu_name(), 'payload': self.current_process}
+                    except:
+                        continue
+                
+                # No specific handler found, use default validation menu
+                return {'menu': 'validation_progress_menu', 'payload': self.current_process}
 
     def start_chd_build(self) -> dict:
         """Start the CHD building process"""
@@ -56,8 +74,25 @@ class ProcessManager:
                 self.current_process = None
                 return {'menu': 'main_menu', 'payload': result}
             elif result.get('needs_user_input'):
-                # Return menu for user input
-                return {'menu': self.EXISTING_CHD_MENU, 'payload': self.current_process}
+                # Get the appropriate menu from the handler system
+                exception = self.current_process.state['exception_payload']
+                
+                # Get handlers that can handle this exception
+                handlers = self.handler_registry.get_relevant_handlers(
+                    self.current_process.current_item,
+                    None  # No file_data for this case
+                )
+                
+                # Find handler that can handle this exception
+                for handler in handlers:
+                    try:
+                        if handler.validate_preconditions(self.current_process.current_item, None):
+                            return {'menu': handler.get_menu_name(), 'payload': self.current_process}
+                    except:
+                        continue
+                
+                # No specific handler found, use default CHD menu
+                return {'menu': 'existing_chd_menu', 'payload': self.current_process}
 
     def continue_processing(self, action: str) -> dict:
         """Continue the current process with user action"""
@@ -81,14 +116,27 @@ class ProcessManager:
                 self.current_process = None
                 return {'menu': 'main_menu', 'payload': next_result}
             elif next_result.get('needs_user_input'):
-                # Return menu for user input
-                return {'menu': self._get_progress_menu_name(), 'payload': self.current_process}
-
-    def _get_progress_menu_name(self) -> str:
-        """Get the appropriate progress menu name based on current process"""
-        if isinstance(self.current_process, ArchiveValidationProcess):
-            return self.VALIDATION_MENU
-        elif isinstance(self.current_process, ChdBuildProcess):
-            return self.CHD_BUILD_MENU
-        else:
-            return 'main_menu'
+                # Get the appropriate menu from the handler system
+                exception = self.current_process.state['exception_payload']
+                
+                # Get handlers that can handle this exception
+                handlers = self.handler_registry.get_relevant_handlers(
+                    self.current_process.current_item,
+                    None  # No file_data for this case
+                )
+                
+                # Find handler that can handle this exception
+                for handler in handlers:
+                    try:
+                        if handler.validate_preconditions(self.current_process.current_item, None):
+                            return {'menu': handler.get_menu_name(), 'payload': self.current_process}
+                    except:
+                        continue
+                
+                # No specific handler found, determine default menu based on process type
+                if isinstance(self.current_process, ArchiveValidationProcess):
+                    return {'menu': 'validation_progress_menu', 'payload': self.current_process}
+                elif isinstance(self.current_process, ChdBuildProcess):
+                    return {'menu': 'existing_chd_menu', 'payload': self.current_process}
+                else:
+                    return {'menu': 'main_menu', 'payload': None}

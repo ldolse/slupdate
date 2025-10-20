@@ -157,5 +157,3 @@ class MenuSystem:
         last_state = self.stack.pop()
         self.current_menu_name = last_state['menu_name']
         return self.current_menu_name
-
-
