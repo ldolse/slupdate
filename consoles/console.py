@@ -318,9 +318,10 @@ class Platform:
 
     def start_validation_process(self) -> dict:
         """Start the validation process through ProcessManager"""
+        from rom_management.processing.archive_validation import ArchiveValidationProcess
         if not self.process_manager:
             raise Exception("ProcessManager not initialized")
-        return self.process_manager.start_validation()
+        return self.process_manager.start_process(ArchiveValidationProcess(self))
 
     def start_chd_build_process(self) -> dict:
         """Start the CHD build process through ProcessManager"""
