@@ -51,21 +51,26 @@ class ProcessManager:
         if not self.current_process:
             return {'menu': 'main_menu', 'payload': None}
 
-        result = self.current_process.execute_step()
+        try:
+            result = self.current_process.execute_step()
 
-        if result.get('complete'):
-            # Process finished
+            if result.get('complete'):
+                # Process finished
+                self.current_process = None
+                return {'menu': 'main_menu', 'payload': result}
+            elif result.get('needs_user_input'):
+                # Get the appropriate menu from the handler system
+                return {
+                    'menu': result['menu'],
+                    'payload': self.current_process
+                }
+            else:
+                # Continue processing - but only if not in exception handling state
+                return result  # Return the direct result instead of recursing
+        except RecursionError:
+            # Handle recursion error by stopping the process
             self.current_process = None
-            return {'menu': 'main_menu', 'payload': result}
-        elif result.get('needs_user_input'):
-            # Get the appropriate menu from the handler system
-            return {
-                'menu': result['menu'],
-                'payload': self.current_process
-            }
-        else:
-            # Continue processing
-            return self.execute_current_step()
+            return {'menu': 'main_menu', 'payload': {'error': 'Recursion error occurred'}}
 
     def get_handler_for_exception(self, exception: Exception, media: 'CDMedia') -> Optional['SpecialHandler']:
         """Find a handler that can handle this exception"""

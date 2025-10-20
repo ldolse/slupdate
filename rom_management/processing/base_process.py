@@ -19,6 +19,7 @@ class BaseProcess(ABC):
             'user_preferences': {}
         }
         self.current_item = None
+        self._handling_exception = False
 
     @abstractmethod
     def initialize(self):
@@ -52,33 +53,45 @@ class BaseProcess(ABC):
 
     def _handle_exception(self, exception: Exception) -> dict:
         """Handle exceptions using the handler system"""
-        # Find a handler for this exception
-        handler = self.platform.process_manager.get_handler_for_exception(exception, self.current_item)
+        # Prevent recursion by checking if we're already handling an exception
+        if self._handling_exception:
+            # We're already in exception handling - just return an error
+            return {'needs_user_input': True, 'menu': 'error_menu', 'payload': str(exception)}
         
-        if handler:
-            try:
-                # Let the handler try to resolve the exception
-                result = handler.handle(self.current_item, None)
-                
-                if isinstance(result, dict):
-                    return result
-                else:
-                    # Handler resolved the exception, continue processing
-                    return {'continue': True}
-            except Exception as e:
-                # If handler can't resolve, re-raise for menu handling
-                if hasattr(e, 'menu_class_name'):
-                    return {
-                        'needs_user_input': True,
-                        'menu': e.menu_class_name,
-                        'payload': self
-                    }
-                else:
-                    # Re-raise the original exception for generic handling
-                    raise e
-        else:
-            # No handler found, re-raise to be handled by generic error handling
-            raise exception
+        self._handling_exception = True
+        
+        try:
+            # Find a handler for this exception
+            handler = self.platform.process_manager.get_handler_for_exception(exception, self.current_item)
+            
+            if handler:
+                try:
+                    # Let the handler try to resolve the exception
+                    result = handler.handle(self.current_item, None)
+                    
+                    if isinstance(result, dict):
+                        return result
+                    else:
+                        # Handler resolved the exception, continue processing
+                        self._handling_exception = False
+                        return {'continue': True}
+                except Exception as e:
+                    # If handler can't resolve, re-raise for menu handling
+                    if hasattr(e, 'menu_class_name'):
+                        self._handling_exception = False
+                        return {
+                            'needs_user_input': True,
+                            'menu': e.menu_class_name,
+                            'payload': self
+                        }
+                    else:
+                        # Re-raise the original exception for generic handling
+                        raise e
+            else:
+                # No handler found, re-raise to be handled by generic error handling
+                raise exception
+        finally:
+            self._handling_exception = False
 
     def handle_user_action(self, action: str) -> dict:
         """Handle user actions from menus - should be overridden by subclasses"""

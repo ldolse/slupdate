@@ -47,20 +47,27 @@ class CDMedia:
     @property
     def matched(self) -> bool:
         """Check if this media is properly matched between DAT and softlist"""
-        # Check if we have both a dat_game_entry with valid dat attribute
-        # and a softlist_part reference
-        # If any required component is missing, it's not matched
-        if (self.dat_game_entry is not None and 
-            hasattr(self.dat_game_entry, 'dat') and
-            self.dat_game_entry.dat is not None):
-            dat_group = self.dat_game_entry.dat.dat_group
-            print(f"{self.dat_game_entry.name}:{dat_group}")
-            if self.softlist_part is not None and dat_group != "MAME-Comment":
-                return True
-        else:
+        # Prevent recursion by checking if we're already in the matched property
+        if hasattr(self, '_checking_matched') and self._checking_matched:
             return False
-
-        return False
+        
+        self._checking_matched = True
+        
+        try:
+            # Check if we have both a dat_game_entry with valid dat attribute
+            # and a softlist_part reference
+            if (self.dat_game_entry is not None and 
+                hasattr(self.dat_game_entry, 'dat') and
+                self.dat_game_entry.dat is not None):
+                
+                # Check if dat_group attribute exists and access it safely
+                if hasattr(self.dat_game_entry.dat, 'dat_group'):
+                    dat_group = self.dat_game_entry.dat.dat_group
+                    if self.softlist_part is not None and dat_group != "MAME-Comment":
+                        return True
+            return False
+        finally:
+            self._checking_matched = False
 
     def to_dict(self):
         return {
