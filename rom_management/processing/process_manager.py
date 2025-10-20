@@ -59,12 +59,22 @@ class ProcessManager:
                 self.current_process = None
                 return {'menu': 'main_menu', 'payload': result}
             elif result.get('needs_user_input'):
-                print("need user input triggered")
                 # Get the appropriate menu from the handler system
-                return {
-                    'menu': result['menu'],
-                    'payload': self.current_process
-                }
+                exception = self.current_process.state.get('exception_payload')
+                
+                if exception and type(exception) in self.current_process.handlers:
+                    # Use the handler's menu
+                    handler = self.current_process.handlers[type(exception)]
+                    return {
+                        'menu': handler.get_menu_name(),
+                        'payload': self.current_process
+                    }
+                else:
+                    # Fallback to default menu based on process type
+                    return {
+                        'menu': self._get_default_menu_name(),
+                        'payload': self.current_process
+                    }
             else:
                 # Continue processing - but only if not in exception handling state
                 return self.execute_current_step()
@@ -77,20 +87,16 @@ class ProcessManager:
             self.current_process = None
             return {'menu': 'main_menu', 'payload': {'error': str(e)}}
 
-    def get_handler_for_exception(self, exception: Exception, media: 'CDMedia') -> Optional['SpecialHandler']:
+    def get_handler_for_exception(self, exception: Exception) -> Optional['SpecialHandler']:
         """Find a handler that can handle this exception"""
-        # Get all special handlers
-        special_handlers = self.handler_registry.get_special_handlers()
+        # Check if current process has handlers for this exception type
+        if self.current_process and type(exception) in self.current_process.handlers:
+            return self.current_process.handlers[type(exception)]
         
-        for handler in special_handlers:
-            try:
-                # Check if this handler can handle the exception type
-                if isinstance(exception, MD5ScanRequiredException):
-                    # Validate preconditions for this handler
-                    if hasattr(handler, 'validate_preconditions') and handler.validate_preconditions(media, None):
-                        return handler
-            except:
-                continue
+        # Check special handlers registry
+        if isinstance(exception, MD5ScanRequiredException):
+            from rom_management.handlers.md5_handler import MD5ScanHandler
+            return MD5ScanHandler()
         
         return None
 
