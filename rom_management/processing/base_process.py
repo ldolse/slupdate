@@ -79,11 +79,7 @@ class BaseProcess(ABC):
                     # If handler can't resolve, re-raise for menu handling
                     if hasattr(e, 'menu_class_name'):
                         self._handling_exception = False
-                        return {
-                            'needs_user_input': True,
-                            'menu': e.menu_class_name,
-                            'payload': self
-                        }
+                        raise e  # Re-raise the exception with menu_class_name
                     else:
                         # Re-raise the original exception for generic handling
                         raise e

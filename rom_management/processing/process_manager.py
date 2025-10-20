@@ -71,6 +71,10 @@ class ProcessManager:
             # Handle recursion error by stopping the process
             self.current_process = None
             return {'menu': 'main_menu', 'payload': {'error': 'Recursion error occurred'}}
+        except Exception as e:
+            # Handle any unhandled exceptions by returning to main menu
+            self.current_process = None
+            return {'menu': 'main_menu', 'payload': {'error': str(e)}}
 
     def get_handler_for_exception(self, exception: Exception, media: 'CDMedia') -> Optional['SpecialHandler']:
         """Find a handler that can handle this exception"""
@@ -79,9 +83,10 @@ class ProcessManager:
         
         for handler in special_handlers:
             try:
-                if handler.validate_preconditions(media, None):
-                    # Check if this handler can handle the exception type
-                    if isinstance(exception, MD5ScanRequiredException):
+                # Check if this handler can handle the exception type
+                if isinstance(exception, MD5ScanRequiredException):
+                    # Validate preconditions for this handler
+                    if hasattr(handler, 'validate_preconditions') and handler.validate_preconditions(media, None):
                         return handler
             except:
                 continue
