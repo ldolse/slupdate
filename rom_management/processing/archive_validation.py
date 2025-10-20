@@ -68,11 +68,11 @@ class ArchiveValidationProcess(BaseProcess):
             except MD5ScanRequiredException as e:
                 # Store exception payload and pause processing for user input
                 self.state['exception_payload'] = e
-                return {'needs_user_input': True, 'menu': self.menu.name if self.menu else 'validation_progress_menu'}
+                return {'needs_user_input': True, 'payload': e}
             except Exception as e:
                 # Store exception payload and pause processing for user input
                 self.state['exception_payload'] = e
-                return {'needs_user_input': True, 'menu': self.menu.name if self.menu else 'validation_progress_menu'}
+                return {'needs_user_input': True, 'payload': e}
         else:
             # Skip unmatched media
             return {'success': True}
