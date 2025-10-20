@@ -65,7 +65,7 @@ class ProcessManager:
             }
         else:
             # Continue processing
-            return {'menu': None, 'payload': result}
+            self.execute_current_step()
 
     def get_handler_for_exception(self, exception: Exception, media: 'CDMedia') -> Optional['SpecialHandler']:
         """Find a handler that can handle this exception"""
