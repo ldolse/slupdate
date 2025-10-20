@@ -49,7 +49,7 @@ class ArchiveValidationProcess(BaseProcess):
         ]
 
         self.state['total_items'] = len(self.state['items_to_process'])
-        print(f"{self.state['total_items'] } to process, excluding {orig_length - self.state['total_items']}")
+        print(f"{self.state['total_items']} to process, excluding {orig_length - self.state['total_items']}")
         self.zip_processor = ZipProcessor()
 
     def _execute_step(self) -> dict:
@@ -108,7 +108,6 @@ class ArchiveValidationProcess(BaseProcess):
             print(f"  ✅ Found valid zip: {media.dat_game_entry.name}")
             media.zip_path = zip_path
             return {'success': True}
-
 
     def handle_user_action(self, action: str) -> dict:
         if action == 'retry':

@@ -1,7 +1,5 @@
-from typing import Dict, Optional, TYPE_CHECKING
+from typing import Dict, Optional, TYPE_CHECKING, Type
 from .base_process import BaseProcess
-from .archive_validation import ArchiveValidationProcess
-from .chd_build_process import ChdBuildProcess
 from rom_management.handlers.registry import HandlerRegistry
 from rom_management.archive.zip_processor import MD5ScanRequiredException
 
@@ -29,25 +27,9 @@ class ProcessManager:
         from rom_management.handlers.md5_handler import MD5ScanHandler
         self.handler_registry.register_special_handler('md5_scan', MD5ScanHandler)
 
-    def get_handler_for_exception(self, exception: Exception, media: 'CDMedia') -> Optional['SpecialHandler']:
-        """Find a handler that can handle this exception"""
-        # Get all special handlers
-        special_handlers = self.handler_registry.get_special_handlers()
-        
-        for handler in special_handlers:
-            try:
-                if handler.validate_preconditions(media, None):
-                    # Check if this handler can handle the exception type
-                    if isinstance(exception, MD5ScanRequiredException):
-                        return handler
-            except:
-                continue
-        
-        return None
-
-    def start_validation(self) -> dict:
-        """Start the CHD validation process"""
-        self.current_process = ArchiveValidationProcess(self.platform)
+    def start_process(self, process_class: Type[BaseProcess], **kwargs) -> dict:
+        """Start any process with the given class"""
+        self.current_process = process_class(self.platform, **kwargs)
         self.current_process.initialize()
 
         # Process steps until completion or error
@@ -68,42 +50,8 @@ class ProcessManager:
                 if handler:
                     return {'menu': handler.get_menu_name(), 'payload': self.current_process}
                 else:
-                    # No specific handler found, use default validation menu
-                    return {'menu': 'validation_progress_menu', 'payload': self.current_process}
-
-    def start_chd_build(self) -> dict:
-        """Start the CHD building process"""
-        self.current_process = ChdBuildProcess(self.platform)
-        self.current_process.initialize()
-
-        # Process steps until completion or error
-        while True:
-            result = self.current_process.execute_step()
-
-            if result.get('complete'):
-                # Process finished
-                self.current_process = None
-                return {'menu': 'main_menu', 'payload': result}
-            elif result.get('needs_user_input'):
-                # Get the appropriate menu from the handler system
-                exception = self.current_process.state['exception_payload']
-                
-                # Get handlers that can handle this exception
-                handlers = self.handler_registry.get_relevant_handlers(
-                    self.current_process.current_item,
-                    None  # No file_data for this case
-                )
-                
-                # Find handler that can handle this exception
-                for handler in handlers:
-                    try:
-                        if handler.validate_preconditions(self.current_process.current_item, None):
-                            return {'menu': handler.get_menu_name(), 'payload': self.current_process}
-                    except:
-                        continue
-                
-                # No specific handler found, use default CHD menu
-                return {'menu': 'existing_chd_menu', 'payload': self.current_process}
+                    # No specific handler found, determine default menu based on process type
+                    return {'menu': self._get_default_menu_name(), 'payload': self.current_process}
 
     def continue_processing(self, action: str) -> dict:
         """Continue the current process with user action"""
@@ -137,9 +85,37 @@ class ProcessManager:
                     return {'menu': handler.get_menu_name(), 'payload': self.current_process}
                 else:
                     # No specific handler found, determine default menu based on process type
-                    if isinstance(self.current_process, ArchiveValidationProcess):
-                        return {'menu': 'validation_progress_menu', 'payload': self.current_process}
-                    elif isinstance(self.current_process, ChdBuildProcess):
-                        return {'menu': 'existing_chd_menu', 'payload': self.current_process}
-                    else:
-                        return {'menu': 'main_menu', 'payload': None}
+                    return {'menu': self._get_default_menu_name(), 'payload': self.current_process}
+
+    def get_handler_for_exception(self, exception: Exception, media: 'CDMedia') -> Optional['SpecialHandler']:
+        """Find a handler that can handle this exception"""
+        # Get all special handlers
+        special_handlers = self.handler_registry.get_special_handlers()
+        
+        for handler in special_handlers:
+            try:
+                if handler.validate_preconditions(media, None):
+                    # Check if this handler can handle the exception type
+                    if isinstance(exception, MD5ScanRequiredException):
+                        return handler
+            except:
+                continue
+        
+        return None
+
+    def _get_default_menu_name(self) -> str:
+        """Determine default menu name based on current process type"""
+        if not self.current_process:
+            return 'main_menu'
+        
+        # Check for specific process types
+        if hasattr(self.current_process, '__class__'):
+            class_name = self.current_process.__class__.__name__
+            
+            if 'ArchiveValidation' in class_name:
+                return 'validation_progress_menu'
+            elif 'ChdBuild' in class_name:
+                return 'existing_chd_menu'
+        
+        # Default fallback
+        return 'main_menu'

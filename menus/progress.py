@@ -1,6 +1,5 @@
 from .menu_system import BaseMenu, MenuItem
-from rom_management.processing import ArchiveValidationProcess
-from rom_management.archive import MD5ScanRequiredException
+from rom_management.processing.base_process import BaseProcess
 
 class ValidationProgressMenu(BaseMenu):
     def __init__(self):
@@ -14,25 +13,30 @@ class ValidationProgressMenu(BaseMenu):
             MenuItem(text="Stop validation", action_func=self.stop)
         ]
 
-    def set_payload(self, process: ArchiveValidationProcess):
+    def set_payload(self, process: BaseProcess):
         self.payload = process
         progress = process.get_progress()
         
         # Get current item for filename display
-        current_item = process.current_item
+        current_item = getattr(process, 'current_item', None)
         file_name = ""
         if current_item and hasattr(current_item, 'dat_game_entry') and current_item.dat_game_entry:
             file_name = f" ({current_item.dat_game_entry.name})"
 
         # Update message based on preference and exception type
-        if isinstance(process.state['exception_payload'], MD5ScanRequiredException):
-            self.message = f"{process.state['exception_payload'].message}"
-        elif process.user_preference == 'skip_all':
-            self.message = f"Skipping all remaining bad ROMs: {progress['failed']}/{progress['total']} skipped"
-        elif process.user_preference == 'continue_all':
-            self.message = f"Continuing without asking: {progress['processed']}/{progress['total']} completed"
-        elif process.user_preference == 'scan_all_md5':
-            self.message = f"Scanning all with MD5: {progress['processed']}/{progress['total']} completed"
+        if process.state.get('exception_payload'):
+            from rom_management.archive import MD5ScanRequiredException
+            if isinstance(process.state['exception_payload'], MD5ScanRequiredException):
+                self.message = f"{process.state['exception_payload'].message}"
+        elif hasattr(process, 'user_preference'):
+            if process.user_preference == 'skip_all':
+                self.message = f"Skipping all remaining bad ROMs: {progress['failed']}/{progress['total']} skipped"
+            elif process.user_preference == 'continue_all':
+                self.message = f"Continuing without asking: {progress['processed']}/{progress['total']} completed"
+            elif process.user_preference == 'scan_all_md5':
+                self.message = f"Scanning all with MD5: {progress['processed']}/{progress['total']} completed"
+            else:
+                self.message = f"Validating ROMs: {progress['processed']}/{progress['total']} completed"
         else:
             self.message = f"Validating ROMs: {progress['processed']}/{progress['total']} completed"
 
