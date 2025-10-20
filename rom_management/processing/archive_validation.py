@@ -64,21 +64,18 @@ class ArchiveValidationProcess(BaseProcess):
                     # Add to matched_buildable_media since we know it's valid
                     self.platform.matched_buildable_media[media] = None
 
-                # Always increment counter after processing
-                self.state['current_index'] += 1
-                return {'continue': True}
+                return {'success': True}
             except MD5ScanRequiredException as e:
                 # Store exception payload and pause processing for user input
                 self.state['exception_payload'] = e
-                return {'needs_user_input': True, 'payload': e}
+                return {'needs_user_input': True, 'menu': self.menu.name if self.menu else 'validation_progress_menu'}
             except Exception as e:
                 # Store exception payload and pause processing for user input
                 self.state['exception_payload'] = e
-                return {'needs_user_input': True, 'payload': e}
+                return {'needs_user_input': True, 'menu': self.menu.name if self.menu else 'validation_progress_menu'}
         else:
             # Skip unmatched media
-            self.state['current_index'] += 1
-            return {'continue': True}
+            return {'success': True}
 
     def _validate_single_media(self, media: 'CDMedia') -> dict:
         """Validate a single media item"""
@@ -92,57 +89,73 @@ class ArchiveValidationProcess(BaseProcess):
         rom_dir = media.dat_game_entry.dat.rom_path
         if not os.path.isdir(rom_dir):
             print(f"  ⚠️  ROM directory does not exist for {media.dat_game_entry.name}: Skipping - {rom_dir}")
-            return {'continue': True}
+            return {'success': False}
 
         # Find and validate zip
         try:
-            zip_path = self.zip_processor.find_valid_zip(media.dat_game_entry, rom_dir, md5=self.md5)
+            # Check user preferences first
+            if self.state['user_preferences'].get('use_md5', False):
+                zip_path = self.zip_processor.find_valid_zip(media.dat_game_entry, rom_dir, md5=True)
+            else:
+                zip_path = self.zip_processor.find_valid_zip(media.dat_game_entry, rom_dir, md5=False)
+                
         except MD5ScanRequiredException as e:
             # Re-raise the exception to be caught by execute_step
             raise e
 
         if not zip_path:
             print(f"  ⚠️  No valid zip found: {media.dat_game_entry.name}")
-            return {'continue': True}
+            return {'success': False}
         else:
             print(f"  ✅ Found valid zip: {media.dat_game_entry.name}")
             media.zip_path = zip_path
             return {'success': True}
 
     def handle_user_action(self, action: str) -> dict:
+        """Handle user actions from menus"""
         if action == 'retry':
             # Retry current item - don't advance index
             self.user_preference = None  # Reset preference
-            return {'continue': True}
+            return {'success': False}
         elif action == 'skip':
-            # Don't advance index here - will be done in execute_step
-            return {'continue': True}
+            # Skip current item and advance index
+            self.state['current_index'] += 1
+            return {'success': False}
         elif action == 'stop':
             return {'complete': True, 'stopped_early': True}
         elif action == 'skip_all':
-            self.user_preference = 'skip_all'
-            return {'continue': True}
+            # Set preference to skip all future MD5 scans
+            self.state['user_preferences']['skip_md5'] = True
+            self.state['current_index'] += 1
+            return {'success': False}
         elif action == 'continue_all':
-            self.user_preference = 'continue_all'
-            self.md5 = True
-            return {'continue': True}
+            # Set preference to scan all items with MD5
+            self.state['user_preferences']['use_md5'] = True
+            return {'success': False}
         elif action == 'scan_md5':
-            # Perform MD5 scan for current item
+            # Scan current item with MD5
             media: 'CDMedia' = self.current_item
             if media:
                 try:
-                    # Try to validate with MD5 scan
-                    zip_path = self.zip_processor.find_valid_zip(media.dat_game_entry, media.dat_game_entry.dat.rom_path, md5=True)
+                    zip_path = self.zip_processor.find_valid_zip(
+                        media.dat_game_entry, 
+                        media.dat_game_entry.dat.rom_path, 
+                        md5=True
+                    )
                     if zip_path:
                         media.zip_path = zip_path
                         return {'success': True}
                     else:
-                        return {'continue': True}
+                        return {'success': False}
                 except Exception as e:
                     print(f"MD5 scan failed: {e}")
-                    return {'continue': True}
+                    return {'success': False}
             # Don't advance index here - will be done in execute_step
-            return {'continue': True}
+            return {'success': False}
         elif action == 'scan_all_md5':
-            self.user_preference = 'scan_all_md5'
-            return {'continue': True}
+            # Set preference to scan all items with MD5
+            self.state['user_preferences']['use_md5'] = True
+            return {'success': False}
+        
+        # Default case - don't advance index
+        return {'success': False}

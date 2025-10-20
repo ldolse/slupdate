@@ -32,26 +32,8 @@ class ProcessManager:
         self.current_process = process_class(self.platform, **kwargs)
         self.current_process.initialize()
 
-        # Process steps until completion or error
-        while True:
-            result = self.current_process.execute_step()
-
-            if result.get('complete'):
-                # Process finished
-                self.current_process = None
-                return {'menu': 'main_menu', 'payload': result}
-            elif result.get('needs_user_input'):
-                # Get the appropriate menu from the handler system
-                exception = self.current_process.state['exception_payload']
-                
-                # Find a handler for this exception
-                handler = self.get_handler_for_exception(exception, self.current_process.current_item)
-                
-                if handler:
-                    return {'menu': handler.get_menu_name(), 'payload': self.current_process}
-                else:
-                    # No specific handler found, determine default menu based on process type
-                    return {'menu': self._get_default_menu_name(), 'payload': self.current_process}
+        # Execute the first step
+        return self.execute_current_step()
 
     def continue_processing(self, action: str) -> dict:
         """Continue the current process with user action"""
@@ -61,31 +43,29 @@ class ProcessManager:
         # Handle the user action first
         result = self.current_process.handle_user_action(action)
 
-        # Check if process is complete after handling action
+        # Execute next step if not complete
+        return self.execute_current_step()
+
+    def execute_current_step(self) -> dict:
+        """Execute the current step of the process"""
+        if not self.current_process:
+            return {'menu': 'main_menu', 'payload': None}
+
+        result = self.current_process.execute_step()
+
         if result.get('complete'):
+            # Process finished
             self.current_process = None
             return {'menu': 'main_menu', 'payload': result}
-
-        # Execute next step if not complete
-        while True:
-            next_result = self.current_process.execute_step()
-
-            if next_result.get('complete'):
-                # Process finished
-                self.current_process = None
-                return {'menu': 'main_menu', 'payload': next_result}
-            elif next_result.get('needs_user_input'):
-                # Get the appropriate menu from the handler system
-                exception = self.current_process.state['exception_payload']
-                
-                # Find a handler for this exception
-                handler = self.get_handler_for_exception(exception, self.current_process.current_item)
-                
-                if handler:
-                    return {'menu': handler.get_menu_name(), 'payload': self.current_process}
-                else:
-                    # No specific handler found, determine default menu based on process type
-                    return {'menu': self._get_default_menu_name(), 'payload': self.current_process}
+        elif result.get('needs_user_input'):
+            # Get the appropriate menu from the handler system
+            return {
+                'menu': result['menu'],
+                'payload': self.current_process
+            }
+        else:
+            # Continue processing
+            return {'menu': None, 'payload': result}
 
     def get_handler_for_exception(self, exception: Exception, media: 'CDMedia') -> Optional['SpecialHandler']:
         """Find a handler that can handle this exception"""

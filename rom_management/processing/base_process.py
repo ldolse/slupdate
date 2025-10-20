@@ -4,7 +4,6 @@ from abc import ABC, abstractmethod
 if TYPE_CHECKING:
     from consoles import Platform
 
-# Use string annotation for type hints to avoid circular imports
 class BaseProcess(ABC):
     """Base class for long-running processes that may require user interaction"""
 
@@ -16,10 +15,10 @@ class BaseProcess(ABC):
             'current_item': None,
             'exception_payload': None,
             'items_to_process': [],
-            'process_metadata': {}
+            'process_metadata': {},
+            'user_preferences': {}
         }
         self.current_item = None
-        self.user_preference = None  # Can be "skip_all", "continue_all", or None
 
     @abstractmethod
     def initialize(self):
@@ -32,17 +31,58 @@ class BaseProcess(ABC):
         pass
 
     def execute_step(self) -> dict:
-        """Execute one step of the process, base function"""
+        """Execute one step of the process with exception handling"""
         if self.state['current_index'] >= self.state['total_items']:
             return {'complete': True}
+        
         self.set_current_item()
-        result = self._execute_step()
-        return result
+        
+        try:
+            result = self._execute_step()
+            
+            # If successful, advance to next item
+            if result.get('success'):
+                self.state['current_index'] += 1
+                
+            return {'continue': True}
+            
+        except Exception as e:
+            # Handle exceptions using the handler system
+            return self._handle_exception(e)
 
-    @abstractmethod
+    def _handle_exception(self, exception: Exception) -> dict:
+        """Handle exceptions using the handler system"""
+        # Find a handler for this exception
+        handler = self.platform.process_manager.get_handler_for_exception(exception, self.current_item)
+        
+        if handler:
+            try:
+                # Let the handler try to resolve the exception
+                result = handler.handle(self.current_item, None)
+                
+                if isinstance(result, dict):
+                    return result
+                else:
+                    # Handler resolved the exception, continue processing
+                    return {'continue': True}
+            except Exception as e:
+                # If handler can't resolve, re-raise for menu handling
+                if hasattr(e, 'menu_class_name'):
+                    return {
+                        'needs_user_input': True,
+                        'menu': e.menu_class_name,
+                        'payload': self
+                    }
+                else:
+                    # Re-raise the original exception for generic handling
+                    raise e
+        else:
+            # No handler found, re-raise to be handled by generic error handling
+            raise exception
+
     def handle_user_action(self, action: str) -> dict:
-        """Handle user actions after exceptions - should be overridden"""
-        pass
+        """Handle user actions from menus - should be overridden by subclasses"""
+        raise NotImplementedError("Subclasses must implement handle_user_action")
 
     def get_progress(self) -> dict:
         """Return current progress information"""
@@ -68,3 +108,11 @@ class BaseProcess(ABC):
         """Set the list of items to process"""
         self.state['items_to_process'] = items
         self.state['total_items'] = len(items)
+
+    def is_complete(self) -> bool:
+        """Check if process is complete"""
+        return self.state['current_index'] >= self.state['total_items']
+
+    def advance_to_next_item(self):
+        """Advance to the next item"""
+        self.state['current_index'] += 1
