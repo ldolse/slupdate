@@ -60,7 +60,7 @@ class ProcessManager:
                 return {'menu': 'main_menu', 'payload': result}
             elif result.get('needs_user_input'):
                 # Get the appropriate menu from the handler system
-                exception = self.current_process.state.get('exception_payload')
+                exception = self.current_process.exception_payload  # Changed from state.get('exception_payload')
                 
                 if exception and type(exception) in self.current_process.handlers:
                     # Use the handler's menu

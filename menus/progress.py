@@ -24,10 +24,10 @@ class ValidationProgressMenu(BaseMenu):
             file_name = f" ({current_item.dat_game_entry.name})"
 
         # Update message based on preference and exception type
-        if process.state.get('exception_payload'):
+        if process.exception_payload:  # Changed from state.get('exception_payload')
             from rom_management.archive import MD5ScanRequiredException
-            if isinstance(process.state['exception_payload'], MD5ScanRequiredException):
-                self.message = f"{process.state['exception_payload'].message}"
+            if isinstance(process.exception_payload, MD5ScanRequiredException):
+                self.message = f"{process.exception_payload.message}"
         elif hasattr(process, 'user_preference'):
             if process.user_preference == 'skip_all':
                 self.message = f"Skipping all remaining bad ROMs: {progress['failed']}/{progress['total']} skipped"
