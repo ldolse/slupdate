@@ -5,6 +5,7 @@ from rom_management.archive.zip_processor import ZipProcessor, MD5ScanRequiredEx
 
 if TYPE_CHECKING:
     from media_registry import CDMedia
+    from consoles import Platform
 
 class ArchiveValidationProcess(BaseProcess):
     """Process for validating matched entries"""
