@@ -9,16 +9,17 @@ class BaseProcess(ABC):
 
     def __init__(self, platform: 'Platform'):
         self.platform = platform
-        self.state = {
-            'current_index': 0,
-            'total_items': 0,
-            'current_item': None,
-            'exception_payload': None,
-            'items_to_process': [],
-            'process_metadata': {},
-            'user_preferences': {}
-        }
+        # Direct attributes instead of nested dict
+        self.current_index = 0
+        self.total_items = 0
         self.current_item = None
+        self.exception_payload = None
+        self.items_to_process = []
+        self.process_metadata = {}
+        
+        # Common preferences that all processes might need
+        self.skip_all = False
+        
         self._handling_exception = False
         self.handlers = {}  # Exception type -> handler mapping
 
@@ -39,7 +40,7 @@ class BaseProcess(ABC):
 
     def execute_step(self) -> dict:
         """Execute one step of the process with exception handling"""
-        if self.state['current_index'] >= self.state['total_items']:
+        if self.current_index >= self.total_items:
             return {'complete': True}
         
         self.set_current_item()
@@ -49,7 +50,7 @@ class BaseProcess(ABC):
             
             # If successful, advance to next item
             if result.get('success'):
-                self.state['current_index'] += 1
+                self.current_index += 1
 
             return result
             
@@ -98,7 +99,7 @@ class BaseProcess(ABC):
     def handle_user_action(self, action: str) -> dict:
         """Handle user actions from menus"""
         # Get current exception if any
-        current_exception = self.state.get('exception_payload')
+        current_exception = self.exception_payload
         
         if current_exception and type(current_exception) in self.handlers:
             # Delegate to handler for this exception type
@@ -117,32 +118,32 @@ class BaseProcess(ABC):
     def get_progress(self) -> dict:
         """Return current progress information"""
         return {
-            'current': self.state['current_index'],
-            'total': self.state['total_items'],
+            'current': self.current_index,
+            'total': self.total_items,
             'percentage': self._calculate_progress_percentage()
         }
 
     def _calculate_progress_percentage(self) -> float:
         """Calculate progress percentage"""
-        if self.state['total_items'] == 0:
+        if self.total_items == 0:
             return 0.0
-        return (self.state['current_index'] / self.state['total_items']) * 100
+        return (self.current_index / self.total_items) * 100
 
     def set_current_item(self) -> None:
         """Get the current item being processed"""
-        if 0 <= self.state['current_index'] < len(self.state['items_to_process']):
-            self.current_item = self.state['items_to_process'][self.state['current_index']]
+        if 0 <= self.current_index < len(self.items_to_process):
+            self.current_item = self.items_to_process[self.current_index]
         return None
 
     def set_items_to_process(self, items: List[Any]):
         """Set the list of items to process"""
-        self.state['items_to_process'] = items
-        self.state['total_items'] = len(items)
+        self.items_to_process = items
+        self.total_items = len(items)
 
     def is_complete(self) -> bool:
         """Check if process is complete"""
-        return self.state['current_index'] >= self.state['total_items']
+        return self.current_index >= self.total_items
 
     def advance_to_next_item(self):
         """Advance to the next item"""
-        self.state['current_index'] += 1
+        self.current_index += 1

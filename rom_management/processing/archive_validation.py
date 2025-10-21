@@ -13,6 +13,8 @@ class ArchiveValidationProcess(BaseProcess):
     def __init__(self, platform: 'Platform'):
         super().__init__(platform)
         self.zip_processor = ZipProcessor()
+        # Process-specific preference
+        self.use_md5 = False  # Default to fast validation
 
     @property
     def progress(self) -> dict:
@@ -20,18 +22,18 @@ class ArchiveValidationProcess(BaseProcess):
         success_count = 0
         failure_count = 0
 
-        for i, item in enumerate(self.state['items_to_process']):
-            if i < self.state['current_index']:
+        for i, item in enumerate(self.items_to_process):
+            if i < self.current_index:
                 # Check if this item was processed successfully
-                media = self.state['items_to_process'][i]
+                media = self.items_to_process[i]
                 if media in self.platform.matched_buildable_media:
                     success_count += 1
                 else:
                     failure_count += 1
 
         return {
-            'current': self.state['current_index'],
-            'total': self.state['total_items'],
+            'current': self.current_index,
+            'total': self.total_items,
             'processed': success_count,
             'failed': failure_count,
             'percentage': self._calculate_progress_percentage()
@@ -43,17 +45,17 @@ class ArchiveValidationProcess(BaseProcess):
             raise Exception("MediaRegistry not initialized")
 
         # Get all media items to process
-        self.state['items_to_process'] = list(self.platform.mr.media_directory.keys())
-        orig_length = len(self.state['items_to_process'])
+        self.items_to_process = list(self.platform.mr.media_directory.keys())
+        orig_length = len(self.items_to_process)
 
         # Filter out already validated items
-        self.state['items_to_process'] = [
-            media for media in self.state['items_to_process']
+        self.items_to_process = [
+            media for media in self.items_to_process
             if (media.sha1_signature or media.crc_signature) not in self.platform.state.matched_media_sigs
         ]
 
-        self.state['total_items'] = len(self.state['items_to_process'])
-        print(f"{self.state['total_items']} to process, excluding {orig_length - self.state['total_items']}")
+        self.total_items = len(self.items_to_process)
+        print(f"{self.total_items} to process, excluding {orig_length - self.total_items}")
         
         # Register handlers
         self.register_handlers()
@@ -78,11 +80,11 @@ class ArchiveValidationProcess(BaseProcess):
                 return {'success': True}
             except MD5ScanRequiredException as e:
                 # Store exception payload and pause processing for user input
-                self.state['exception_payload'] = e
+                self.exception_payload = e
                 return {'needs_user_input': True, 'payload': e}
             except Exception as e:
                 # Store exception payload and pause processing for user input
-                self.state['exception_payload'] = e
+                self.exception_payload = e
                 return {'needs_user_input': True, 'payload': e}
         else:
             # Skip unmatched media
@@ -102,13 +104,9 @@ class ArchiveValidationProcess(BaseProcess):
             print(f"  ⚠️  ROM directory does not exist for {media.dat_game_entry.name}: Skipping - {rom_dir}")
             return {'success': False}
 
-        # Find and validate zip
+        # Find and validate zip using the process's use_md5 setting
         try:
-            # Check user preferences first
-            if self.state['user_preferences'].get('use_md5', False):
-                zip_path = self.zip_processor.find_valid_zip(media.dat_game_entry, rom_dir, md5=True)
-            else:
-                zip_path = self.zip_processor.find_valid_zip(media.dat_game_entry, rom_dir, md5=False)
+            zip_path = self.zip_processor.find_valid_zip(media.dat_game_entry, rom_dir, md5=self.use_md5)
                 
         except MD5ScanRequiredException as e:
             # Re-raise the exception to be caught by execute_step
@@ -125,7 +123,7 @@ class ArchiveValidationProcess(BaseProcess):
     def handle_user_action(self, action: str) -> dict:
         """Handle user actions from menus"""
         # Delegate to handler system for exception-related actions
-        if self.state.get('exception_payload'):
+        if self.exception_payload:
             return super().handle_user_action(action)
         
         # Handle default actions (not tied to exceptions)

@@ -14,13 +14,11 @@ class MD5ScanHandler(SpecialHandler):
         """Handle MD5 scanning requirements"""
         if isinstance(exception, MD5ScanRequiredException):
             # Check user preferences first
-            prefs = process.state['user_preferences']
-            
-            if prefs.get('skip_md5', False):
+            if process.skip_all:
                 # User chose to skip all MD5 scans
-                process.state['current_index'] += 1
+                process.current_index += 1
                 return {'success': True, 'continue': True}
-            elif prefs.get('use_md5', False):
+            elif process.use_md5:
                 # User chose to use MD5 for all scans
                 return self._perform_md5_scan(process.current_item)
             else:
@@ -33,17 +31,28 @@ class MD5ScanHandler(SpecialHandler):
     def handle_user_action(self, action: str, process) -> dict:
         """Handle user actions from the menu"""
         if action == 'skip':
-            process.state['current_index'] += 1
+            process.current_index += 1
             return {'success': True}
         elif action == 'skip_all':
-            process.state['user_preferences']['skip_md5'] = True
-            process.state['current_index'] += 1
+            process.skip_all = True
+            process.current_index += 1
             return {'success': True}
         elif action == 'scan_md5':
-            return self._perform_md5_scan(process.current_item)
+            # Temporarily enable MD5 for this item
+            original_use_md5 = process.use_md5
+            process.use_md5 = True
+            
+            try:
+                # Execute step with MD5 enabled
+                result = process.execute_step()
+                return {'success': True, 'continue': True}
+            finally:
+                # Restore original setting
+                process.use_md5 = original_use_md5
+                
         elif action == 'scan_all_md5':
-            process.state['user_preferences']['use_md5'] = True
-            return self._perform_md5_scan(process.current_item)
+            process.use_md5 = True
+            return {'success': True}
         elif action == 'stop':
             return {'complete': True, 'stopped_early': True}
         else:
