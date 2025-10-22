@@ -41,20 +41,12 @@ class BaseProcess(ABC):
 
     def execute_step(self) -> dict:
         """Execute one step of the process with exception handling"""
-        if self.current_index >= self.total_items:
-            return {'complete': True}
         
         # Get next item using iterator to preserve state
         if not self._get_next_item():
             return {'complete': True}
-        
         try:
             result = self._execute_step()
-            
-            # If successful, advance to next item
-            if result.get('success'):
-                self.current_index += 1
-
             return result
             
         except Exception as e:
