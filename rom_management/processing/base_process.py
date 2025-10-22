@@ -22,6 +22,7 @@ class BaseProcess(ABC):
         
         self._handling_exception = False
         self.handlers = {}  # Exception type -> handler mapping
+        self._items_iterator = None
 
     @abstractmethod
     def initialize(self):
@@ -43,7 +44,9 @@ class BaseProcess(ABC):
         if self.current_index >= self.total_items:
             return {'complete': True}
         
-        self.set_current_item()
+        # Get next item using iterator to preserve state
+        if not self._get_next_item():
+            return {'complete': True}
         
         try:
             result = self._execute_step()
@@ -57,6 +60,19 @@ class BaseProcess(ABC):
         except Exception as e:
             # Handle exceptions using the handler system
             return self._handle_exception(e)
+
+    def _get_next_item(self) -> bool:
+        """Get next item from iterator - preserves state between calls"""
+        if self._items_iterator is None:
+            # Initialize iterator if not already done
+            self._items_iterator = iter(self.items_to_process)
+        
+        try:
+            self.current_item = next(self._items_iterator)
+            return True
+        except StopIteration:
+            self.current_item = None
+            return False
 
     def _handle_exception(self, exception: Exception) -> dict:
         """Handle exceptions using the handler system"""
@@ -139,6 +155,8 @@ class BaseProcess(ABC):
         """Set the list of items to process"""
         self.items_to_process = items
         self.total_items = len(items)
+        # Reset iterator when new items are set
+        self._items_iterator = None
 
     def is_complete(self) -> bool:
         """Check if process is complete"""
