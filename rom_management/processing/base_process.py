@@ -10,12 +10,11 @@ class BaseProcess(ABC):
     def __init__(self, platform: 'Platform'):
         self.platform = platform
         # Direct attributes instead of nested dict
-        self.current_index = 0
         self.total_items = 0
+        self.processed_items = 0
         self.current_item = None
         self.exception_payload = None
         self.items_to_process = []
-        self.process_metadata = {}
         
         # Common preferences that all processes might need
         self.skip_all = False
@@ -47,6 +46,7 @@ class BaseProcess(ABC):
             return {'complete': True}
         try:
             result = self._execute_step()
+            self.processed_items += 1
             return result
             
         except Exception as e:
@@ -126,7 +126,7 @@ class BaseProcess(ABC):
     def get_progress(self) -> dict:
         """Return current progress information"""
         return {
-            'current': self.current_index,
+            'processed': self.processed_items,
             'total': self.total_items,
             'percentage': self._calculate_progress_percentage()
         }
@@ -135,13 +135,8 @@ class BaseProcess(ABC):
         """Calculate progress percentage"""
         if self.total_items == 0:
             return 0.0
-        return (self.current_index / self.total_items) * 100
+        return (self.processed_items / self.total_items) * 100
 
-    def set_current_item(self) -> None:
-        """Get the current item being processed"""
-        if 0 <= self.current_index < len(self.items_to_process):
-            self.current_item = self.items_to_process[self.current_index]
-        return None
 
     def set_items_to_process(self, items: List[Any]):
         """Set the list of items to process"""
@@ -150,10 +145,3 @@ class BaseProcess(ABC):
         # Reset iterator when new items are set
         self._items_iterator = None
 
-    def is_complete(self) -> bool:
-        """Check if process is complete"""
-        return self.current_index >= self.total_items
-
-    def advance_to_next_item(self):
-        """Advance to the next item"""
-        self.current_index += 1

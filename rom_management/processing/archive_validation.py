@@ -24,16 +24,16 @@ class ArchiveValidationProcess(BaseProcess):
         failure_count = 0
 
         for i, item in enumerate(self.items_to_process):
-            if i < self.current_index:
+            if i < self.processed_items:
                 # Check if this item was processed successfully
-                media = self.items_to_process[i]
+                media = self.items_to_process[i].media
                 if media in self.platform.matched_buildable_media:
                     success_count += 1
                 else:
                     failure_count += 1
 
         return {
-            'current': self.current_index,
+            'processed': self.processed_items,
             'total': self.total_items,
             'processed': success_count,
             'failed': failure_count,
