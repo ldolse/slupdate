@@ -16,7 +16,6 @@ class MD5ScanHandler(SpecialHandler):
             # Check user preferences first
             if process.skip_all:
                 # User chose to skip all MD5 scans
-                process.current_index += 1
                 return {'success': True, 'continue': True}
             elif process.use_md5:
                 # User chose to use MD5 for all scans
@@ -31,11 +30,9 @@ class MD5ScanHandler(SpecialHandler):
     def handle_user_action(self, action: str, process: 'BaseProcess') -> dict:
         """Handle user actions from the menu"""
         if action == 'skip':
-            process.current_index += 1
             return {'success': True}
         elif action == 'skip_all':
             process.skip_all = True
-            process.current_index += 1
             return {'success': True}
         elif action == 'scan_md5':
             # Temporarily enable MD5 for this item

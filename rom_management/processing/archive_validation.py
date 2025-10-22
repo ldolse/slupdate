@@ -6,6 +6,7 @@ from rom_management.archive.zip_processor import ZipProcessor, MD5ScanRequiredEx
 if TYPE_CHECKING:
     from media_registry import CDMedia
     from consoles import Platform
+    from softwarelist import Part
 
 class ArchiveValidationProcess(BaseProcess):
     """Process for validating matched entries"""
@@ -45,17 +46,10 @@ class ArchiveValidationProcess(BaseProcess):
             raise Exception("MediaRegistry not initialized")
 
         # Get all media items to process
-        self.items_to_process = list(self.platform.mr.media_directory.keys())
-        orig_length = len(self.items_to_process)
-
-        # Filter out already validated items
-        self.items_to_process = [
-            media for media in self.items_to_process
-            if (media.sha1_signature or media.crc_signature) not in self.platform.state.matched_media_sigs
-        ]
+        self.items_to_process = self.platform.all_parts
 
         self.total_items = len(self.items_to_process)
-        print(f"{self.total_items} to process, excluding {orig_length - self.total_items}")
+        print(f"{self.total_items} to process")
         
         # Register handlers
         self.register_handlers()
@@ -67,32 +61,30 @@ class ArchiveValidationProcess(BaseProcess):
 
     def _execute_step(self) -> dict:
         # Get current media item
-        media: 'CDMedia' = self.current_item
+        current_part: 'Part' = self.current_item
+        media: 'CDMedia' = current_part.cdmedia
+        
+        try:
+            # Validate this media item
+            result = self._validate_single_media(media)
+            if result.get('success'):
+                # Add to matched_buildable_media since we know it's valid
+                self.platform.matched_buildable_media[media] = None
 
-        if media.matched:
-            try:
-                # Validate this media item
-                result = self._validate_single_media(media)
-                if result.get('success'):
-                    # Add to matched_buildable_media since we know it's valid
-                    self.platform.matched_buildable_media[media] = None
-
+            return {'success': True}
+        except MD5ScanRequiredException as e:
+            # Store exception payload and pause processing for user input
+            if self.skip_all:
+                print(f"skipping md5 scan for {media.dat_game_entry.name}")
                 return {'success': True}
-            except MD5ScanRequiredException as e:
-                # Store exception payload and pause processing for user input
-                if self.skip_all:
-                    print(f"skipping md5 scan for {media.dat_game_entry.name}")
-                    return {'success': True}
-                else:
-                    self.exception_payload = e
-                    return {'needs_user_input': True, 'payload': e}
-            except Exception as e:
-                # Store exception payload and pause processing for user input
+            else:
                 self.exception_payload = e
                 return {'needs_user_input': True, 'payload': e}
-        else:
-            # Skip unmatched media
-            return {'success': True}
+        except Exception as e:
+            # Store exception payload and pause processing for user input
+            self.exception_payload = e
+            return {'needs_user_input': True, 'payload': e}
+
 
     def _validate_single_media(self, media: 'CDMedia') -> dict:
         """Validate a single media item"""

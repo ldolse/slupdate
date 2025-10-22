@@ -159,6 +159,16 @@ class Platform:
         return count
 
     @property
+    def all_parts(self) -> List:
+        """All parts that have a 'source_dat' entry (matched to DAT)"""
+        matched = []
+        for entry in self.softwarelist.software_items:
+            for part in entry.parts:
+                if hasattr(part, 'matched') and part.matched:
+                    matched.append(part)
+        return matched
+
+    @property
     def chd_count(self) -> int:
         """Number of CHDs that have been validated"""
         return len(self.validated_chds)
@@ -380,7 +390,7 @@ class Platform:
                     zip_path = zip_processor.find_valid_zip(media.dat_game_entry, rom_dir, md5=True)
 
             if zip_path is not None:
-                print(f"  ✅ {media.dat_game_entry.name}: Found valid zip")
+                print(f"  ✅ Found valid zip: {media.dat_game_entry.name}")
                 media.zip_path = zip_path
                 self.matched_buildable_media[media] = None # Value doesn't matter, using key as an ordered set
             else:
