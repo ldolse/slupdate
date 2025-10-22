@@ -42,15 +42,16 @@ class BaseProcess(ABC):
         """Execute one step of the process with exception handling"""
 
         # Only get next item if we don't have a current item (i.e., starting fresh)
-        if self.current_item is None:
+        # AND we're not in the middle of handling an exception
+        if self.current_item is None and not self._handling_exception:
             if not self._get_next_item():
                 return {'complete': True}
 
         try:
             result = self._execute_step()
 
-            # Only advance if processing was successful
-            if result.get('success', True):
+            # Only advance if processing was successful AND we're not in exception handling mode
+            if result.get('success', True) and not self._handling_exception:
                 self.processed_items += 1
                 # Clear current_item to indicate we're done with it
                 self.current_item = None
@@ -152,4 +153,3 @@ class BaseProcess(ABC):
         self.total_items = len(items)
         # Reset iterator when new items are set
         self._items_iterator = None
-
