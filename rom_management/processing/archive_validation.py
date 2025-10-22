@@ -98,7 +98,7 @@ class ArchiveValidationProcess(BaseProcess):
         rom_dir = media.dat_game_entry.dat.rom_path
         if not os.path.isdir(rom_dir):
             print(f"  ⚠️  ROM directory does not exist for {media.dat_game_entry.name}: Skipping - {rom_dir}")
-            return {'success': False}
+            return {'success': True}
 
         # Find and validate zip using the process's use_md5 setting
         try:
@@ -110,7 +110,7 @@ class ArchiveValidationProcess(BaseProcess):
 
         if not zip_path:
             print(f"  ⚠️  No valid zip found: {media.dat_game_entry.name}")
-            return {'success': False}
+            return {'success': True}
         else:
             print(f"  ✅ Found valid zip: {media.dat_game_entry.name}")
             media.zip_path = zip_path

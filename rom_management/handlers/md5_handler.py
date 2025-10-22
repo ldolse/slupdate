@@ -30,8 +30,10 @@ class MD5ScanHandler(SpecialHandler):
     def handle_user_action(self, action: str, process: 'BaseProcess') -> dict:
         """Handle user actions from the menu"""
         if action == 'skip':
+            process.current_item = None
             return {'success': True}
         elif action == 'skip_all':
+            process.current_item = None
             process.skip_all = True
             return {'success': True}
         elif action == 'scan_md5':

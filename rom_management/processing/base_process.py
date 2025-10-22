@@ -15,10 +15,10 @@ class BaseProcess(ABC):
         self.current_item = None
         self.exception_payload = None
         self.items_to_process = []
-        
+
         # Common preferences that all processes might need
         self.skip_all = False
-        
+
         self._handling_exception = False
         self.handlers = {}  # Exception type -> handler mapping
         self._items_iterator = None
@@ -40,15 +40,23 @@ class BaseProcess(ABC):
 
     def execute_step(self) -> dict:
         """Execute one step of the process with exception handling"""
-        
-        # Get next item using iterator to preserve state
-        if not self._get_next_item():
-            return {'complete': True}
+
+        # Only get next item if we don't have a current item (i.e., starting fresh)
+        if self.current_item is None:
+            if not self._get_next_item():
+                return {'complete': True}
+
         try:
             result = self._execute_step()
-            self.processed_items += 1
+
+            # Only advance if processing was successful
+            if result.get('success', True):
+                self.processed_items += 1
+                # Clear current_item to indicate we're done with it
+                self.current_item = None
+
             return result
-            
+
         except Exception as e:
             # Handle exceptions using the handler system
             return self._handle_exception(e)
@@ -58,7 +66,7 @@ class BaseProcess(ABC):
         if self._items_iterator is None:
             # Initialize iterator if not already done
             self._items_iterator = iter(self.items_to_process)
-        
+
         try:
             self.current_item = next(self._items_iterator)
             return True
@@ -72,18 +80,18 @@ class BaseProcess(ABC):
         if self._handling_exception:
             # We're already in exception handling - just return an error
             return {'needs_user_input': True, 'menu': 'error_menu', 'payload': str(exception)}
-        
+
         self._handling_exception = True
-        
+
         try:
             # Find a handler for this exception type
             handler = self.handlers.get(type(exception))
-            
+
             if handler:
                 try:
                     # Let the handler deal with this exception
                     result = handler.handle(exception, self)
-                    
+
                     if isinstance(result, dict):
                         return result
                     else:
@@ -108,7 +116,7 @@ class BaseProcess(ABC):
         """Handle user actions from menus"""
         # Get current exception if any
         current_exception = self.exception_payload
-        
+
         if current_exception and type(current_exception) in self.handlers:
             # Delegate to handler for this exception type
             return self.handlers[type(current_exception)].handle_user_action(action, self)
