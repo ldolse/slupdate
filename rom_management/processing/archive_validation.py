@@ -80,8 +80,12 @@ class ArchiveValidationProcess(BaseProcess):
                 return {'success': True}
             except MD5ScanRequiredException as e:
                 # Store exception payload and pause processing for user input
-                self.exception_payload = e
-                return {'needs_user_input': True, 'payload': e}
+                if self.skip_all:
+                    print(f"skipping md5 scan for {media.dat_game_entry.name}")
+                    return {'success': True}
+                else:
+                    self.exception_payload = e
+                    return {'needs_user_input': True, 'payload': e}
             except Exception as e:
                 # Store exception payload and pause processing for user input
                 self.exception_payload = e
