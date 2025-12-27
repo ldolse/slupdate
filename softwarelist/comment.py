@@ -88,31 +88,27 @@ class Comment:
         '''
         discs = []
         current_disc = ''
-        toc_first = False
-        for i, line in enumerate(self.rom_lines):
-            toc = False
-            if self.toc_pattern.search(line):
-                toc = True
-            if toc and i == 0:
-                toc_first = True
-                current_disc += line.strip()
-                # skip any further logic for this case
+        
+        for line in self.rom_lines:
+            # Skip lines that don't contain ROM entries
+            if '<rom' not in line or 'name="' not in line:
                 continue
-            # if it's a new TOC file append the current disc and start a new one
-            if toc_first and toc:
-                discs.append(current_disc)
-                current_disc = line.strip()
-            # in this case add the toc to the current disc and start a new one
-            elif not toc_first and toc:
+                
+            toc = bool(self.toc_pattern.search(line))
+            
+            # If we encounter a TOC and current_disc has content, start a new disc
+            if toc and current_disc:
                 current_disc += line.strip()
                 discs.append(current_disc)
                 current_disc = ''
-            # keep adding tracks to the current disc otherwise
             else:
+                # Always add the line to current_disc
                 current_disc += line.strip()
-        # add the last disc to the disc list
-        if current_disc not in discs:
+
+        # Add the last disc if it has content
+        if current_disc:
             discs.append(current_disc)
+            
         return discs
 
 
@@ -125,6 +121,10 @@ class Comment:
         if sum(len(self.toc_pattern.findall(line)) for line in self.rom_lines) > 1:
             # Multiple discs entries found
             discs = self._split_data_by_discs()
+            if sum(len(self.toc_pattern.findall(line)) for line in self.rom_lines) != len(discs):
+                print(f"⚠️ Warning: Mismatch in TOC files and disc entries in comment for {name}.")
+                import pprint
+                pprint.pprint(discs)
             for disc in discs:
                 game_discs.append(self._xml_to_game_entries(disc, name, dat))
         else:
