@@ -115,10 +115,6 @@ class MenuItem:
                 total_processed=0, destination_menu=self.target_name
             )
 
-        except TypeError as te:
-            print(f"[ERROR] TypeError in action: {te}. Using default.")
-            return {"menu": self.target_name, "payload": None}
-
 
 class BaseMenu(ABC):
     """Base class for all menus"""

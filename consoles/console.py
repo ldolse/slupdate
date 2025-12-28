@@ -4,7 +4,11 @@ from softwarelist import SoftwareList, Part
 from utils import select_directory
 from rom_management import ZipProcessor, CHD
 from rom_management.processing import ProcessManager
-from rom_management.exceptions import HandlerException, UserActionRequiredException, SkipCurrentItemException
+from rom_management.exceptions import (
+    HandlerException,
+    UserActionRequiredException,
+    SkipCurrentItemException,
+)
 from optical_media.utils import OpticalMediaProcessor
 from rom_management.handlers import registry, SpecialHandler
 from media_registry import MediaRegistry, CDMedia
@@ -13,6 +17,7 @@ from collections import OrderedDict
 from .platform_state import PlatformState
 
 from typing import TYPE_CHECKING, Optional, List
+
 if TYPE_CHECKING:
     from consoles.platform_manager import PlatformManager
     from dat import RomDat
@@ -37,7 +42,9 @@ class Platform:
         self.mr: MediaRegistry = None
         self.matched_buildable_media: OrderedDict[CDMedia, None] = OrderedDict()
         self.validated_chds: set[CHD] = set()
-        self._chd_handling_preference = None  # Can be "ask", "overwrite", or "skip", set via Exception
+        self._chd_handling_preference = (
+            None  # Can be "ask", "overwrite", or "skip", set via Exception
+        )
         self._chd_build_index = 0
         self.handler_registry = registry
         self.state = PlatformState()
@@ -46,7 +53,9 @@ class Platform:
     def save_state(self) -> PlatformState:
         """Save current state to PlatformState object"""
         # Update directory status and sync with current dat_directories keys
-        self.state.dat_directories = list(self.dat_directories.keys())  # Sync with current keys
+        self.state.dat_directories = list(
+            self.dat_directories.keys()
+        )  # Sync with current keys
 
         # Update processing state
         self.state._chd_build_index = self._chd_build_index
@@ -103,13 +112,15 @@ class Platform:
         # Recreate process manager with reset state
         self.process_manager = ProcessManager(self)
 
-    def get_relevant_handlers(self, media: CDMedia, file_data: OpticalMediaProcessor) -> List[SpecialHandler]:
+    def get_relevant_handlers(
+        self, media: CDMedia, file_data: OpticalMediaProcessor
+    ) -> List[SpecialHandler]:
         """Get all relevant handlers for a media item"""
         return self.handler_registry.get_relevant_handlers(media, file_data)
 
     @property
     def _media_to_process(self) -> list[CDMedia]:
-        return list(self.matched_buildable_media.keys())[self._chd_build_index:]
+        return list(self.matched_buildable_media.keys())[self._chd_build_index :]
 
     @property
     def _all_dats(self) -> list[RomDat]:
@@ -135,7 +146,7 @@ class Platform:
         count = 0
         for entry in self.softwarelist.software_items:
             for part in entry.parts:
-                if hasattr(part, 'game_entry') and part.game_entry is not None:
+                if hasattr(part, "game_entry") and part.game_entry is not None:
                     count += 1
         return count
 
@@ -144,7 +155,7 @@ class Platform:
         """Number of software list entries that have at least one part with a source match"""
         count = 0
         for entry in self.softwarelist.software_items:
-            if any(hasattr(part, 'matched') and part.matched for part in entry.parts):
+            if any(hasattr(part, "matched") and part.matched for part in entry.parts):
                 count += 1
         return count
 
@@ -154,7 +165,7 @@ class Platform:
         count = 0
         for entry in self.softwarelist.software_items:
             for part in entry.parts:
-                if hasattr(part, 'matched') and part.matched:
+                if hasattr(part, "matched") and part.matched:
                     count += 1
         return count
 
@@ -164,7 +175,7 @@ class Platform:
         matched = []
         for entry in self.softwarelist.software_items:
             for part in entry.parts:
-                if hasattr(part, 'matched') and part.matched:
+                if hasattr(part, "matched") and part.matched:
                     matched.append(part)
         return matched
 
@@ -186,11 +197,12 @@ class Platform:
             dict: A dictionary with the total number of dumps per source group
         """
         from collections import defaultdict
+
         counts = defaultdict(int)
 
         for entry in self.softwarelist.software_items:
             for part in entry.parts:
-                if hasattr(part, 'source_group') and part.source_group:
+                if hasattr(part, "source_group") and part.source_group:
                     counts[part.source_group] += 1
 
         return dict(counts)
@@ -205,11 +217,17 @@ class Platform:
         print("Details by DAT Group:")
         for group, count in stats.items():
             known_sum += count
-            percentage = (count / self.total_source_ref) * 100 if self.total_source_ref > 0 else 0
+            percentage = (
+                (count / self.total_source_ref) * 100
+                if self.total_source_ref > 0
+                else 0
+            )
             print(f"  {group}: {percentage:.1f}%")
 
         if self.total_source_ref > 0:
-            other_percent = ((self.total_source_ref - known_sum) / self.total_source_ref) * 100
+            other_percent = (
+                (self.total_source_ref - known_sum) / self.total_source_ref
+            ) * 100
             print(f"  Unknown: {other_percent:.1f}%")
         else:
             print("  No source references found")
@@ -236,22 +254,29 @@ class Platform:
         Wrapper function to run all necessary setup steps for mapping.
         This orchestrates the initial data processing pipeline.
         """
-        self.update_dats() # find all DAT files and assign ROM directories
-        self.register_dat_media() # register all DAT files to MediaRegistry
-        self.register_softlist() # load and register software list to MediaRegistry
+        self.update_dats()  # find all DAT files and assign ROM directories
+        self.register_dat_media()  # register all DAT files to MediaRegistry
+        self.register_softlist()  # load and register software list to MediaRegistry
         self.print_stats()
-
 
     def print_stats(self, zip=False, chd=False):
         # Print statistics after processing
-        print(f'found:\n  {self.total_source_ref} / {self.total_parts} individual discs contain source references')
-        print(f'  {self.total_source_dat} individual discs can be matched to dat sources')
-        print(f'  {self.total_source_found} / {self.total_softlist_entries} Software List Entries have DAT matches')
+        print(
+            f"found:\n  {self.total_source_ref} / {self.total_parts} individual discs contain source references"
+        )
+        print(
+            f"  {self.total_source_dat} individual discs can be matched to dat sources"
+        )
+        print(
+            f"  {self.total_source_found} / {self.total_softlist_entries} Software List Entries have DAT matches"
+        )
         if zip:
-            print(f'  {self.total_source_rom} valid zip files')
+            print(f"  {self.total_source_rom} valid zip files")
         if chd:
-            print(f'  {self.chd_count} chds already exist in the destination directory\n')
-        print('\n')
+            print(
+                f"  {self.chd_count} chds already exist in the destination directory\n"
+            )
+        print("\n")
         self.print_source_stats()
 
     def update_dats(self):
@@ -261,15 +286,24 @@ class Platform:
         - For manual mode: User selects a single ROM directory for each DAT
         """
         for dat_directory_path in self.dat_directories.keys():
-            if not os.path.exists(dat_directory_path) or not os.path.isdir(dat_directory_path):
-                print(f"Directory `{dat_directory_path}` does not exist or is not a directory.")
+            if not os.path.exists(dat_directory_path) or not os.path.isdir(
+                dat_directory_path
+            ):
+                print(
+                    f"Directory `{dat_directory_path}` does not exist or is not a directory."
+                )
                 continue
 
-            dat_files = [f for f in sorted(os.listdir(dat_directory_path))
-                        if f.endswith(".xml") or f.endswith(".dat")]
+            dat_files = [
+                f
+                for f in sorted(os.listdir(dat_directory_path))
+                if f.endswith(".xml") or f.endswith(".dat")
+            ]
 
             # RomVault: Generate base ROM directory from DAT dir
-            rom_dir_base = dat_directory_path.replace(self.pm.datroot, self.pm.romroot, 1)
+            rom_dir_base = dat_directory_path.replace(
+                self.pm.datroot, self.pm.romroot, 1
+            )
 
             dats_in_dir = []
 
@@ -286,17 +320,24 @@ class Platform:
                 if self.pm.romvault and len(dat_files) > 1:
                     # check subdirectory based on DAT metadata name
                     rom_subdir = os.path.join(rom_dir_base, dat.name)
-                    if not os.path.exists(rom_subdir):
-                        print(f"RomVault subdirectory `{rom_subdir}` does not exist.")
-                        continue
                     dat.rom_path = rom_subdir
+                    if not os.path.exists(rom_subdir):
+                        print(
+                            f"RomVault subdirectory `{rom_subdir}` does not exist. ROM files can be added later."
+                        )
                 else:
                     # Use the base ROM directory for single DATs or manual mode
-                    if self.pm.romvault and os.path.exists(rom_dir_base):
+                    if self.pm.romvault:
                         dat.rom_path = rom_dir_base
+                        if not os.path.exists(rom_dir_base):
+                            print(
+                                f"RomVault directory `{rom_dir_base}` does not exist. ROM files can be added later."
+                            )
                     elif not self.pm.romvault:
                         prompt_msg = f"Select ROM directory for DAT: {file_name}"
-                        rom_subdir = select_directory(prompt_msg, start_dir=self.pm.romroot)
+                        rom_subdir = select_directory(
+                            prompt_msg, start_dir=self.pm.romroot
+                        )
                         dat.rom_path = rom_subdir
 
                 dats_in_dir.append(dat)
@@ -307,22 +348,26 @@ class Platform:
         self._init_redump_db()
         match_failures = []
         url_parts = self.softwarelist.unmatched_redump_url_parts
-        redump_base = 'http://redump.org'
+        redump_base = "http://redump.org"
         for part in url_parts:
-            url = part.redump_url.replace(redump_base,'')
+            url = part.redump_url.replace(redump_base, "")
             if url in self.redump_db.entries_by_url:
                 entry = self.redump_db.entries_by_url[url]
                 hashkey = self.redump_db.entries_by_url[url].site_hash
                 if hashkey in self.mr.media_hashes:
                     dat_entry_name = self.mr.media_hashes[hashkey].dat_game_entry.name
-                    print(f"✅ Matched existing media: {part.part_of.name} to {dat_entry_name}")
+                    print(
+                        f"✅ Matched existing media: {part.part_of.name} to {dat_entry_name}"
+                    )
                     if part.game_entry is not None:
-                        print('    [Info] replacing existing source references for this part')
+                        print(
+                            "    [Info] replacing existing source references for this part"
+                        )
                     part.game_entry = self.mr.media_hashes[hashkey].dat_game_entry
                     part.cdmedia = self.mr.media_hashes[hashkey]
             else:
-                print(f'{part.redump_url} no longer in redump, removing reference')
-                part.redump_url = ''
+                print(f"{part.redump_url} no longer in redump, removing reference")
+                part.redump_url = ""
                 match_failures.append(part)
         return match_failures
 
@@ -330,11 +375,14 @@ class Platform:
         """Start the validation process through ProcessManager"""
         if not self.process_manager:
             raise Exception("ProcessManager not initialized")
-        
+
         # Initialize handlers for the process manager
         self.process_manager.initialize_handlers()
-        
-        from rom_management.processing.archive_validation import ArchiveValidationProcess
+
+        from rom_management.processing.archive_validation import (
+            ArchiveValidationProcess,
+        )
+
         return self.process_manager.start_process(ArchiveValidationProcess)
 
     def start_chd_build_process(self) -> dict:
@@ -342,7 +390,6 @@ class Platform:
         if not self.process_manager:
             raise Exception("ProcessManager not initialized")
         return self.process_manager.start_chd_build()
-
 
     def validate_matched_entries(self) -> None:
         """
@@ -360,7 +407,9 @@ class Platform:
             # Skip if this media signature is already validated
             media_sig = media.sha1_signature or media.crc_signature
             if media_sig in self.state.matched_media_sigs:
-                print(f". ✅ {media.dat_game_entry.name} already validated, skipping zip check")
+                print(
+                    f". ✅ {media.dat_game_entry.name} already validated, skipping zip check"
+                )
                 # Add to matched_buildable_media since we know it's valid
                 self.matched_buildable_media[media] = None
                 continue
@@ -370,33 +419,47 @@ class Platform:
                 continue
 
             if media.dat_game_entry is None or media.softlist_part is None:
-                print(f"  ⚠️  {media.dat_game_entry.name}: Skipping - No valid DAT game entry or softlist part reference")
+                print(
+                    f"  ⚠️  {media.dat_game_entry.name}: Skipping - No valid DAT game entry or softlist part reference"
+                )
                 continue
 
             # Find ROM directory for this DAT
             rom_dir = media.dat_game_entry.dat.rom_path
             if not os.path.isdir(rom_dir):
-                print(f"  ⚠️  {media.dat_game_entry.name}: Skipping - ROM directory does not exist: {rom_dir}")
+                print(
+                    f"  ⚠️  {media.dat_game_entry.name}: Skipping - ROM directory does not exist: {rom_dir}"
+                )
                 continue
             from rom_management.archive import MD5ScanRequiredException
+
             try:
                 # Find and validate zip
                 zip_path = zip_processor.find_valid_zip(media.dat_game_entry, rom_dir)
             except MD5ScanRequiredException:
-                user_input = input(f"   {media.dat_game_entry.name} requires full scan, Check Using MD5 (slow)? (y/n): ").strip().lower()
-                if user_input != 'y':
+                user_input = (
+                    input(
+                        f"   {media.dat_game_entry.name} requires full scan, Check Using MD5 (slow)? (y/n): "
+                    )
+                    .strip()
+                    .lower()
+                )
+                if user_input != "y":
                     continue
                 else:
-                    zip_path = zip_processor.find_valid_zip(media.dat_game_entry, rom_dir, md5=True)
+                    zip_path = zip_processor.find_valid_zip(
+                        media.dat_game_entry, rom_dir, md5=True
+                    )
 
             if zip_path is not None:
                 print(f"  ✅ Found valid zip: {media.dat_game_entry.name}")
                 media.zip_path = zip_path
-                self.matched_buildable_media[media] = None # Value doesn't matter, using key as an ordered set
+                self.matched_buildable_media[media] = (
+                    None  # Value doesn't matter, using key as an ordered set
+                )
             else:
                 print(f"  ⚠️  {media.dat_game_entry.name}: No valid zip found")
                 continue
-
 
     def build_chds_for_matched(self) -> dict:
         """
@@ -405,17 +468,29 @@ class Platform:
         """
         for media in self._media_to_process:
             # Check if CHD already exists and is validated
-            title = media.softlist_part.part_of.name if media.softlist_part and media.softlist_part.part_of else None
+            title = (
+                media.softlist_part.part_of.name
+                if media.softlist_part and media.softlist_part.part_of
+                else None
+            )
             if not title:
-                print(f"  ⚠️ Skipping - No valid softlist part or title for media ID {media.id}")
+                print(
+                    f"  ⚠️ Skipping - No valid softlist part or title for media ID {media.id}"
+                )
                 continue
 
             # Check if this CHD is already validated
-            expected_chd_path = os.path.join(self.chd_path, title, f"{media.softlist_part.disk_name}.chd")
-            if expected_chd_path in self.state.validated_chds_paths and os.path.exists(expected_chd_path):
+            expected_chd_path = os.path.join(
+                self.chd_path, title, f"{media.softlist_part.disk_name}.chd"
+            )
+            if expected_chd_path in self.state.validated_chds_paths and os.path.exists(
+                expected_chd_path
+            ):
                 existing_chd = CHD(chd_path=expected_chd_path)
                 if existing_chd.is_valid:
-                    print(f"✅ CHD already validated for {media.dat_game_entry.name}, skipping")
+                    print(
+                        f"✅ CHD already validated for {media.dat_game_entry.name}, skipping"
+                    )
                     self.validated_chds.add(existing_chd)
                     continue
                 else:
@@ -424,12 +499,21 @@ class Platform:
 
             elif os.path.exists(expected_chd_path):
                 matched_chd = CHD(chd_path=expected_chd_path)
-                print(f"⚠️  CHD already exists for {media.dat_game_entry.name} at {expected_chd_path}")
+                print(
+                    f"⚠️  CHD already exists for {media.dat_game_entry.name} at {expected_chd_path}"
+                )
 
                 # Create exception with existing version info
                 from rom_management.exceptions import CHDAlreadyExistsException
-                existing_version = matched_chd._get_chd_info().get('file_version') if matched_chd.is_valid else None
-                exception = CHDAlreadyExistsException(expected_chd_path, existing_version)
+
+                existing_version = (
+                    matched_chd._get_chd_info().get("file_version")
+                    if matched_chd.is_valid
+                    else None
+                )
+                exception = CHDAlreadyExistsException(
+                    expected_chd_path, existing_version
+                )
 
                 # Return navigation info with exception as payload
                 return {"menu": "existing_chd_menu", "payload": exception}
@@ -445,7 +529,9 @@ class Platform:
                 file_data.extract_and_process()
 
                 if not file_data.temp_dir.exists():
-                    raise Exception(f"Temp directory creation for {media.dat_game_entry.name} failed")
+                    raise Exception(
+                        f"Temp directory creation for {media.dat_game_entry.name} failed"
+                    )
 
                 # Get and apply handlers
                 handlers = self.get_relevant_handlers(media, file_data)
@@ -453,8 +539,10 @@ class Platform:
                 for handler in handlers:
                     try:
                         result = handler.handle(media, file_data)
-                        if not result.get('success', True):
-                            raise HandlerException(f"Handler {handler.name} failed: {result.get('error')}")
+                        if not result.get("success", True):
+                            raise HandlerException(
+                                f"Handler {handler.name} failed: {result.get('error')}"
+                            )
                     except SkipCurrentItemException:
                         print(f"Skipping item due to handler request")
                         continue
@@ -465,7 +553,9 @@ class Platform:
                 # Prepare for CHD conversion
                 toc_source = file_data.current_toc
 
-                matched_chd = CHD(source=media, base_path=self.chd_path, toc_source=toc_source)
+                matched_chd = CHD(
+                    source=media, base_path=self.chd_path, toc_source=toc_source
+                )
 
                 if matched_chd.exists and matched_chd.is_valid:
                     self.validated_chds.add(matched_chd)
@@ -480,7 +570,7 @@ class Platform:
                 continue
             finally:
                 # Clean up temp directory only if we're not retrying
-                if 'file_data' in locals() and file_data:
+                if "file_data" in locals() and file_data:
                     file_data.cleanup()
 
         # Return success navigation if all processing completes

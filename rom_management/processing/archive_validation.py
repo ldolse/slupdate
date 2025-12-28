@@ -35,7 +35,7 @@ class ArchiveValidationProcess(BaseProcess):
         for i, item in enumerate(self.items_to_process):
             if i < self.processed_items:
                 # Check if this item was processed successfully
-                media = self.items_to_process[i].media
+                media = self.items_to_process[i].part.cdmedia
                 if media in self.platform.matched_buildable_media:
                     success_count += 1
                 else:
@@ -102,7 +102,7 @@ class ArchiveValidationProcess(BaseProcess):
 
         # Find ROM directory for this DAT
         rom_dir = media.dat_game_entry.dat.rom_path
-        if not os.path.isdir(rom_dir):
+        if not rom_dir or not os.path.isdir(rom_dir):
             print(
                 f"  ⚠️  ROM directory does not exist for {media.dat_game_entry.name}: Skipping - {rom_dir}"
             )
