@@ -36,10 +36,37 @@ class Action(Enum):
     RETRY = ("retry", "Retry current item")
     OVERWRITE = ("overwrite", "Overwrite this CHD")
     SKIP_EXISTING = ("skip_existing", "Skip this CHD")
+    SET_OVERWRITE_PREFERENCE = ("set_overwrite_pref", "Always overwrite older CHDs")
+    SET_SKIP_PREFERENCE = ("set_skip_pref", "Always skip existing CHDs")
 
     # Common actions
     STOP = ("stop", "Stop processing")
     CONTINUE = ("continue", "Continue")
+
+
+@dataclass
+class CloneCDConversionParams:
+    """Parameters for CloneCD conversion operations"""
+
+    output_format: str  # 'cue' or 'cdrdao'
+    preserve_subchannel: bool = True
+
+
+@dataclass
+class LibcryptPatchingParams:
+    """Parameters for Libcrypt DRM patching operations"""
+
+    lsd_file_path: str
+    patch_options: Optional[dict] = None
+
+
+@dataclass
+class CHDConversionParams:
+    """Parameters for CHD conversion operations"""
+
+    chd_path: str
+    force_rebuild: bool = False
+    compression_level: Optional[int] = None
 
 
 class BaseProcessingItem(ABC):

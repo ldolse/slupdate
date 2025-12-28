@@ -11,6 +11,9 @@ from rom_management.processing.models import (
     BaseProcessingItem,
     MediaProcessingItem,
     PartProcessingItem,
+    CloneCDConversionParams,
+    LibcryptPatchingParams,
+    CHDConversionParams,
 )
 
 
@@ -47,12 +50,19 @@ class TestAction:
         assert Action.RETRY.value == "retry"
         assert Action.OVERWRITE.value == "overwrite"
         assert Action.SKIP_EXISTING.value == "skip_existing"
+        assert Action.SET_OVERWRITE_PREFERENCE.value == "set_overwrite_pref"
+        assert Action.SET_SKIP_PREFERENCE.value == "set_skip_pref"
 
     def test_chd_build_actions_display_names(self):
         """Test that CHD build actions have human-readable display names"""
         assert Action.RETRY.display_name == "Retry current item"
         assert Action.OVERWRITE.display_name == "Overwrite this CHD"
         assert Action.SKIP_EXISTING.display_name == "Skip this CHD"
+        assert (
+            Action.SET_OVERWRITE_PREFERENCE.display_name
+            == "Always overwrite older CHDs"
+        )
+        assert Action.SET_SKIP_PREFERENCE.display_name == "Always skip existing CHDs"
 
     def test_common_actions_values(self):
         """Test that common actions have correct internal values"""
@@ -63,6 +73,71 @@ class TestAction:
         """Test that common actions have human-readable display names"""
         assert Action.STOP.display_name == "Stop processing"
         assert Action.CONTINUE.display_name == "Continue"
+
+
+class TestCloneCDConversionParams:
+    """Test CloneCD conversion params dataclass"""
+
+    def test_clone_cd_params_creation(self):
+        from rom_management.processing.models import CloneCDConversionParams
+
+        params = CloneCDConversionParams(output_format="cue", preserve_subchannel=True)
+
+        assert params.output_format == "cue"
+        assert params.preserve_subchannel is True
+
+    def test_clone_cd_params_defaults(self):
+        from rom_management.processing.models import CloneCDConversionParams
+
+        params = CloneCDConversionParams(output_format="cdrdao")
+
+        assert params.preserve_subchannel is True  # Default value
+
+
+class TestLibcryptPatchingParams:
+    """Test Libcrypt patching params dataclass"""
+
+    def test_libcrypt_params_creation(self):
+        from rom_management.processing.models import LibcryptPatchingParams
+
+        params = LibcryptPatchingParams(
+            lsd_file_path="/path/to/file.lsd", patch_options={"option1": True}
+        )
+
+        assert params.lsd_file_path == "/path/to/file.lsd"
+        assert params.patch_options == {"option1": True}
+
+    def test_libcrypt_params_defaults(self):
+        from rom_management.processing.models import LibcryptPatchingParams
+
+        params = LibcryptPatchingParams(lsd_file_path="/path/to/file.lsd")
+
+        assert params.patch_options is None  # Default value
+
+
+class TestCHDConversionParams:
+    """Test CHD conversion params dataclass"""
+
+    def test_chd_params_creation(self):
+        from rom_management.processing.models import CHDConversionParams
+
+        params = CHDConversionParams(
+            chd_path="/path/to/file.chd",
+            force_rebuild=True,
+            compression_level=9,
+        )
+
+        assert params.chd_path == "/path/to/file.chd"
+        assert params.force_rebuild is True
+        assert params.compression_level == 9
+
+    def test_chd_params_defaults(self):
+        from rom_management.processing.models import CHDConversionParams
+
+        params = CHDConversionParams(chd_path="/path/to/file.chd")
+
+        assert params.force_rebuild is False  # Default value
+        assert params.compression_level is None  # Default value
 
 
 class TestBaseProcessingItem:
