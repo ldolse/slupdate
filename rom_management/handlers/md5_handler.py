@@ -1,37 +1,49 @@
 from .base import SpecialHandler
 from media_registry import CDMedia
 from rom_management.archive.zip_processor import MD5ScanRequiredException
-from menus.progress import ValidationProgressMenu
-from rom_management.processing import BaseProcess
-from rom_management.exceptions import UserActionRequiredException
+from typing import Optional, Dict, Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from rom_management.processing.models import Action, ResultObject
+    from rom_management.processing.base_process import BaseProcess
+
 
 class MD5ScanHandler(SpecialHandler):
+    """
+    Handles MD5 scan requirements during archive validation.
+    Provides options to scan current item, scan all, skip, or stop.
+    """
+
     def __init__(self):
         super().__init__("md5_scan_handler")
-        self.menu = ValidationProgressMenu()
 
-    def _handle(self, exception: Exception, process: 'BaseProcess') -> dict:
-        """Handle MD5 scanning requirements"""
-        pass
+    def execute_action(
+        self,
+        action: "Action",
+        process: "BaseProcess",
+        params: Optional[Dict[str, Any]] = None,
+    ) -> "ResultObject":
+        """
+        Execute MD5 scanning actions
 
-    def handle_user_action(self, action: str, process: 'BaseProcess') -> dict:
-        """Handle user actions from the menu"""
-        if action == 'skip':
-            process.current_item = None
-            return {'success': True}
-        elif action == 'skip_all':
-            process.current_item = None
-            process.skip_all = True
-            return {'success': True}
-        elif action == 'scan_md5':
+        Args:
+            action: The Action enum representing user's choice
+            process: The BaseProcess instance
+            params: Optional parameters for action
+
+        Returns:
+            ResultObject from executing the action
+        """
+        from rom_management.processing.models import (
+            ResultObject,
+            ProcessStatus,
+            Action,
+        )
+
+        if action == Action.SCAN_MD5:
             # Temporarily enable MD5 for this item
             original_use_md5 = process.use_md5
             process.use_md5 = True
-
-            # Mark that we're handling an exception to prevent iterator advancement
-            # This ensures the same item gets reprocessed
-            original_handling_exception = process._handling_exception
-            process._handling_exception = True
 
             try:
                 # Execute step with MD5 enabled
@@ -40,34 +52,45 @@ class MD5ScanHandler(SpecialHandler):
             finally:
                 # Restore original settings
                 process.use_md5 = original_use_md5
-                process._handling_exception = original_handling_exception
 
-        elif action == 'scan_all_md5':
+        elif action == Action.SCAN_ALL_MD5:
             # Set the preference to use MD5 for all items
             process.use_md5 = True
-            
-            # Mark that we're handling an exception to prevent iterator advancement
-            original_handling_exception = process._handling_exception
-            process._handling_exception = True
 
-            try:
-                # Execute step with MD5 enabled
-                result = process._execute_step()
-                return result
-            finally:
-                # Restore handling state (use_md5 preference remains True)
-                process._handling_exception = original_handling_exception
-        elif action == 'stop':
-            return {'complete': True, 'stopped_early': True}
-        else:
-            # Default behavior
-            return {'success': False}
+            # Execute step with MD5 enabled
+            return process._execute_step()
+
+        elif action == Action.SKIP:
+            # Skip current item
+            process.current_item = None
+            process.processed_items += 1
+            return ResultObject.success(message="Skipped MD5 scan for current item")
+
+        elif action == Action.SKIP_ALL:
+            # Skip all remaining MD5-required items
+            process.skip_all = True
+            process.current_item = None
+            process.processed_items += 1
+            return ResultObject.success(
+                message="Set skip_all preference for remaining items"
+            )
+
+        elif action == Action.STOP:
+            return ResultObject.complete(
+                total_processed=process.processed_items,
+                stopped_early=True,
+            )
+
+        return ResultObject.error(
+            error_type="UnknownAction",
+            message=f"Unknown action for MD5ScanHandler: {action.value}",
+        )
 
     def _requires_user_intervention(self, error: Exception) -> bool:
         """MD5 scan always requires user intervention"""
         return isinstance(error, MD5ScanRequiredException)
 
-    def validate_preconditions(self, media: CDMedia, file_data = None) -> bool:
+    def validate_preconditions(self, media: CDMedia, file_data=None) -> bool:
         """Check if this handler should be applied"""
         dat = media.dat_game_entry.dat
-        return any(hasattr(rom, 'md5') and not hasattr(rom, 'crc') for rom in dat.roms)
+        return any(hasattr(rom, "md5") and not hasattr(rom, "crc") for rom in dat.roms)

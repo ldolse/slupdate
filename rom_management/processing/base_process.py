@@ -1,26 +1,27 @@
-from typing import Dict, List, Any, TYPE_CHECKING
+from typing import Dict, List, Any, Optional, TYPE_CHECKING
 from abc import ABC, abstractmethod
+from rom_management.processing.models import Action, ResultObject
 
 if TYPE_CHECKING:
     from consoles import Platform
 
-class BaseProcess(ABC):
-    """Base class for long-running processes that may require user interaction"""
 
-    def __init__(self, platform: 'Platform'):
+class BaseProcess(ABC):
+    """
+    Base class for long-running processes that may require user interaction.
+
+    Processes manage their own state and use ResultObject for communication.
+    Exception-based control flow has been removed - processes return
+    ResultObject.pending_input() when user interaction is needed.
+    """
+
+    def __init__(self, platform: "Platform"):
         self.platform = platform
-        # Direct attributes instead of nested dict
         self.total_items = 0
         self.processed_items = 0
         self.current_item = None
-        self.exception_payload = None
         self.items_to_process = []
-
-        # Common preferences that all processes might need
         self.skip_all = False
-
-        self._handling_exception = False
-        self.handlers = {}  # Exception type -> handler mapping
         self._items_iterator = None
 
     @abstractmethod
@@ -30,37 +31,44 @@ class BaseProcess(ABC):
 
     @abstractmethod
     def register_handlers(self):
-        """Register handlers for this process type - should be overridden"""
+        """
+        Register handlers for this process type.
+
+        This method is for clarity during process setup.
+        Handlers are now called directly by processes, not via exceptions.
+        """
         pass
 
     @abstractmethod
-    def _execute_step(self) -> dict:
-        """Execute one step of the process - should be overridden"""
+    def _execute_step(self) -> ResultObject:
+        """
+        Execute one step of the process - should be overridden
+
+        Returns:
+            ResultObject indicating step result (SUCCESS, PENDING_INPUT, COMPLETE, ERROR)
+        """
         pass
 
-    def execute_step(self) -> dict:
-        """Execute one step of the process with exception handling"""
+    def execute_step(self) -> ResultObject:
+        """
+        Execute one step of the process
 
-        # Only get next item if we don't have a current item (i.e., starting fresh)
-        # AND we're not in the middle of handling an exception
-        if self.current_item is None and not self._handling_exception:
+        Returns:
+            ResultObject from executing the step
+        """
+        # Get next item if we don't have a current item
+        if self.current_item is None:
             if not self._get_next_item():
-                return {'complete': True}
+                return ResultObject.complete(total_processed=self.processed_items)
 
-        try:
-            result = self._execute_step()
+        result = self._execute_step()
 
-            # Only advance if processing was successful AND we're not in exception handling mode
-            if result.get('success', True) and not self._handling_exception:
-                self.processed_items += 1
-                # Clear current_item to indicate we're done with it
-                self.current_item = None
+        # Only advance on SUCCESS
+        if result.is_success():
+            self.processed_items += 1
+            self.current_item = None
 
-            return result
-
-        except Exception as e:
-            # Handle exceptions using the handler system
-            return self._handle_exception(e)
+        return result
 
     def _get_next_item(self) -> bool:
         """Get next item from iterator - preserves state between calls"""
@@ -75,69 +83,69 @@ class BaseProcess(ABC):
             self.current_item = None
             return False
 
-    def _handle_exception(self, exception: Exception) -> dict:
-        """Handle exceptions using the handler system"""
-        # Prevent recursion by checking if we're already handling an exception
-        if self._handling_exception:
-            # We're already in exception handling - just return an error
-            return {'needs_user_input': True, 'menu': 'error_menu', 'payload': str(exception)}
+    def handle_user_action(
+        self, action: "Action", params: Optional[Dict[str, Any]] = None
+    ) -> ResultObject:
+        """
+        Handle user actions from menus
 
-        self._handling_exception = True
+        Args:
+            action: The Action enum representing user's choice
+            params: Optional parameters for the action
 
-        try:
-            # Find a handler for this exception type
-            handler = self.handlers.get(type(exception))
+        Returns:
+            ResultObject from handling the action
+        """
+        # Find handler for this action type
+        handler = self._get_handler_for_action(action)
 
-            if handler:
-                try:
-                    # Let the handler deal with this exception
-                    result = handler.handle(exception, self)
-
-                    if isinstance(result, dict):
-                        return result
-                    else:
-                        # Handler resolved the exception, continue processing
-                        self._handling_exception = False
-                        return {'continue': True}
-                except Exception as e:
-                    # If handler can't resolve, re-raise for menu handling
-                    if hasattr(e, 'menu_class_name'):
-                        self._handling_exception = False
-                        raise e  # Re-raise the exception with menu_class_name
-                    else:
-                        # Re-raise the original exception for generic handling
-                        raise e
-            else:
-                # No handler found, re-raise to be handled by generic error handling
-                raise exception
-        finally:
-            self._handling_exception = False
-
-    def handle_user_action(self, action: str) -> dict:
-        """Handle user actions from menus"""
-        # Get current exception if any
-        current_exception = self.exception_payload
-
-        if current_exception and type(current_exception) in self.handlers:
-            # Delegate to handler for this exception type
-            return self.handlers[type(current_exception)].handle_user_action(action, self)
+        if handler:
+            return handler.execute_action(action, self, params)
         else:
-            # Default handling for actions not tied to specific exceptions
-            return self._handle_default_user_action(action)
+            # Handle default actions
+            return self._handle_default_action(action)
 
-    def _handle_default_user_action(self, action: str) -> dict:
-        """Handle user actions not tied to specific exceptions"""
-        if action == 'stop':
-            return {'complete': True, 'stopped_early': True}
-        # Default behavior - don't advance index
-        return {'success': False}
+    def _get_handler_for_action(self, action: "Action"):
+        """
+        Find handler for given action type.
+
+        Override in subclasses if needed to map actions to handlers.
+
+        Args:
+            action: The Action enum
+
+        Returns:
+            Handler instance or None
+        """
+        return None
+
+    def _handle_default_action(self, action: "Action") -> ResultObject:
+        """
+        Handle actions not tied to specific handlers
+
+        Args:
+            action: The Action enum
+
+        Returns:
+            ResultObject from handling the action
+        """
+        if action == Action.STOP:
+            return ResultObject.complete(
+                total_processed=self.processed_items,
+                stopped_early=True,
+            )
+
+        return ResultObject.error(
+            error_type="UnknownAction",
+            message=f"Unknown action: {action.value}",
+        )
 
     def get_progress(self) -> dict:
         """Return current progress information"""
         return {
-            'processed': self.processed_items,
-            'total': self.total_items,
-            'percentage': self._calculate_progress_percentage()
+            "processed": self.processed_items,
+            "total": self.total_items,
+            "percentage": self._calculate_progress_percentage(),
         }
 
     def _calculate_progress_percentage(self) -> float:
@@ -145,7 +153,6 @@ class BaseProcess(ABC):
         if self.total_items == 0:
             return 0.0
         return (self.processed_items / self.total_items) * 100
-
 
     def set_items_to_process(self, items: List[Any]):
         """Set the list of items to process"""
