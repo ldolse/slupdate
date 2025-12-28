@@ -1,4 +1,7 @@
 from menus.menu_system import BaseMenu, MenuItem
+from rom_management.processing.models import PendingInputPayload, Action
+from typing import Optional, Tuple
+
 
 class MainMenu(BaseMenu):
     def __init__(self):
@@ -33,6 +36,12 @@ class MainMenu(BaseMenu):
                 requires_platform = False
             )
         ]
+
+    def display_and_get_input(
+        self, payload: PendingInputPayload
+    ) -> Tuple[Action, Optional[dict]]:
+        """MainMenu does not require user input - should not be called"""
+        raise NotImplementedError("MainMenu does not support process-based user input")
 
     def _save_settings(self, platform_manager):
         """Method that will be called with the platform manager when selected"""

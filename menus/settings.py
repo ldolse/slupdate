@@ -2,6 +2,9 @@ from menus.menu_system import BaseMenu, MenuItem
 from consoles import Platform, PlatformManager
 from typing import List, Tuple
 from utils.utils import reconfigure_settings, list_menu
+from rom_management.processing.models import PendingInputPayload, Action
+from typing import Optional
+
 
 class SettingsMenu(BaseMenu):
     def __init__(self):
@@ -39,6 +42,14 @@ class SettingsMenu(BaseMenu):
             )
         ]
 
+    def display_and_get_input(
+        self, payload: PendingInputPayload
+    ) -> Tuple[Action, Optional[dict]]:
+        """SettingsMenu does not require user input - should not be called"""
+        raise NotImplementedError(
+            "SettingsMenu does not support process-based user input"
+        )
+
     @staticmethod
     def _reset_platform(platform: Platform) -> None:
         """Reset the current platform to its default state."""
@@ -59,7 +70,7 @@ class SettingsMenu(BaseMenu):
 
     @staticmethod
     def _platform_select(platform_manager: PlatformManager) -> None:
-        """Select a platform from the list of available platforms."""
+        """Select a platform from list of available platforms."""
         selected_platform = platform_manager.select_platform(show_all=True)
         if selected_platform:
             print(f"Selected platform: {selected_platform.name}")
@@ -86,6 +97,12 @@ class DatMenu(BaseMenu):
                 requires_platform = False
             )
         ]
+
+    def display_and_get_input(
+        self, payload: PendingInputPayload
+    ) -> Tuple[Action, Optional[dict]]:
+        """DatMenu does not require user input - should not be called"""
+        raise NotImplementedError("DatMenu does not support process-based user input")
 
     @staticmethod
     def _del_datpath_function(platform: Platform) -> None:

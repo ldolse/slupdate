@@ -3,12 +3,15 @@ import os, sys, traceback
 import inquirer
 from consoles import Platform
 from rom_management import CHD
-from rom_management.exceptions import HandlerException, UserActionRequiredException, CHDAlreadyExistsException
+from rom_management.exceptions import HandlerException
 from modules.software_list import update_softlist_chd_sha1s
 from modules.chd import (
     create_chd_from_zip,
     chdman_info,
 )
+from rom_management.processing.archive_validation import ArchiveValidationProcess
+from rom_management.processing.models import ResultObject, PendingInputPayload, Action
+from typing import Optional, Tuple
 
 # disabled by default, allows the script to populate chd sha1s on subsequent runs
 # only enable if CHD destination folder ONLY contains chds created by this script
@@ -181,34 +184,120 @@ class CHDBuildMenu(BaseMenu):
             )
         ]
 
-    @staticmethod
-    def _validate_roms(platform: Platform) -> None:
-        return platform.start_validation_process()
-    
-    @staticmethod
-    def _validate_roms_old(platform: Platform) -> None:
-        return platform.validate_matched_entries()
+    def display_and_get_input(
+        self, payload: PendingInputPayload
+    ) -> Tuple[Action, Optional[dict]]:
+        """CHDBuildMenu does not require user input - should not be called"""
+        raise NotImplementedError(
+            "CHDBuildMenu does not support process-based user input"
+        )
 
     @staticmethod
-    def _chd_builder(platform: Platform) -> dict:
-        # check chdman version
+    def _validate_roms(platform: Platform, menu_system: "MenuSystem") -> ResultObject:
+        """Run validation process via MenuSystem"""
+
+        # Run the validation process
+        result = menu_system.run_process(
+            ArchiveValidationProcess, destination_menu="chd_build_menu"
+        )
+
+        # If None, process is waiting for user input - return success
+        # Control will be resumed after user interaction
+        if result is None:
+            from rom_management.processing.models import ResultObject
+
+            return ResultObject.success(message="Waiting for user input...")
+
+        # Process completed or errored
+        return result
+
+    @staticmethod
+    def _validate_roms_old(
+        platform: Platform, menu_system: "MenuSystem"
+    ) -> ResultObject:
+        """Old validation method - for comparison"""
+        # Keep as is for now, will remove later
+        platform.validate_matched_entries()
+        return ResultObject.success(message="Validation complete (old method)")
+
+
+
+
+    @staticmethod
+    def _chd_builder(platform: Platform, menu_system: "MenuSystem") -> ResultObject:
+        """Build CHDs from validated ROMs"""
+
+        # Check chdman version
+        check = CHD(check_chdman=True)
+        if not check.chdman_uptodate:
+            print("Outdated Chdman, please upgrade to a recent version")
+            from rom_management.processing.models import ResultObject
+
+            return ResultObject.complete(destination_menu="chd_build_menu")
+
+        if len(platform.matched_buildable_media) == 0:
+            print('No valid media found, please check source ROMs and DAT files, and ensure mapping is complete.')
+            from rom_management.processing.models import ResultObject
+
+            return ResultObject.complete(destination_menu="chd_build_menu")
+
+        # Confirm with user
+        build = inquirer.confirm("Begin Creating CHDs?", default=False)
+        if not build:
+            return ResultObject.complete(destination_menu="chd_build_menu")
+
+        try:
+            # This will eventually be converted to a process
+            return platform.start_chd_build_process()
+
+        except HandlerException as e:
+            # Return error result with handler_error_menu as destination
+            return ResultObject.error(
+                error_type="HandlerException",
+                message=str(e),
+                exception=e,
+                destination_menu="handler_error_menu",
+            )
+
+        # If None, process is waiting for user input - return success
+        # Control will be resumed after user interaction
+        if result is None:
+            return ResultObject.success(message="Waiting for user input...")
+
+        # Process completed or errored
+        return result
+
+    @staticmethod
+    def _chd_builder(platform: Platform, menu_system: "MenuSystem") -> ResultObject:
+        """Build CHDs from validated ROMs"""
+
+        # Check chdman version
         check = CHD(check_chdman=True)
         if not check.chdman_uptodate:
             print('Outdated Chdman, please upgrade to a recent version')
-            return {"menu": "chd_build_menu", "payload": None}
+            return ResultObject.complete(destination_menu="chd_build_menu")
+
         if len(platform.matched_buildable_media) == 0:
             print('No valid media found, please check source ROMs and DAT files, and ensure mapping is complete.')
-            return {"menu": "chd_build_menu", "payload": None}
-        build = inquirer.confirm('Begin Creating CHDs?', default=False)
-        if build:
-            try:
-                return platform.start_chd_build_process()
+            return ResultObject.complete(destination_menu="chd_build_menu")
 
-            except HandlerException as e:
-                # Let the menu system handle this by returning navigation info
-                return {"menu": "handler_error_menu", "payload": e}
-        else:
-            return {"menu": "chd_build_menu", "payload": None}
+        # Confirm with user
+        build = inquirer.confirm('Begin Creating CHDs?', default=False)
+        if not build:
+            return ResultObject.complete(destination_menu="chd_build_menu")
+
+        try:
+            # This will eventually be converted to a process
+            return platform.start_chd_build_process()
+
+        except HandlerException as e:
+            # Return error result with handler_error_menu as destination
+            return ResultObject.error(
+                error_type="HandlerException",
+                message=str(e),
+                exception=e,
+                destination_menu="handler_error_menu",
+            )
 
 class HandlerErrorMenu(BaseMenu):
     def __init__(self, name: str = "handler_error_menu"):
@@ -225,6 +314,14 @@ class HandlerErrorMenu(BaseMenu):
         self.payload = payload
         if payload:
             self.message = f"Handler Error: {payload}"
+
+    def display_and_get_input(
+        self, payload: PendingInputPayload
+    ) -> Tuple[Action, Optional[dict]]:
+        """Display error prompt and get user action"""
+        # This menu is deprecated - use GenericQueryMenu instead
+        print("HandlerErrorMenu is deprecated - using GenericQueryMenu")
+        return (Action.SKIP, None)
 
     @staticmethod
     def retry() -> str:
@@ -254,6 +351,14 @@ class CHDErrorMenu(BaseMenu):
         self.payload = payload
         if payload:
             self.message = f"Error processing {payload.chd_path}: {payload.error_message}"
+
+    def display_and_get_input(
+        self, payload: PendingInputPayload
+    ) -> Tuple[Action, Optional[dict]]:
+        """Display error prompt and get user action"""
+        # This menu is deprecated - use GenericQueryMenu instead
+        print("CHDErrorMenu is deprecated - using GenericQueryMenu")
+        return (Action.SKIP, None)
 
     @staticmethod
     def skip() -> str:
@@ -285,6 +390,14 @@ class ExistingCHDMenu(BaseMenu):
         if payload:
             existing_version = payload.existing_version or "Unknown"
             self.message = f"CHD already exists at {payload.chd_path}\nExisting version: {existing_version}"
+
+    def display_and_get_input(
+        self, payload: PendingInputPayload
+    ) -> Tuple[Action, Optional[dict]]:
+        """Display CHD overwrite prompt and get user action"""
+        # This menu is deprecated - use GenericQueryMenu instead
+        print("ExistingCHDMenu is deprecated - using GenericQueryMenu")
+        return (Action.SKIP_EXISTING, None)
 
     @staticmethod
     def overwrite(platform: Platform) -> str:

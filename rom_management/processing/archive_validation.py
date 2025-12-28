@@ -127,7 +127,7 @@ class ArchiveValidationProcess(BaseProcess):
 
             # Return pending input for user decision
             return ResultObject.pending_input(
-                query_id="confirm_scan_md5",
+                query_id="generic_query",
                 message="This DAT requires full MD5 scan (slow)",
                 item=PartProcessingItem(current_part),
                 valid_actions=[

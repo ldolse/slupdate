@@ -15,6 +15,9 @@ from modules.mapping import (
     fuzzy_hash_compare,
 )
 
+from rom_management.processing.models import PendingInputPayload, Action
+from typing import Optional, Tuple
+
 script_dir = os.path.dirname(os.path.abspath(__file__))
 
 def process_interactive_matches(interactive_matches,platform: Platform,match_type):
@@ -121,6 +124,12 @@ class MapMenu(BaseMenu):
     def _unknown_list_function(self, platform: Platform) -> None:
         self._list_soft_entries(platform)
 
+    def display_and_get_input(
+        self, payload: PendingInputPayload
+    ) -> Tuple[Action, Optional[dict]]:
+        """MapMenu does not require user input - should not be called"""
+        raise NotImplementedError("MapMenu does not support process-based user input")
+
 
 class MapStageTwo(BaseMenu):
     def __init__(self):
@@ -208,6 +217,11 @@ class MapStageTwo(BaseMenu):
     def _name_serial_automap_function(self, platform: Platform) -> None:
         self.automated_mapping(platform,'name_serial')
 
+    def display_and_get_input(
+        self, payload: PendingInputPayload
+    ) -> Tuple[Action, Optional[dict]]:
+        """MapMenu does not require user input - should not be called"""
+        raise NotImplementedError("MapMenu does not support process-based user input")
 
 
 
@@ -279,4 +293,9 @@ class MapStageThree(BaseMenu):
             if proceed:
                 update_soft_dict(platform.key,confirmed)
 
+    def display_and_get_input(
+        self, payload: PendingInputPayload
+    ) -> Tuple[Action, Optional[dict]]:
+        """MapMenu does not require user input - should not be called"""
+        raise NotImplementedError("MapMenu does not support process-based user input")
 

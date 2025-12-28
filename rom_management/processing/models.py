@@ -163,6 +163,7 @@ class CompletePayload(BasePayload):
     failed: int = 0
     stopped_early: bool = False
     metadata: Optional[dict] = None
+    destination_menu: Optional[str] = "main_menu"
 
 
 @dataclass
@@ -181,6 +182,15 @@ class ErrorPayload(BasePayload):
     message: str
     exception: Optional[Exception] = None
     context: Optional[dict] = None
+    destination_menu: Optional[str] = "main_menu"
+
+
+@dataclass
+class NavigationPayload(BasePayload):
+    """Payload for successful navigation from MenuItem execution"""
+
+    target_menu: str
+    payload: Optional[dict] = None
 
 
 @dataclass
@@ -261,6 +271,7 @@ class ResultObject:
         failed: int = 0,
         stopped_early: bool = False,
         metadata: Optional[dict] = None,
+        destination_menu: Optional[str] = "main_menu",
     ) -> "ResultObject":
         """Create a result indicating the process is complete"""
         return ResultObject(
@@ -271,6 +282,7 @@ class ResultObject:
                 failed=failed,
                 stopped_early=stopped_early,
                 metadata=metadata,
+                destination_menu=destination_menu,
             ),
         )
 
@@ -290,6 +302,7 @@ class ResultObject:
         message: str,
         exception: Optional[Exception] = None,
         context: Optional[dict] = None,
+        destination_menu: Optional[str] = "main_menu",
     ) -> "ResultObject":
         """Create an error result"""
         return ResultObject(
@@ -299,5 +312,6 @@ class ResultObject:
                 message=message,
                 exception=exception,
                 context=context,
+                destination_menu=destination_menu,
             ),
         )

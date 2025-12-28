@@ -1,5 +1,8 @@
 from .menu_system import BaseMenu, MenuItem
 from rom_management.processing.base_process import BaseProcess
+from rom_management.processing.models import PendingInputPayload, Action
+from typing import Optional, Tuple
+
 
 class ValidationProgressMenu(BaseMenu):
     def __init__(self):
@@ -59,3 +62,14 @@ class ValidationProgressMenu(BaseMenu):
     @staticmethod
     def stop(self, menu_system) -> str:
         return menu_system.current_platform_obj.process_manager.continue_processing('stop')
+
+    def display_and_get_input(
+        self, payload: PendingInputPayload
+    ) -> Tuple[Action, Optional[dict]]:
+        """
+        Implementation of new interface.
+        This menu is deprecated - use GenericQueryMenu instead.
+        """
+        # This should not be called in new architecture
+        print("ValidationProgressMenu is deprecated - using GenericQueryMenu")
+        return (Action.SKIP, None)
