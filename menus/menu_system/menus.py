@@ -86,26 +86,22 @@ class MenuItem:
             if self.action:
                 result = self.action(*args)
 
-            # Handle different return types
+            # Handle different result types
             if isinstance(result, ResultObject):
-                # New style - already a ResultObject
                 return result
-            elif isinstance(result, dict):
-                # Legacy style - convert to ResultObject
-                menu = result.get("menu", self.target_name)
-                return ResultObject.complete(total_processed=1, destination_menu=menu)
-            elif isinstance(result, str):
-                # Legacy style - string menu name
-                return ResultObject.complete(total_processed=1, destination_menu=result)
             elif result is None:
-                # Default to target_name
+                # No action function (e.g., Exit, or navigation-only items)
+                # Navigate to target menu
                 return ResultObject.complete(
-                    total_processed=1, destination_menu=self.target_name
+                    total_processed=0, destination_menu=self.target_name
                 )
             else:
-                # Unknown type - default
+                # Unexpected return type - should not happen
+                print(
+                    f"[WARNING] Action function returned unexpected type: {type(result)}"
+                )
                 return ResultObject.complete(
-                    total_processed=1, destination_menu=self.target_name
+                    total_processed=0, destination_menu=self.target_name
                 )
 
         except TypeError as te:
@@ -299,19 +295,17 @@ class MenuSystem:
         return result
 
     def navigate_to(self, navigation_info) -> None:
-        """Handle both ResultObject and legacy dict navigation"""
-
+        """Handle ResultObject navigation"""
         if isinstance(navigation_info, ResultObject):
             self._handle_result_navigation(navigation_info)
-        else:
-            self._handle_dict_navigation(navigation_info)
+        # No else branch - all navigation uses ResultObject
 
     def _handle_result_navigation(self, result: "ResultObject") -> None:
         """Process-aware navigation logic"""
         if result.is_complete():
             # Navigate to destination menu specified in payload
             target = result.payload.destination_menu
-            self._legacy_navigate_to(target, result.payload)
+            self._navigate_to_menu(target, result.payload)
 
         elif result.requires_input():
             # Navigate to query handler menu
@@ -321,7 +315,7 @@ class MenuSystem:
             handler._pending_result = result
 
             # Navigate to the handler menu
-            self._legacy_navigate_to(handler.name, result.payload)
+            self._navigate_to_menu(handler.name, result.payload)
 
         elif result.is_success():
             # SUCCESS means continue with current state - no navigation needed
@@ -330,13 +324,10 @@ class MenuSystem:
         elif result.is_error():
             # Navigate to error destination or main menu
             target = result.payload.destination_menu or "main_menu"
-            self._legacy_navigate_to(target, result.payload)
+            self._navigate_to_menu(target, result.payload)
 
-    def _handle_dict_navigation(self, navigation_info: dict) -> None:
-        """Legacy dict navigation - unchanged logic"""
-        target = navigation_info.get("menu")
-        payload = navigation_info.get("payload")
-
+    def _navigate_to_menu(self, target: str, payload: Optional[dict] = None) -> None:
+        """Navigate to a menu with optional payload injection"""
         if target is None:
             return
 
@@ -348,25 +339,7 @@ class MenuSystem:
         ):
             self.menus[target].set_payload(payload)
 
-        if self.current_menu_name:
-            if self.current_menu_name != target:
-                if not any(item["menu_name"] == target for item in self.stack):
-                    self.stack.append({"menu_name": self.current_menu_name})
-
-        self.current_menu_name = target
-
-    def _legacy_navigate_to(self, target: str, payload: Optional[dict] = None) -> None:
-        """Shared navigation logic"""
-        if target is None:
-            return
-
-        if (
-            payload
-            and target in self.menus
-            and hasattr(self.menus[target], "set_payload")
-        ):
-            self.menus[target].set_payload(payload)
-
+        # Manage navigation stack
         if self.current_menu_name:
             if self.current_menu_name != target:
                 if not any(item["menu_name"] == target for item in self.stack):
@@ -476,7 +449,7 @@ class MenuSystem:
         # Process finished - handle navigation
         if result.is_complete():
             target = result.payload.destination_menu or "main_menu"
-            self._legacy_navigate_to(target, result.payload)
+            self._navigate_to_menu(target, result.payload)
         elif result.is_error():
             target = result.payload.destination_menu or "main_menu"
-            self._legacy_navigate_to(target, result.payload)
+            self._navigate_to_menu(target, result.payload)

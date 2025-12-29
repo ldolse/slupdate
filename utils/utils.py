@@ -1,4 +1,3 @@
-import glob
 import os, sys
 import re
 import pickle
@@ -7,6 +6,7 @@ import builtins
 import inquirer
 from requests.adapters import HTTPAdapter, Retry
 import requests
+from rom_management.processing.models import ResultObject
 
 def requests_retry_session(
     retries=4,
@@ -225,3 +225,35 @@ def reconfigure_settings(instance: object, settings_list: list[tuple[str, str, s
             update_directory(choice_key)
         elif any(key[0] == choice_key and key[2] == "boolean" for key in settings_list):
             update_boolean(choice_key)
+
+def handle_unimplemented_function(func_name: str, exception: Exception) -> ResultObject:
+    """
+    Utility function to handle unimplemented functions that still access old dict structures.
+
+    This catches AttributeError exceptions where Platform objects don't have the old
+    dict attributes (e.g., 'software_list_data') and returns a safe ResultObject.
+
+    Args:
+        func_name: Name of the function that failed
+        exception: The exception that was caught
+
+    Returns:
+        ResultObject indicating the function is not yet implemented
+    """
+    if isinstance(exception, AttributeError):
+        attr_name = str(exception).split("'")[1] if "'" in str(exception) else "unknown"
+        print(
+            f"\n[NOT IMPLEMENTED] Function '{func_name}' accesses '{attr_name}' from old dict structure."
+        )
+        print(
+            f"[NOT IMPLEMENTED] This will be refactored to use Platform class methods in a future update."
+        )
+        print(f"[NOT IMPLEMENTED] Returning to menu...\n")
+        return ResultObject.complete(total_processed=0)
+    else:
+        print(f"\n[ERROR] Unexpected error in {func_name}: {exception}\n")
+        return ResultObject.error(
+            error_type=type(exception).__name__,
+            message=str(exception),
+            exception=exception,
+        )

@@ -12,6 +12,7 @@ import inquirer
 from consoles import PlatformManager, Platform
 from utils.utils import get_script_path
 from menus.menu_system import MenuSystem
+from rom_management.processing.models import ResultObject
 from menus import (
     MainMenu,
     SettingsMenu,
@@ -240,7 +241,9 @@ if __name__ == "__main__":
     system.register(CHDBuildMenu())
 
     # Initialize the main menu
-    system.navigate_to({"menu": "main_menu", "payload": None})  # Start at root menu
+    system.navigate_to(
+        ResultObject.complete(total_processed=0, destination_menu="main_menu")
+    )  # Start at root menu
 
     while True:
         current_menu = system.current_menu
