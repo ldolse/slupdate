@@ -203,6 +203,7 @@ def load_or_create_platform_manager():
 
     return pm
 
+
 def configure_initial_platform(platform_manager: PlatformManager):
     """Ensure at least one platform has a DAT directory and ROM folder."""
     print("\nConfiguring initial platform with DAT/ROM directories.")
@@ -213,6 +214,7 @@ def configure_initial_platform(platform_manager: PlatformManager):
     else:
         print("No platform selected. Exiting.")
         sys.exit(0)
+
 
 if __name__ == "__main__":
     platform_manager = load_or_create_platform_manager()
@@ -246,43 +248,15 @@ if __name__ == "__main__":
             print("Invalid menu state! Name:", system.current_menu)
             break
 
-        # Special handling for query menus - they handle their own display
-        if hasattr(current_menu, "display_and_get_input") and hasattr(
-            current_menu, "execute"
-        ):
-            # Query menu handles its own display and input
-            execute_method = getattr(current_menu, "execute")
-            result = execute_method(system)
-            if result.is_complete():
-                system.navigate_to(result.payload.destination_menu)
-            elif result.is_success():
-                # Query completed, continue to current menu (will be set by resume_process)
-                pass
-            continue
+        # Render menu and get user selection
+        selected_action = system.render(current_menu)
 
-        # Display the current menu
-        option_strings = [item.text for item in current_menu.options]
-        selected_item = inquirer.list_input(
-            current_menu.message, choices=option_strings, default=0, carousel=True
-        )
+        # Execute the action
+        result = system.execute_menu_action(current_menu, selected_action)
 
-        # Find which MenuItem corresponds to this text
-        chosen_item = None
-        for item in current_menu.options:
-            if item.text == selected_item:
-                chosen_item = item
+        # Handle exit
+        if result.is_complete():
+            if result.payload and result.payload.destination_menu == "Exit":
+                platform_manager.save()
+                print("Exiting...")
                 break
-
-        if not chosen_item:
-            print("Selection invalid")
-            continue
-
-        next_target_name = chosen_item.execute(system)
-        if next_target_name == None:  # Handled by 'is_back' logic in execute()
-            pass
-        elif next_target_name == "Exit":
-            platform_manager.save()
-            print("Exiting...")
-            break
-        else:
-            system.navigate_to(next_target_name)  # Update current menu

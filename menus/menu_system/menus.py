@@ -1,9 +1,10 @@
-from typing import Dict, Optional, Tuple, Type, TYPE_CHECKING
+from typing import Dict, Optional, Tuple, Type, TYPE_CHECKING, Any
 import inspect
 from abc import ABC, abstractmethod
 from consoles.platform_manager import PlatformManager
 from consoles import Platform
 from rom_management.processing.models import PendingInputPayload, Action, ResultObject
+from menus.ux_models import DisplayData
 
 if TYPE_CHECKING:
     from rom_management.processing.models import NavigationPayload, BaseProcess
@@ -117,7 +118,15 @@ class MenuItem:
 
 
 class BaseMenu(ABC):
-    """Base class for all menus"""
+    """Base class for all menus
+
+    All menus must implement:
+    - get_display_data(): Returns DisplayData for rendering
+    - execute_custom_action(): Handles user action from menu
+
+    This allows MenuSystem to render all menus the same way (currently
+    inquirer CLI, future web UI) without knowing menu implementation details.
+    """
 
     def __init__(self, name: str):
         self.name = name
@@ -130,14 +139,37 @@ class BaseMenu(ABC):
         self.payload = payload
 
     @abstractmethod
-    def display_and_get_input(
-        self, payload: PendingInputPayload
-    ) -> Tuple[Action, Optional[dict]]:
+    def get_display_data(self) -> DisplayData:
         """
-        Display menu prompt and return user's action and optional params.
-        New interface for process-aware menus.
+        Return display data for rendering by MenuSystem.
+
+        This method is called by MenuSystem.render() to get the data needed
+        to display the menu to the user. The rendering logic (inquirer CLI,
+        React web UI, etc.) is handled by MenuSystem, not the menu.
+
+        Returns:
+            DisplayData: Message and choices for rendering
         """
-        raise NotImplementedError
+        pass
+
+    @abstractmethod
+    def execute_custom_action(
+        self, menu_system: "MenuSystem", action: Any
+    ) -> ResultObject:
+        """
+        Execute a user action selected from the menu.
+
+        This method is called after the user makes a selection. The action
+        parameter is the value from the selected DisplayData choice.
+
+        Args:
+            menu_system: The MenuSystem instance for navigation/orchestration
+            action: The action selected by the user (MenuItem, Action enum, etc.)
+
+        Returns:
+            ResultObject: Result of executing the action
+        """
+        pass
 
     @property
     def options(self) -> list[MenuItem]:
@@ -210,6 +242,62 @@ class MenuSystem:
     def current_menu(self) -> BaseMenu:
         return self.menus.get(self.current_menu_name)
 
+    def render(self, menu: BaseMenu) -> Any:
+        """
+        Display menu and return selected action/value.
+
+        This method centralizes all rendering logic for menus. It calls
+        get_display_data() on the menu to get the data needed to render,
+        then uses inquirer CLI to display it.
+
+        In the future, this could be replaced with web UI API endpoints
+        that return DisplayData as JSON.
+
+        Args:
+            menu: The menu to render
+
+        Returns:
+            The value from the selected choice (MenuItem, Action, etc.)
+        """
+        display_data = menu.get_display_data()
+
+        print(f"\n{display_data.message}")
+
+        import inquirer
+
+        questions = [
+            inquirer.List(
+                "action",
+                message=display_data.question_text,
+                choices=display_data.choices,
+            )
+        ]
+
+        answers = inquirer.prompt(questions)
+        return answers["action"]
+
+    def execute_menu_action(self, menu: BaseMenu, action: Any) -> ResultObject:
+        """
+        Execute a menu action and handle navigation.
+
+        This method is called after user makes a selection. It delegates
+        execution to the menu's execute_custom_action() method, then
+        handles navigation based on the ResultObject.
+
+        Args:
+            menu: The menu that generated the action
+            action: The action selected by the user
+
+        Returns:
+            ResultObject: Result of executing the action
+        """
+        result = menu.execute_custom_action(self, action)
+
+        if result.is_complete() or result.is_error():
+            self.navigate_to(result)
+
+        return result
+
     def navigate_to(self, navigation_info) -> None:
         """Handle both ResultObject and legacy dict navigation"""
 
@@ -229,8 +317,8 @@ class MenuSystem:
             # Navigate to query handler menu
             handler = self._get_or_create_query_handler(result.payload.query_id)
 
-            # Store the handler and result for when user makes selection
-            self._pending_action_handler = (handler, result)
+            # Store the result for the handler to use when rendering
+            handler._pending_result = result
 
             # Navigate to the handler menu
             self._legacy_navigate_to(handler.name, result.payload)

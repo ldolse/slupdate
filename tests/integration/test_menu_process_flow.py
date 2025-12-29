@@ -116,36 +116,34 @@ class TestMenuProcessFlow:
             # Process should have completed
             assert menu_system.current_menu_name == "main_menu"
 
-    def test_generic_query_menu_display_and_get_input(self, menu_system):
+    def test_generic_query_menu_get_display_data(self, menu_system):
         """Test that GenericQueryMenu builds options from valid_actions"""
         generic_menu = GenericQueryMenu()
 
-        payload = PendingInputPayload(
+        # Set up a mock ResultObject as pending result
+        mock_result = ResultObject.pending_input(
             query_id="test_query",
             message="Test message",
             item=Mock(display_name="Test Item"),
             valid_actions=[Action.SKIP, Action.SCAN_MD5, Action.STOP],
         )
 
-        with patch("inquirer.prompt") as mock_prompt:
-            mock_prompt.return_value = {"action": Action.SCAN_MD5}
+        generic_menu._pending_result = mock_result
 
-            action, params = generic_menu.display_and_get_input(payload)
+        # Get display data
+        display_data = generic_menu.get_display_data()
 
-            assert action == Action.SCAN_MD5
-            assert params is None
-            mock_prompt.assert_called_once()
+        # Verify message and choices
+        assert display_data.message == "Test message\nItem: Test Item"
 
-            # Check that options were built with display_name as tuples (display_name, value)
-            # call_args is a tuple, call_args[0] is a list of questions
-            questions_list = mock_prompt.call_args[0][0]
-            question = questions_list[0]
-            choices = question.choices
-            assert len(choices) == 3
-            # Choices should be tuples: (display_name, action_enum)
-            assert ("Scan this archive with MD5 (slow)", Action.SCAN_MD5) in choices
-            assert ("Skip current item", Action.SKIP) in choices
-            assert ("Stop processing", Action.STOP) in choices
+        # Check that options were built with display_name as tuples (display_name, value)
+        assert len(display_data.choices) == 3
+        expected_choices = [
+            (Action.SKIP.display_name, Action.SKIP),
+            (Action.SCAN_MD5.display_name, Action.SCAN_MD5),
+            (Action.STOP.display_name, Action.STOP),
+        ]
+        assert display_data.choices == expected_choices
 
     def test_run_process_from_result_continues_on_success(self, menu_system):
         """Test that run_process_from_result() auto-continues on SUCCESS results after user action"""

@@ -1,4 +1,5 @@
 from menus.menu_system import BaseMenu, MenuItem, MenuSystem
+from menus.menu_system.adapters import DeclarativeMenuAdapter
 import os, sys, traceback
 import inquirer
 from consoles import Platform
@@ -10,7 +11,7 @@ from modules.chd import (
 )
 from rom_management.processing.archive_validation import ArchiveValidationProcess
 from rom_management.processing.models import ResultObject, PendingInputPayload, Action
-from typing import Optional, Tuple
+from typing import Optional
 
 # disabled by default, allows the script to populate chd sha1s on subsequent runs
 # only enable if CHD destination folder ONLY contains chds created by this script
@@ -193,7 +194,7 @@ def old_chd_builder(platform: Platform) -> None:
             )
 
 
-class CHDBuildMenu(BaseMenu):
+class CHDBuildMenu(DeclarativeMenuAdapter, BaseMenu):
     def __init__(self):
         super().__init__("chd_build_menu")
         self.message = "Create CHDs from ROMs"
@@ -215,14 +216,6 @@ class CHDBuildMenu(BaseMenu):
                 text="c. Back to Main Menu", target="main_menu", requires_platform=False
             ),
         ]
-
-    def display_and_get_input(
-        self, payload: PendingInputPayload
-    ) -> Tuple[Action, Optional[dict]]:
-        """CHDBuildMenu does not require user input - should not be called"""
-        raise NotImplementedError(
-            "CHDBuildMenu does not support process-based user input"
-        )
 
     def _validate_roms(
         self, platform: Platform, menu_system: "MenuSystem"
