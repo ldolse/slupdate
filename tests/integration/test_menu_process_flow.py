@@ -136,13 +136,44 @@ class TestMenuProcessFlow:
             assert params is None
             mock_prompt.assert_called_once()
 
-            # Check that options were built with display_name
+            # Check that options were built with display_name as tuples (display_name, value)
             # call_args is a tuple, call_args[0] is a list of questions
             questions_list = mock_prompt.call_args[0][0]
             question = questions_list[0]
             choices = question.choices
             assert len(choices) == 3
-            assert {
-                "name": "Scan this archive with MD5 (slow)",
-                "value": Action.SCAN_MD5,
-            } in choices
+            # Choices should be tuples: (display_name, action_enum)
+            assert ("Scan this archive with MD5 (slow)", Action.SCAN_MD5) in choices
+            assert ("Skip current item", Action.SKIP) in choices
+            assert ("Stop processing", Action.STOP) in choices
+
+    def test_run_process_from_result_continues_on_success(self, menu_system):
+        """Test that run_process_from_result() auto-continues on SUCCESS results after user action"""
+        from rom_management.processing.process_runner import ProcessRunner
+
+        # Setup: Create a real runner instance
+        runner = ProcessRunner(menu_system.platform_manager.platforms["test_platform"])
+        menu_system.runner = runner
+
+        # Mock the process
+        with patch.object(
+            runner,
+            "execute_next_step",
+            side_effect=[
+                ResultObject.success("MD5 scan completed"),
+                ResultObject.complete(total_processed=1),
+            ],
+        ):
+            # Simulate result from handle_user_action (which auto-continued)
+            success_result = ResultObject.success("MD5 scan completed")
+
+            # Call run_process_from_result with SUCCESS
+            menu_system.run_process_from_result(success_result)
+
+            # Should have called execute_next_step twice:
+            # 1. To continue after SUCCESS
+            # 2. To get the COMPLETE result
+            assert runner.execute_next_step.call_count == 2
+
+            # Should have navigated to main_menu on completion
+            assert menu_system.current_menu_name == "main_menu"

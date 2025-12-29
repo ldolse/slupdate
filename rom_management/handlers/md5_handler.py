@@ -47,8 +47,7 @@ class MD5ScanHandler(SpecialHandler):
 
             try:
                 # Execute step with MD5 enabled
-                result = process._execute_step()
-                return result
+                return self._execute_step_and_advance(process)
             finally:
                 # Restore original settings
                 process.use_md5 = original_use_md5
@@ -58,7 +57,7 @@ class MD5ScanHandler(SpecialHandler):
             process.use_md5 = True
 
             # Execute step with MD5 enabled
-            return process._execute_step()
+            return self._execute_step_and_advance(process)
 
         elif action == Action.SKIP:
             # Skip current item

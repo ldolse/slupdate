@@ -374,6 +374,8 @@ class TestArchiveValidationProcess:
             assert result.is_success()
             # Verify _execute_step was called (use_md5 was temporarily True during the call)
             mock_step.assert_called_once()
+            # Verify item was advanced (handler manually advances on success)
+            assert process.current_item is None
 
     def test_handle_user_action_scan_all_md5(self, mock_platform, create_mock_media):
         """Test handle_user_action() with SCAN_ALL_MD5 action"""

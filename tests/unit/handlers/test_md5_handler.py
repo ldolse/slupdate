@@ -24,12 +24,17 @@ class TestMD5ScanHandler:
         mock_process = Mock()
         mock_process.use_md5 = False
         mock_process._execute_step = Mock(return_value=ResultObject.success())
+        mock_process.processed_items = 5
+        mock_process.current_item = "test_item"
 
         result = handler.execute_action(Action.SCAN_MD5, mock_process)
 
         assert result.is_success()
         mock_process._execute_step.assert_called_once()
         assert mock_process.use_md5 is False
+        # Verify item was advanced on success
+        assert mock_process.current_item is None
+        assert mock_process.processed_items == 6
 
     def test_action_scan_all_md5(self):
         """Test SCAN_ALL_MD5 action"""
@@ -37,12 +42,17 @@ class TestMD5ScanHandler:
         mock_process = Mock()
         mock_process.use_md5 = False
         mock_process._execute_step = Mock(return_value=ResultObject.success())
+        mock_process.processed_items = 5
+        mock_process.current_item = "test_item"
 
         result = handler.execute_action(Action.SCAN_ALL_MD5, mock_process)
 
         assert result.is_success()
         mock_process._execute_step.assert_called_once()
         assert mock_process.use_md5 is True
+        # Verify item was advanced on success
+        assert mock_process.current_item is None
+        assert mock_process.processed_items == 6
 
     def test_action_skip(self):
         """Test SKIP action"""

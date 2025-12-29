@@ -202,6 +202,8 @@ class MenuSystem:
 
         handler = GenericQueryMenu()
         self._query_handlers[query_id] = handler
+        # Also register in main menus dict so it can be found by current_menu property
+        self.menus[handler.name] = handler
         return handler
 
     @property
@@ -232,6 +234,10 @@ class MenuSystem:
 
             # Navigate to the handler menu
             self._legacy_navigate_to(handler.name, result.payload)
+
+        elif result.is_success():
+            # SUCCESS means continue with current state - no navigation needed
+            pass
 
         elif result.is_error():
             # Navigate to error destination or main menu
@@ -373,7 +379,11 @@ class MenuSystem:
                 self.navigate_to(result)
                 return
 
-            result = self.runner.execute_next_step()
+            if result.is_success() or result.is_progress():
+                # Auto-continue on SUCCESS or PROGRESS
+                result = self.runner.execute_next_step()
+            else:
+                break
 
         # Process finished - handle navigation
         if result.is_complete():

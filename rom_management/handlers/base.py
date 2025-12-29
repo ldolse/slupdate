@@ -1,10 +1,5 @@
-from abc import ABC, abstractmethod
+from abc import ABC
 from typing import Optional, Dict, Any, TYPE_CHECKING
-from ..exceptions import (
-    UserActionRequiredException,
-    SkipCurrentItemException,
-    HandlerException,
-)
 from media_registry import CDMedia
 from optical_media.utils import OpticalMediaProcessor
 
@@ -23,6 +18,25 @@ class SpecialHandler(ABC):
     ) -> bool:
         """Check if this handler should be applied"""
         return True
+
+    def _execute_step_and_advance(self, process: "BaseProcess") -> "ResultObject":
+        """
+        Helper method for handlers that need to execute a step and advance to next item.
+
+        This wraps _execute_step() with the advancement logic, so handlers don't need
+        to manually advance items on success.
+
+        Args:
+            process: The BaseProcess instance
+
+        Returns:
+            ResultObject from executing the step
+        """
+        result = process._execute_step()
+        if result.is_success():
+            process.processed_items += 1
+            process.current_item = None
+        return result
 
     def _requires_user_intervention(self, error: Exception) -> bool:
         """
@@ -71,8 +85,6 @@ class SpecialHandler(ABC):
         DEPRECATED: Use execute_action() in subclasses. This default implementation
         raises NotImplementedError.
         """
-        from rom_management.processing.models import ResultObject
-
         raise NotImplementedError(
             f"Handler {self.name} must implement execute_action() "
             "if it handles interactive actions"
@@ -97,55 +109,6 @@ class SpecialHandler(ABC):
         DEPRECATED: Use execute() in subclasses. This default implementation
         raises NotImplementedError.
         """
-        from rom_management.processing.models import ResultObject
-
-        raise NotImplementedError(
-            f"Handler {self.name} must implement execute() "
-            "if it performs automated processing"
-        )
-        """
-        Execute an action for this handler.
-
-        This is used by interactive handlers that respond to user actions
-        (e.g., MD5ScanHandler, CHDExistenceHandler).
-
-        Args:
-            action: The Action enum representing user's choice
-            process: The BaseProcess instance
-            params: Optional parameters for the action
-
-        Returns:
-            ResultObject from executing the action
-
-        DEPRECATED: Use execute_action() in subclasses. This default implementation
-        raises NotImplementedError.
-        """
-        raise NotImplementedError(
-            f"Handler {self.name} must implement execute_action() "
-            "if it handles interactive actions"
-        )
-
-    def execute(
-        self, media: CDMedia, file_data: OpticalMediaProcessor
-    ) -> "ResultObject":
-        """
-        Execute automated handler logic.
-
-        This is used by automated handlers that perform conversions
-        without user interaction (e.g., CloneCDHandler, BinCueHandler, MdFHandler).
-
-        Args:
-            media: The CDMedia object being processed
-            file_data: The OpticalMediaProcessor with extracted files
-
-        Returns:
-            ResultObject with SUCCESS or ERROR status
-
-        DEPRECATED: Use execute() in subclasses. This default implementation
-        raises NotImplementedError.
-        """
-        from rom_management.processing.models import ResultObject
-
         raise NotImplementedError(
             f"Handler {self.name} must implement execute() "
             "if it performs automated processing"

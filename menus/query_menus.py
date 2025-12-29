@@ -19,11 +19,8 @@ class GenericQueryMenu(BaseMenu):
     ) -> Tuple[Action, Optional[dict]]:
         """Display query and get user action"""
 
-        # Build options from valid_actions using display_name
-        options = [
-            {"name": action.display_name, "value": action}
-            for action in payload.valid_actions
-        ]
+        # Build options from valid_actions as tuples (display_name, value)
+        options = [(action.display_name, action) for action in payload.valid_actions]
 
         # Display message and item info
         print(f"\n{payload.message}")
@@ -63,4 +60,4 @@ class GenericQueryMenu(BaseMenu):
                 return ResultObject.success()
 
         # Fallback: return to main menu if no pending process
-        return ResultObject.complete(destination_menu="main_menu")
+        return ResultObject.complete(total_processed=0, destination_menu="main_menu")
