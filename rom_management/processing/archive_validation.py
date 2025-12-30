@@ -44,7 +44,7 @@ class ArchiveValidationProcess(BaseProcess):
         return {
             "processed": self.processed_items,
             "total": self.total_items,
-            "processed": success_count,
+            "succeeded": success_count,
             "failed": failure_count,
             "percentage": self._calculate_progress_percentage(),
         }
@@ -95,6 +95,8 @@ class ArchiveValidationProcess(BaseProcess):
             print(
                 f". ✅ {media.dat_game_entry.name} already validated, skipping zip check"
             )
+            # Add to matched_buildable_media since we know it's valid
+            self.platform.matched_buildable_media[media] = None
             return ResultObject.success(
                 message=f"Already validated: {media.dat_game_entry.name}",
                 metadata={"media_id": media.id},

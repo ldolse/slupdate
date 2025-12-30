@@ -266,6 +266,7 @@ class MenuSystem:
                 "action",
                 message=display_data.question_text,
                 choices=display_data.choices,
+                carousel=True
             )
         ]
 

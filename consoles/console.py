@@ -135,6 +135,20 @@ class Platform:
     def chd_handling_preference(self) -> str:
         return self._chd_handling_preference
 
+    def set_chd_preference(self, preference: str) -> None:
+        """
+        Set the CHD handling preference for this platform.
+
+        Args:
+            preference: One of "ask", "overwrite", "skip"
+        """
+        valid_preferences = ["ask", "overwrite", "skip"]
+        if preference not in valid_preferences:
+            raise ValueError(
+                f"Invalid preference: {preference}. Must be one of {valid_preferences}"
+            )
+        self._chd_handling_preference = preference
+
     @property
     def total_softlist_entries(self) -> int:
         """Total number of software list entries (titles)"""

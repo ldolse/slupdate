@@ -10,6 +10,7 @@ from modules.chd import (
     chdman_info,
 )
 from rom_management.processing.archive_validation import ArchiveValidationProcess
+from rom_management.processing.chd_build_process import ChdBuildProcess
 from rom_management.processing.models import ResultObject, PendingInputPayload, Action
 from typing import Optional
 
@@ -252,22 +253,30 @@ class CHDBuildMenu(DeclarativeMenuAdapter, BaseMenu):
         check = CHD(check_chdman=True)
         if not check.chdman_uptodate:
             print("Outdated Chdman, please upgrade to a recent version")
-            return ResultObject.complete(destination_menu="chd_build_menu")
+            return ResultObject.complete(
+                total_processed=0, destination_menu="chd_build_menu"
+            )
 
         if len(platform.matched_buildable_media) == 0:
             print(
                 "No valid media found, please check source ROMs and DAT files, and ensure mapping is complete."
             )
-            return ResultObject.complete(destination_menu="chd_build_menu")
+            return ResultObject.complete(
+                total_processed=0, destination_menu="chd_build_menu"
+            )
 
         # Confirm with user
         build = inquirer.confirm("Begin Creating CHDs?", default=False)
         if not build:
-            return ResultObject.complete(destination_menu="chd_build_menu")
+            return ResultObject.complete(
+                total_processed=0, destination_menu="chd_build_menu"
+            )
 
         try:
-            # This will eventually be converted to a process
-            return platform.start_chd_build_process()
+            # Run CHD build process via ProcessRunner
+            return menu_system.run_process(
+                ChdBuildProcess, destination_menu="chd_build_menu"
+            )
 
         except Exception as e:
             # Return error result with handler_error_menu as destination
