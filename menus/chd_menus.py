@@ -274,9 +274,17 @@ class CHDBuildMenu(DeclarativeMenuAdapter, BaseMenu):
 
         try:
             # Run CHD build process via ProcessRunner
-            return menu_system.run_process(
+            result = menu_system.run_process(
                 ChdBuildProcess, destination_menu="chd_build_menu"
             )
+
+            # If None, process is waiting for user input - return success
+            # Control will be resumed after user interaction via resume_process()
+            if result is None:
+                return ResultObject.success(message="Waiting for user input...")
+
+            # Process completed or errored
+            return result
 
         except Exception as e:
             # Return error result with handler_error_menu as destination

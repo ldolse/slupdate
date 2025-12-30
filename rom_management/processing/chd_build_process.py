@@ -139,7 +139,7 @@ class ChdBuildProcess(BaseProcess):
 
             exception = CHDAlreadyExistsException(expected_chd_path, existing_version)
 
-            return ResultObject.pending_input(
+            result = ResultObject.pending_input(
                 query_id="generic_query",
                 message=f"CHD already exists for {media.dat_game_entry.name}",
                 item=self.current_item,
@@ -155,7 +155,7 @@ class ChdBuildProcess(BaseProcess):
                     "exception": exception,
                 },
             )
-
+            return result
 
     def _build_single_chd(
         self, media, title: str, expected_chd_path: str
@@ -176,7 +176,7 @@ class ChdBuildProcess(BaseProcess):
                 return ResultObject.error(
                     error_type="TempDirectoryError",
                     message=f"Temp directory creation for {media.dat_game_entry.name} failed",
-                    metadata={"media_id": media.id},
+                    context={"media_id": media.id},
                 )
 
             # Get and apply handlers
@@ -190,7 +190,7 @@ class ChdBuildProcess(BaseProcess):
                     return ResultObject.error(
                         error_type="HandlerFailed",
                         message=f"Handler {handler.name} failed",
-                        metadata={
+                        context={
                             "handler": handler.name,
                             "error": result.payload.message if result.payload else None,
                         },
@@ -203,7 +203,7 @@ class ChdBuildProcess(BaseProcess):
                 return ResultObject.error(
                     error_type="NoTOCError",
                     message=f"No TOC file found for {media.dat_game_entry.name}",
-                    metadata={"media_id": media.id},
+                    context={"media_id": media.id},
                 )
 
             # Create CHD
@@ -225,7 +225,7 @@ class ChdBuildProcess(BaseProcess):
                 return ResultObject.error(
                     error_type="CHDCreationError",
                     message=f"CHD creation failed for {media.dat_game_entry.name}",
-                    metadata={"media_id": media.id},
+                    context={"media_id": media.id},
                 )
 
         except OSError as e:
@@ -235,21 +235,21 @@ class ChdBuildProcess(BaseProcess):
                     error_type="DiskSpaceError",
                     message=f"Insufficient disk space to build CHD for {media.dat_game_entry.name}. Please free up space and try again.",
                     exception=e,
-                    metadata={"media_id": media.id},
+                    context={"media_id": media.id},
                 )
             else:
                 return ResultObject.error(
                     error_type="OSError",
                     message=f"OS error processing {media.dat_game_entry.name}: {str(e)}",
                     exception=e,
-                    metadata={"media_id": media.id},
+                    context={"media_id": media.id},
                 )
         except Exception as e:
             return ResultObject.error(
                 error_type="BuildError",
                 message=f"Unexpected error processing {media.dat_game_entry.name}: {str(e)}",
                 exception=e,
-                metadata={"media_id": media.id},
+                context={"media_id": media.id},
             )
         finally:
             # Clean up temp directory

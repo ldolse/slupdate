@@ -266,7 +266,7 @@ class MenuSystem:
                 "action",
                 message=display_data.question_text,
                 choices=display_data.choices,
-                carousel=True
+                carousel=True,
             )
         ]
 
@@ -379,12 +379,10 @@ class MenuSystem:
         from rom_management.processing.process_runner import ProcessRunner
 
         self.runner = ProcessRunner(platform)
-        self.runner.start_new_process(process_class)
+        result = self.runner.start_new_process(process_class)
 
         try:
             while True:
-                result = self.runner.execute_next_step()
-
                 if result.is_success() or result.is_progress():
                     # Auto-continue, display message if present
                     if (
@@ -393,12 +391,15 @@ class MenuSystem:
                         and result.payload.message
                     ):
                         print(result.payload.message)
-                    # Continue loop
+                    # Get next result
+                    result = self.runner.execute_next_step()
+                    # Continue loop to process the new result
+                    continue
 
                 elif result.requires_input():
                     # Navigate to menu via navigate_to()
                     # User interaction will resume loop via resume_process()
-                    self.navigate_to(result)
+                    nav_result = self.navigate_to(result)
                     # Return None to indicate waiting for user input
                     return None
 
