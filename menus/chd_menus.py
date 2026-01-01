@@ -205,10 +205,6 @@ class CHDBuildMenu(DeclarativeMenuAdapter, BaseMenu):
                 action_func=self._validate_roms,
             ),
             MenuItem(
-                text="a. Validate source ROMs (old method)",
-                action_func=self._validate_roms_old,
-            ),
-            MenuItem(
                 text="b. Build CHDs from ROMs",
                 action_func=self._chd_builder,
                 requires_platform=True,
@@ -235,14 +231,6 @@ class CHDBuildMenu(DeclarativeMenuAdapter, BaseMenu):
 
         # Process completed or errored
         return result
-
-    def _validate_roms_old(
-        self, platform: Platform, menu_system: "MenuSystem"
-    ) -> ResultObject:
-        """Old validation method - for comparison"""
-        # Keep as is for now, will remove later
-        platform.validate_matched_entries()
-        return ResultObject.success(message="Validation complete (old method)")
 
     def _chd_builder(
         self, platform: Platform, menu_system: "MenuSystem"

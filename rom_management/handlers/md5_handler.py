@@ -85,10 +85,6 @@ class MD5ScanHandler(SpecialHandler):
             message=f"Unknown action for MD5ScanHandler: {action.value}",
         )
 
-    def _requires_user_intervention(self, error: Exception) -> bool:
-        """MD5 scan always requires user intervention"""
-        return isinstance(error, MD5ScanRequiredException)
-
     def validate_preconditions(self, media: CDMedia, file_data=None) -> bool:
         """Check if this handler should be applied"""
         dat = media.dat_game_entry.dat

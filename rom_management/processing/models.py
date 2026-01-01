@@ -6,7 +6,6 @@ from typing import Any, List, Literal, Optional, TYPE_CHECKING
 if TYPE_CHECKING:
     from media_registry import CDMedia
     from softwarelist import Part
-    from rom_management.exceptions import HandlerException
 
 
 class ProcessStatus(Enum):

@@ -8,7 +8,7 @@ from .models import (
     MediaProcessingItem,
 )
 from optical_media.utils import OpticalMediaProcessor
-from rom_management import CHD
+from rom_management import CHD, CHDAlreadyExistsException
 
 if TYPE_CHECKING:
     from consoles import Platform
@@ -134,9 +134,7 @@ class ChdBuildProcess(BaseProcess):
             # Proceed to build after removing
             return self._build_single_chd(media, title, expected_chd_path)
         else:
-            # Ask user what to do
-            from rom_management.exceptions import CHDAlreadyExistsException
-
+            # No preference set - require user intervention
             exception = CHDAlreadyExistsException(expected_chd_path, existing_version)
 
             result = ResultObject.pending_input(

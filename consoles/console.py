@@ -3,12 +3,6 @@ from dat import RomDat
 from softwarelist import SoftwareList, Part
 from utils import select_directory
 from rom_management import ZipProcessor, CHD
-from rom_management.processing import ProcessManager
-from rom_management.exceptions import (
-    HandlerException,
-    UserActionRequiredException,
-    SkipCurrentItemException,
-)
 from optical_media.utils import OpticalMediaProcessor
 from rom_management.handlers import registry, SpecialHandler
 from media_registry import MediaRegistry, CDMedia
@@ -48,7 +42,6 @@ class Platform:
         self._chd_build_index = 0
         self.handler_registry = registry
         self.state = PlatformState()
-        self.process_manager = ProcessManager(self)
 
     def save_state(self) -> PlatformState:
         """Save current state to PlatformState object"""
@@ -108,9 +101,6 @@ class Platform:
         self.validated_chds = set()
         self._chd_handling_preference = None
         self._chd_build_index = 0
-
-        # Recreate process manager with reset state
-        self.process_manager = ProcessManager(self)
 
     def get_relevant_handlers(
         self, media: CDMedia, file_data: OpticalMediaProcessor
@@ -384,208 +374,3 @@ class Platform:
                 part.redump_url = ""
                 match_failures.append(part)
         return match_failures
-
-    def start_validation_process(self) -> dict:
-        """Start the validation process through ProcessManager"""
-        if not self.process_manager:
-            raise Exception("ProcessManager not initialized")
-
-        # Initialize handlers for the process manager
-        self.process_manager.initialize_handlers()
-
-        from rom_management.processing.archive_validation import (
-            ArchiveValidationProcess,
-        )
-
-        return self.process_manager.start_process(ArchiveValidationProcess)
-
-    def start_chd_build_process(self) -> dict:
-        """Start the CHD build process through ProcessManager"""
-        if not self.process_manager:
-            raise Exception("ProcessManager not initialized")
-        return self.process_manager.start_chd_build()
-
-    def validate_matched_entries(self) -> None:
-        """
-        Validate zip files for all matched entries in MediaRegistry
-        Skip validation if media signature is already in validated state
-        """
-        if not self.mr:
-            print("MediaRegistry not initialized")
-            return
-
-        zip_processor = ZipProcessor()
-
-        for media in self.mr.media_directory.keys():
-            zip_path = None
-            # Skip if this media signature is already validated
-            media_sig = media.sha1_signature or media.crc_signature
-            if media_sig in self.state.matched_media_sigs:
-                print(
-                    f". ✅ {media.dat_game_entry.name} already validated, skipping zip check"
-                )
-                # Add to matched_buildable_media since we know it's valid
-                self.matched_buildable_media[media] = None
-                continue
-
-            if not media.dat_game_entry.name:
-                print(f"  ⚠️  Media ID: {media.id} - skipping, No DAT Game name")
-                continue
-
-            if media.dat_game_entry is None or media.softlist_part is None:
-                print(
-                    f"  ⚠️  {media.dat_game_entry.name}: Skipping - No valid DAT game entry or softlist part reference"
-                )
-                continue
-
-            # Find ROM directory for this DAT
-            rom_dir = media.dat_game_entry.dat.rom_path
-            if not os.path.isdir(rom_dir):
-                print(
-                    f"  ⚠️  {media.dat_game_entry.name}: Skipping - ROM directory does not exist: {rom_dir}"
-                )
-                continue
-            from rom_management.archive import MD5ScanRequiredException
-
-            try:
-                # Find and validate zip
-                zip_path = zip_processor.find_valid_zip(media.dat_game_entry, rom_dir)
-            except MD5ScanRequiredException:
-                user_input = (
-                    input(
-                        f"   {media.dat_game_entry.name} requires full scan, Check Using MD5 (slow)? (y/n): "
-                    )
-                    .strip()
-                    .lower()
-                )
-                if user_input != "y":
-                    continue
-                else:
-                    zip_path = zip_processor.find_valid_zip(
-                        media.dat_game_entry, rom_dir, md5=True
-                    )
-
-            if zip_path is not None:
-                print(f"  ✅ Found valid zip: {media.dat_game_entry.name}")
-                media.zip_path = zip_path
-                self.matched_buildable_media[media] = (
-                    None  # Value doesn't matter, using key as an ordered set
-                )
-            else:
-                print(f"  ⚠️  {media.dat_game_entry.name}: No valid zip found")
-                continue
-
-    def build_chds_for_matched(self) -> dict:
-        """
-        Convert all matched entries in MediaRegistry to CHD format.
-        Returns navigation info with payload if exception occurs
-        """
-        for media in self._media_to_process:
-            # Check if CHD already exists and is validated
-            title = (
-                media.softlist_part.part_of.name
-                if media.softlist_part and media.softlist_part.part_of
-                else None
-            )
-            if not title:
-                print(
-                    f"  ⚠️ Skipping - No valid softlist part or title for media ID {media.id}"
-                )
-                continue
-
-            # Check if this CHD is already validated
-            expected_chd_path = os.path.join(
-                self.chd_path, title, f"{media.softlist_part.disk_name}.chd"
-            )
-            if expected_chd_path in self.state.validated_chds_paths and os.path.exists(
-                expected_chd_path
-            ):
-                existing_chd = CHD(chd_path=expected_chd_path)
-                if existing_chd.is_valid:
-                    print(
-                        f"✅ CHD already validated for {media.dat_game_entry.name}, skipping"
-                    )
-                    self.validated_chds.add(existing_chd)
-                    continue
-                else:
-                    # will try to rebuild if it's not reported as valid
-                    os.remove(expected_chd_path)
-
-            elif os.path.exists(expected_chd_path):
-                matched_chd = CHD(chd_path=expected_chd_path)
-                print(
-                    f"⚠️  CHD already exists for {media.dat_game_entry.name} at {expected_chd_path}"
-                )
-
-                # Create exception with existing version info
-                from rom_management.exceptions import CHDAlreadyExistsException
-
-                existing_version = (
-                    matched_chd._get_chd_info().get("file_version")
-                    if matched_chd.is_valid
-                    else None
-                )
-                exception = CHDAlreadyExistsException(
-                    expected_chd_path, existing_version
-                )
-
-                # Return navigation info with exception as payload
-                return {"menu": "existing_chd_menu", "payload": exception}
-
-            file_data = OpticalMediaProcessor(media, tmpdsk=self.pm.tmpdsk)
-
-            try:
-                # initialize CHD object
-                print(f"Converting {media.zip_path} to CHD")
-                print(f"  softlist title: {title}")
-
-                # Extract the ROM to a temp directory
-                file_data.extract_and_process()
-
-                if not file_data.temp_dir.exists():
-                    raise Exception(
-                        f"Temp directory creation for {media.dat_game_entry.name} failed"
-                    )
-
-                # Get and apply handlers
-                handlers = self.get_relevant_handlers(media, file_data)
-
-                for handler in handlers:
-                    try:
-                        result = handler.handle(media, file_data)
-                        if not result.get("success", True):
-                            raise HandlerException(
-                                f"Handler {handler.name} failed: {result.get('error')}"
-                            )
-                    except SkipCurrentItemException:
-                        print(f"Skipping item due to handler request")
-                        continue
-                    except UserActionRequiredException as e:
-                        # Return navigation info with exception as payload
-                        return {"menu": "handler_error_menu", "payload": e}
-
-                # Prepare for CHD conversion
-                toc_source = file_data.current_toc
-
-                matched_chd = CHD(
-                    source=media, base_path=self.chd_path, toc_source=toc_source
-                )
-
-                if matched_chd.exists and matched_chd.is_valid:
-                    self.validated_chds.add(matched_chd)
-                    self.state.add_validated_chd_path(matched_chd.path)
-                    print(f"✅ Converted {media.zip_path} to CHD")
-
-            except HandlerException as e:
-                # Return navigation info with exception as payload
-                return {"menu": "handler_error_menu", "payload": e}
-            except Exception as e:
-                print(f"Unexpected error processing {media.dat_game_entry.name}: {e}")
-                continue
-            finally:
-                # Clean up temp directory only if we're not retrying
-                if "file_data" in locals() and file_data:
-                    file_data.cleanup()
-
-        # Return success navigation if all processing completes
-        return {"menu": "chd_build_menu", "payload": None}

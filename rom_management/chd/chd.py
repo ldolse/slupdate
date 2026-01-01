@@ -12,6 +12,20 @@ class CHDCreationException(Exception):
         self.error_message = error_message
         super().__init__(f"Error creating CHD at {chd_path}: {error_message}")
 
+
+class CHDAlreadyExistsException(Exception):
+    """Exception raised when a CHD already exists during processing"""
+
+    def __init__(
+        self,
+        chd_path: str,
+        existing_version: Optional[str] = None,
+    ):
+        self.chd_path = chd_path
+        self.existing_version = existing_version
+        super().__init__(f"CHD already exists at {chd_path}")
+
+
 class CHD:
     """
     Represents a CHD (Compressed Hunks of Data) file as a Python object.
