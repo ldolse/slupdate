@@ -69,7 +69,7 @@ class TestCHDExistenceHandler:
         """Test OVERWRITE action removes existing CHD"""
         # Setup
         mock_process.current_item = MediaProcessingItem(mock_media)
-        chd_path = "/test/chd/path/TestTitle/disk1.chd"
+        chd_path = "/test/chd/path/Test Game.chd"
         mock_exists.return_value = True
 
         with patch.object(handler, "_execute_step_and_advance") as mock_execute_step:

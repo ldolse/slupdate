@@ -6,6 +6,7 @@ from media_registry import CDMedia
 
 from typing import Optional, Dict
 
+
 class CHDCreationException(Exception):
     def __init__(self, chd_path: str, error_message: str):
         self.chd_path = chd_path
@@ -34,7 +35,14 @@ class CHD:
     with properties that are set either during creation or by parsing an existing CHD.
     """
 
-    def __init__(self, chd_path=None, source: CDMedia = None, base_path=None, check_chdman: bool = False, toc_source: Optional[str] = None):
+    def __init__(
+        self,
+        chd_path=None,
+        source: CDMedia = None,
+        base_path=None,
+        check_chdman: bool = False,
+        toc_source: Optional[str] = None,
+    ):
         """
         Initialize a CHD object.
 
@@ -43,9 +51,9 @@ class CHD:
             output_path (str): Output path for the created CHD
         """
         # Properties set during initialization or by parsing existing CHD
-        self.path = ''  # Path to the CHD file
+        self.path = ""  # Path to the CHD file
         self.name = None  # Name of the CHD (without extension)
-        self.extension = '.chd'  # File extension
+        self.extension = ".chd"  # File extension
         self.size = 0  # Size in bytes
         self.sha1 = None  # SHA1 hash
         self.parent_sha = None  # Parent CHD SHA1 if applicable
@@ -55,7 +63,9 @@ class CHD:
         self.source: CDMedia = source  # Source DAT game entry if applicable
         self.toc_source = None  # TOC source, required for CD-based CHDs
         self._base_path = base_path  # Base path to create the softlist title directory
-        self.output_path = None  # Output path for CHD creation based on base_path and softlist title
+        self.output_path = (
+            None  # Output path for CHD creation based on base_path and softlist title
+        )
         self.preexisting = False  # Flag indicating if CHD already exists
         self.chdman_version = 280  # chdman version as integer (e.g., 280 for 0.280)
 
@@ -65,7 +75,11 @@ class CHD:
         elif source and toc_source and base_path:
             self.source = source
             self.toc_source = toc_source
-            self.title = self.source.softlist_part.part_of.name if self.source.softlist_part and self.source.softlist_part.part_of else None
+            self.title = (
+                self.source.softlist_part.part_of.name
+                if self.source.softlist_part and self.source.softlist_part.part_of
+                else None
+            )
             if not self.title:
                 raise ValueError("Source must have a softlist title for CHD creation")
             self.output_path = pathlib.Path(base_path) / self.title
@@ -73,10 +87,12 @@ class CHD:
             self._initialize_for_creation()
         elif check_chdman:
             info = self._get_chd_info(check_chdman=True)
-            if 'chdman_version' not in info:
+            if "chdman_version" not in info:
                 raise EnvironmentError("chdman not found or not working")
         else:
-            raise ValueError("Either provide chd_path for reading or both toc source and output_path for creation")
+            raise ValueError(
+                "Either provide chd_path for reading or both toc source and output_path for creation"
+            )
 
     def _initialize_from_existing(self, chd_path):
         """
@@ -92,10 +108,10 @@ class CHD:
         # Get CHD information
         info = self._get_chd_info()
         if info:
-            self.sha1 = info.get('sha1')
-            self.parent_sha = info.get('parent_sha')
-            self.logical_size = info.get('logical_size')
-            self.compression = info.get('compression')
+            self.sha1 = info.get("sha1")
+            self.parent_sha = info.get("parent_sha")
+            self.logical_size = info.get("logical_size")
+            self.compression = info.get("compression")
         else:
             self.error = "Failed to retrieve CHD information"
 
@@ -109,7 +125,7 @@ class CHD:
         if not self._base_path:
             raise ValueError("Base path must be provided for CHD creation")
         self.output_path = pathlib.Path(self._base_path) / self.title
-        self.name = self.source.softlist_part.disk_name # use mame disk name
+        self.name = self.source.dat_game_entry.name  # use DAT game name
         if not self.name:
             raise ValueError("Source must have a filename name for CHD creation")
         self.path = f"{self.output_path}/{self.name}.chd"
@@ -118,8 +134,10 @@ class CHD:
 
     @property
     def chdman_uptodate(self):
-        version_string = self._get_chd_info(check_chdman=True).get('chdman_version', '0.0')
-        v = list(map(int, version_string.split('.')))
+        version_string = self._get_chd_info(check_chdman=True).get(
+            "chdman_version", "0.0"
+        )
+        v = list(map(int, version_string.split(".")))
         v_target = [0, self.chdman_version]
         return all(x >= y for x, y in zip(v, v_target))
 
@@ -133,65 +151,77 @@ class CHD:
         if not os.path.exists(self.path) and not check_chdman:
             return {"error": "CHD file does not exist"}
 
-        command = ['chdman']
+        command = ["chdman"]
         if not check_chdman:
-            command += ['info', '-i', str(self.path)]
+            command += ["info", "-i", str(self.path)]
 
         info = {}
 
         try:
             proc = subprocess.Popen(command, stdout=subprocess.PIPE)
-            output = proc.stdout.read().decode('ascii').split('\n')
+            output = proc.stdout.read().decode("ascii").split("\n")
 
             # Parse the chdman version line
             for line in output:
-                if re.findall(r'^chdman - MAME Compressed Hunks of Data \(CHD\) manager', line):
+                if re.findall(
+                    r"^chdman - MAME Compressed Hunks of Data \(CHD\) manager", line
+                ):
                     # Extract version number
-                    version_match = re.search(r'(\d+\.\d+)', line)
+                    version_match = re.search(r"(\d+\.\d+)", line)
                     if version_match:
-                        info['chdman_version'] = version_match.group(1)
+                        info["chdman_version"] = version_match.group(1)
                         break
 
             # Parse all other information lines
             for line in output:
-                if re.findall(r'^SHA1:', line):
-                    info['sha1'] = re.sub(r'\s*SHA1:\s*', '', line).strip()
-                elif re.findall(r'^Parent SHA', line):
-                    info['parent_sha'] = re.sub(r'\s*Parent SHA:\s*', '', line).strip()
-                elif re.findall(r'^File Version:', line):
-                    info['file_version'] = re.sub(r'\s*File Version:\s*', '', line).strip()
-                elif re.findall(r'^Logical size:', line):
-                    info['logical_size'] = re.sub(r'\s*Logical size:\s*', '', line).strip()
-                elif re.findall(r'^Compression:', line):
-                    info['compression'] = re.sub(r'\s*Compression:\s*', '', line).strip()
-                elif re.findall(r'^Hunk Size:', line):
-                    info['hunk_size'] = re.sub(r'\s*Hunk Size:\s*', '', line).strip()
-                elif re.findall(r'^Total Hunks:', line):
-                    info['total_hunks'] = re.sub(r'\s*Total Hunks:\s*', '', line).strip()
-                elif re.findall(r'^Unit Size:', line):
-                    info['unit_size'] = re.sub(r'\s*Unit Size:\s*', '', line).strip()
-                elif re.findall(r'^Total Units:', line):
-                    info['total_units'] = re.sub(r'\s*Total Units:\s*', '', line).strip()
-                elif re.findall(r'^CHD size:', line):
-                    info['chd_size'] = re.sub(r'\s*CHD size:\s*', '', line).strip()
-                elif re.findall(r'^Ratio:', line):
-                    info['ratio'] = re.sub(r'\s*Ratio:\s*', '', line).strip()
-                elif re.findall(r'^Data SHA1:', line):
-                    info['data_sha1'] = re.sub(r'\s*Data SHA1:\s*', '', line).strip()
-                elif re.findall(r'^Metadata:', line):
+                if re.findall(r"^SHA1:", line):
+                    info["sha1"] = re.sub(r"\s*SHA1:\s*", "", line).strip()
+                elif re.findall(r"^Parent SHA", line):
+                    info["parent_sha"] = re.sub(r"\s*Parent SHA:\s*", "", line).strip()
+                elif re.findall(r"^File Version:", line):
+                    info["file_version"] = re.sub(
+                        r"\s*File Version:\s*", "", line
+                    ).strip()
+                elif re.findall(r"^Logical size:", line):
+                    info["logical_size"] = re.sub(
+                        r"\s*Logical size:\s*", "", line
+                    ).strip()
+                elif re.findall(r"^Compression:", line):
+                    info["compression"] = re.sub(
+                        r"\s*Compression:\s*", "", line
+                    ).strip()
+                elif re.findall(r"^Hunk Size:", line):
+                    info["hunk_size"] = re.sub(r"\s*Hunk Size:\s*", "", line).strip()
+                elif re.findall(r"^Total Hunks:", line):
+                    info["total_hunks"] = re.sub(
+                        r"\s*Total Hunks:\s*", "", line
+                    ).strip()
+                elif re.findall(r"^Unit Size:", line):
+                    info["unit_size"] = re.sub(r"\s*Unit Size:\s*", "", line).strip()
+                elif re.findall(r"^Total Units:", line):
+                    info["total_units"] = re.sub(
+                        r"\s*Total Units:\s*", "", line
+                    ).strip()
+                elif re.findall(r"^CHD size:", line):
+                    info["chd_size"] = re.sub(r"\s*CHD size:\s*", "", line).strip()
+                elif re.findall(r"^Ratio:", line):
+                    info["ratio"] = re.sub(r"\s*Ratio:\s*", "", line).strip()
+                elif re.findall(r"^Data SHA1:", line):
+                    info["data_sha1"] = re.sub(r"\s*Data SHA1:\s*", "", line).strip()
+                elif re.findall(r"^Metadata:", line):
                     # Parse metadata which may span multiple lines
-                    metadata_line = re.sub(r'\s*Metadata:\s*', '', line).strip()
-                    if 'Metadata' not in info:
-                        info['metadata'] = []
-                    info['metadata'].append(metadata_line)
+                    metadata_line = re.sub(r"\s*Metadata:\s*", "", line).strip()
+                    if "Metadata" not in info:
+                        info["metadata"] = []
+                    info["metadata"].append(metadata_line)
 
             # Store the parsed version in the object
-            if 'file_version' in info:
-                self.version = info['file_version']
+            if "file_version" in info:
+                self.version = info["file_version"]
 
         except Exception as e:
-            print(f'Error getting CHD info: {e}')
-            info['error'] = str(e)
+            print(f"Error getting CHD info: {e}")
+            info["error"] = str(e)
 
         return info
 
@@ -204,7 +234,7 @@ class CHD:
     def is_valid(self):
         """Check if the CHD file is valid."""
         info = self._get_chd_info()
-        return 'error' not in info and 'sha1' in info
+        return "error" not in info and "sha1" in info
 
     def _create(self):
         """
@@ -218,15 +248,26 @@ class CHD:
             self._initialize_from_existing(str(self.path))
         else:
             if not self.toc_source:
-                raise Exception(f"toc file not found for {self.source.dat_game_entry.name}")
+                raise Exception(
+                    f"toc file not found for {self.source.dat_game_entry.name}"
+                )
 
             try:
                 os.makedirs(self.output_path, exist_ok=True)
             except Exception as e:
-                raise CHDCreationException(f"Failed to create output directory {self.output_path}:", str(e))
+                raise CHDCreationException(
+                    f"Failed to create output directory {self.output_path}:", str(e)
+                )
 
             try:
-                command = ['chdman', 'createcd', '-i', str(self.toc_source), '-o', str(self.path)]
+                command = [
+                    "chdman",
+                    "createcd",
+                    "-i",
+                    str(self.toc_source),
+                    "-o",
+                    str(self.path),
+                ]
                 subprocess.run(command, check=True)
 
                 # Update properties after creation
@@ -238,7 +279,6 @@ class CHD:
             except subprocess.CalledProcessError as e:
                 raise CHDCreationException(str(self.path), str(e))
                 # print(f'CHD creation failed: {e}')
-
 
     def delete(self):
         """
@@ -252,6 +292,6 @@ class CHD:
                 os.remove(self.path)
                 return True
         except Exception as e:
-            print(f'Error deleting CHD file: {e}')
+            print(f"Error deleting CHD file: {e}")
 
         return False
