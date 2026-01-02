@@ -8,6 +8,7 @@ if TYPE_CHECKING:
     from rom_management.processing.base_process import BaseProcess
     from media_registry import CDMedia
 
+
 class CHDExistenceHandler(SpecialHandler):
     """
     Handles scenarios where a CHD already exists during CHD build process.
@@ -106,7 +107,7 @@ class CHDExistenceHandler(SpecialHandler):
         self, process: "BaseProcess", media: "CDMedia"
     ) -> Optional[str]:
         """
-        Get the expected CHD path for a media item
+        Get expected CHD path for a media item
 
         Args:
             process: The BaseProcess instance
@@ -117,10 +118,15 @@ class CHDExistenceHandler(SpecialHandler):
         """
         import os
 
-        title = (
-            media.softlist_part.part_of.name
-            if media.softlist_part and media.softlist_part.part_of
-            else None
+        if not media.dat_game_entry or not media.dat_game_entry.name:
+            return None
+
+        title = media.dat_game_entry.name
+
+        return os.path.join(
+            process.platform.chd_path,
+            title,
+            f"{title}.chd",
         )
 
         if not title or not media.softlist_part:

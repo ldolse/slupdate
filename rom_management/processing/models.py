@@ -38,6 +38,9 @@ class Action(Enum):
     SET_OVERWRITE_PREFERENCE = ("set_overwrite_pref", "Always overwrite older CHDs")
     SET_SKIP_PREFERENCE = ("set_skip_pref", "Always skip existing CHDs")
 
+    # Hash validation actions
+    UPDATE = ("update", "Update hash and filename")
+
     # Common actions
     STOP = ("stop", "Stop processing")
     CONTINUE = ("continue", "Continue")

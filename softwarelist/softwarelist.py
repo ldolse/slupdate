@@ -6,7 +6,7 @@ from softwarelist.software import Software
 from softwarelist.part import Part
 from softwarelist.comment import Comment
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from media_registry import MediaRegistry, CDMedia
@@ -18,7 +18,7 @@ class SoftwareList:
         self.name = ""
         self.description = ""
         self.software_items: list["Software"] = []
-        self._xml_tree: etree.ElementTree | None = None  # For future writes
+        self._xml_tree: Optional[etree.ElementTree] = None  # For future writes
         self._lxml_replacements: dict[
             str, str
         ] = {}  # lxml formatting quirks to preserve
@@ -225,7 +225,12 @@ class SoftwareList:
             disc_num = 0
             parts = []
             for part_element in software_element.findall("part"):
-                part = Part()
+                disk_elem = None
+                diskarea_elem = part_element.find("diskarea")
+                if diskarea_elem is not None:
+                    disk_elem = diskarea_elem.find("disk")
+
+                part = Part(part_element=part_element, disk_element=disk_elem)
                 part.name = part_element.get("name", "")
                 part.part_of = software
                 if part.name == part_base_name and disc_num == 0:
@@ -247,15 +252,6 @@ class SoftwareList:
                         if comment_obj not in software.comments:
                             part.comments.append(comment_obj)
 
-                # Disk data
-                diskarea_elem = part_element.find("diskarea")
-                if diskarea_elem is not None:
-                    disk_elem = diskarea_elem.find("disk")
-                    if disk_elem is not None:
-                        part.disk_name = disk_elem.get("name", "").strip()
-                        part.disk_sha1 = disk_elem.get("sha1", "").strip()
-                        part.disk_status = disk_elem.get("status", "").strip()
-
                 parts.append(part)
             validate_parts(parts, "cdrom")
             software.parts = parts
@@ -270,7 +266,7 @@ class SoftwareList:
         return instance
 
     @property
-    def entries_by_name(self) -> dict[str:Software]:
+    def entries_by_name(self) -> dict[str, Software]:
         if not self._entries_by_name:
             for entry in self.software_items:
                 self._entries_by_name[entry.name] = entry
@@ -320,9 +316,9 @@ class SoftwareList:
         registry: MediaRegistry,
         game_entry: GameEntry,
         software_item: Software,
-        part: Part = None,
+        part: Optional[Part] = None,
     ) -> None:
-        registered: CDMedia = None
+        registered: Optional[CDMedia] = None
         matched: bool = False
         if getattr(game_entry, "media", None) is None:
             registered, matched = registry.get_or_create_media(game_entry)

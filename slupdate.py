@@ -8,7 +8,6 @@ https://github.com/ldolse/slupdate
 
 import os
 import sys
-import inquirer
 from consoles import PlatformManager, Platform
 from utils.utils import get_script_path
 from menus.menu_system import MenuSystem

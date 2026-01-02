@@ -69,7 +69,7 @@ class TestCHDExistenceHandler:
         """Test OVERWRITE action removes existing CHD"""
         # Setup
         mock_process.current_item = MediaProcessingItem(mock_media)
-        chd_path = "/test/chd/path/Test Game.chd"
+        chd_path = "/test/chd/path/Test Game/Test Game.chd"
         mock_exists.return_value = True
 
         with patch.object(handler, "_execute_step_and_advance") as mock_execute_step:
@@ -190,21 +190,22 @@ class TestCHDExistenceHandler:
         """Test _get_expected_chd_path returns correct path"""
         chd_path = handler._get_expected_chd_path(mock_process, mock_media)
 
-        expected = "/test/chd/path/TestTitle/disk1.chd"
+        expected = "/test/chd/path/Test Game/Test Game.chd"
         assert chd_path == expected
 
-    def test_get_expected_chd_path_no_softlist(self, handler, mock_process):
-        """Test _get_expected_chd_path when softlist_part is None"""
+    def test_get_expected_chd_path_no_dat_entry(self, handler, mock_process):
+        """Test _get_expected_chd_path when dat_game_entry is None"""
         mock_media = Mock()
-        mock_media.softlist_part = None
+        mock_media.dat_game_entry = None
 
         chd_path = handler._get_expected_chd_path(mock_process, mock_media)
 
         assert chd_path is None
 
-    def test_get_expected_chd_path_no_part_of(self, handler, mock_process, mock_media):
-        """Test _get_expected_chd_path when part_of is None"""
-        mock_media.softlist_part.part_of = None
+    def test_get_expected_chd_path_no_dat_name(self, handler, mock_process, mock_media):
+        """Test _get_expected_chd_path when dat_game_entry.name is None"""
+        mock_media.dat_game_entry = Mock()
+        mock_media.dat_game_entry.name = None
 
         chd_path = handler._get_expected_chd_path(mock_process, mock_media)
 

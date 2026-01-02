@@ -11,6 +11,7 @@ from modules.chd import (
 )
 from rom_management.processing.archive_validation import ArchiveValidationProcess
 from rom_management.processing.chd_build_process import ChdBuildProcess
+from rom_management.processing.chd_hash_validation import CHDHashValidationProcess
 from rom_management.processing.models import ResultObject, PendingInputPayload, Action
 from typing import Optional
 
