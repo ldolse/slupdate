@@ -142,25 +142,34 @@ class CHDHashValidationProcess(BaseProcess):
                 metadata={"chd_path": str(chd.path)},
             )
 
+        message = f"Hash/filename mismatch for {part.part_of.name}\n"
+        message += f"  Software: {part.part_of.name}\n"
+        message += f"  Part: {part.name}\n"
+
+        if hash_mismatch:
+            message += f"\n  HASH MISMATCH:\n"
+            message += f"    CHD SHA1:     {chd.sha1}\n"
+            message += f"    Part SHA1:    {part.disk_sha1}\n"
+
+        if filename_mismatch:
+            message += f"\n  FILENAME MISMATCH:\n"
+            message += f"    CHD filename: {chd.name}\n"
+            message += f"    Part filename:{part.disk_name}\n"
+
+        if hasattr(part, "source_group") and part.source_group:
+            message += f"\n  Source group: {part.source_group}\n"
+
         return ResultObject.pending_input(
-            query_id="hash_validation_query",
-            message=f"Hash/filename mismatch for {part.part_of.name}",
+            query_id="generic_query",
+            message=message,
             item=PartProcessingItem(part),
             valid_actions=[
                 Action.UPDATE,
+                Action.UPDATE_ALL,
                 Action.SKIP,
                 Action.SKIP_ALL,
                 Action.STOP,
             ],
-            options_context={
-                "chd_sha1": chd.sha1,
-                "part_sha1": part.disk_sha1,
-                "chd_name": chd.name,
-                "part_name": part.disk_name,
-                "source_group": part.source_group
-                if hasattr(part, "source_group")
-                else None,
-            },
         )
 
     def _apply_update(self, chd: CHD, part: "Part") -> None:
@@ -256,6 +265,11 @@ class CHDHashValidationProcess(BaseProcess):
 
         if action == Action.UPDATE:
             if part:
+                return self._handle_update_action(part, params)
+
+        elif action == Action.UPDATE_ALL:
+            if part:
+                self.update_all = True
                 return self._handle_update_action(part, params)
 
         elif action == Action.SKIP:

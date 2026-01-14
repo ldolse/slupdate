@@ -200,9 +200,8 @@ This is a multi-phase project to refactor the entire process handling system. Th
 - ✅ Phase 3A: MenuSystem ResultObject-only navigation
 - ✅ Phase 3B: Concrete Process Migration (CHDBuildProcess)
 - ✅ Phase 3C: Bug Fixes & Process Flow Improvements
-
-**Pending Phases:**
-- ⏳ Phase 4: Cleanup & Migration (remove ProcessManager, legacy code)
+- ✅ Phase 4: Cleanup & Migration (remove ProcessManager, legacy code)
+- ✅ Phase 5: CHD Hash Validation Integration
 
 ---
 
@@ -322,6 +321,106 @@ Both bugs were fixed by following existing proven patterns in the codebase. Inte
 
 ---
 
+### **7E. Phase 5: CHD Hash Validation Integration** ✅ COMPLETE
+
+*Validate CHD hashes and filenames against softwarelist entries, update XML with minimal git diff.*
+
+**Overview:**
+After building CHDs, users need to verify that the CHD SHA1 hashes and filenames match the corresponding softwarelist Part entries. This phase implements a validation process that compares CHD metadata with softwarelist data and provides options to update mismatches.
+
+**Changes Made:**
+
+1. **Added UPDATE_ALL Action** (`rom_management/processing/models.py`)
+   - New action: `Action.UPDATE_ALL = ("update_all", "Update all remaining items")`
+   - Enables batch updating of all remaining mismatches without prompting for each one
+
+2. **Created CHDHashValidationProcess** (`rom_management/processing/chd_hash_validation.py`)
+   - Validates CHD SHA1 and filename against softwarelist Part entries
+   - Compares `chd.sha1` with `part.disk_sha1`
+   - Compares `chd.name` with `part.disk_name`
+   - Tracks pending updates in `self.pending_updates` dict
+   - Supports: interactive mode (user approves each), skip_all, update_all, stop
+   - Handles STOP action by saving pending updates before exit
+   - Calls `part.update_chd_metadata()` to update both XML and in-memory
+   - Calls `platform.softwarelist.write_to_file()` to save XML with lxml preservation
+
+3. **Updated CHDBuildMenu** (`menus/chd_menus.py`)
+   - Added menu option: "c. Validate CHD hashes against softwarelist"
+   - Added `_validate_chd_hashes()` method to run validation process
+   - Auto-runs validation after successful CHD build (no prompt needed)
+   - First mismatch allows user to "Skip All" to skip entire validation flow
+   - Supports resumability - users can stop and return to validation later
+
+**Key Design Decisions:**
+
+1. **Reuses GenericQueryMenu** - No custom query menu needed
+   - Changed `query_id="hash_validation_query"` to `query_id="generic_query"`
+   - Removed `options_context` (not used by GenericQueryMenu)
+   - Built detailed mismatch message in `payload.message` field
+   - GenericQueryMenu + DynamicMenuAdapter handle all query types uniformly
+
+2. **Auto-Run Validation After Build**
+   - No prompt to run validation after CHD build
+   - User gets first mismatch immediately, can "Skip All" to skip entire flow
+   - Provides immediate feedback on CHD quality
+   - Supports resumability via dedicated menu option
+
+3. **Batch Update Support**
+   - `UPDATE_ALL` action allows users to approve all remaining updates
+   - Useful when confident in CHD quality after reviewing first few mismatches
+
+4. **Detailed Mismatch Display**
+   - Message format shows:
+     - Software and Part names
+     - CHD vs Part SHA1 (if hash mismatch)
+     - CHD vs Part filename (if filename mismatch)
+     - Source group (redump, TOSEC, no-intro) if available
+
+**Files Modified:**
+- `rom_management/processing/models.py` - Added UPDATE_ALL action
+- `rom_management/processing/chd_hash_validation.py` - Created new process (276 lines)
+- `rom_management/processing/__init__.py` - Export CHDHashValidationProcess
+- `menus/chd_menus.py` - Added menu option and auto-run logic
+- `tests/unit/menus/test_menus.py` - Updated to expect 4 menu options
+
+**Testing:**
+- ✅ All existing unit tests pass (168 passed, 1 skipped, 1 pre-existing failure)
+- ✅ Import tests for CHDHashValidationProcess and UPDATE_ALL action
+- ✅ Menu initialization test updated to expect 4 options
+- ⏳ No unit tests for CHDHashValidationProcess yet (future work)
+
+**Integration Details:**
+
+The validation flow works as follows:
+1. User selects "Build CHDs from ROMs" or "Validate CHD hashes" option
+2. MenuSystem runs CHDHashValidationProcess via ProcessRunner
+3. Process validates each CHD against its corresponding Part
+4. On mismatch, process returns `ResultObject.pending_input()` with detailed message
+5. MenuSystem._get_or_create_query_handler("generic_query") returns GenericQueryMenu
+6. DynamicMenuAdapter converts PendingInputPayload to DisplayData
+7. User sees mismatch details and actions: Update, Update All, Skip, Skip All, Stop
+8. User action processed by `handle_user_action()` → applies update or skips
+9. Process continues to next CHD until complete or stopped
+10. On STOP or COMPLETE, `softwarelist.write_to_file()` saves XML with lxml formatting preservation
+
+**Pre-Requisite Work:**
+- Phase 1-3: ProcessRunner, ResultObject, MenuSystem architecture
+- Phase 4: Cleanup (removed legacy code)
+- Previous work: XML write infrastructure (lxml formatting), Part.update_chd_metadata()
+
+**Status:**
+- ✅ Basic hash and filename validation working
+- ✅ XML updates with minimal git diffs (lxml formatting)
+- ✅ Batch update support (UPDATE_ALL action)
+- ✅ Auto-run validation after CHD build
+- ✅ Resumability via dedicated menu option
+- ⏳ Comment migration not yet implemented (deferred to future phase)
+- ⏳ Unit tests for CHDHashValidationProcess (future work)
+
+---
+
+---
+
 ## Current Architecture Status
 
 **Completed Components:**
@@ -330,6 +429,7 @@ Both bugs were fixed by following existing proven patterns in the codebase. Inte
 - ✅ ResultObject & Action Enum (`rom_management/processing/models.py`)
 - ✅ ArchiveValidationProcess (`rom_management/processing/archive_validation.py`)
 - ✅ ChdBuildProcess (`rom_management/processing/chd_build_process.py`)
+- ✅ CHDHashValidationProcess (`rom_management/processing/chd_hash_validation.py`)
 - ✅ MenuSystem ResultObject-only navigation (`menus/menu_system/menus.py`)
 - ✅ DeclarativeMenuAdapter & DynamicMenuAdapter (`menus/menu_system/adapters.py`)
 - ✅ All action functions return ResultObject (`menus/mapping.py`)
@@ -337,6 +437,7 @@ Both bugs were fixed by following existing proven patterns in the codebase. Inte
 - ✅ Process flow bug fixes (duplicate execution, None handling)
 - ✅ Integration tests for menu/process flow
 - ✅ **Phase 4 Cleanup**: Removed ProcessManager, legacy code, exceptions, deprecated methods
+- ✅ **Phase 5**: CHD Hash Validation Integration
 - ✅ Platform unit tests (`tests/unit/consoles/test_platform.py`)
 
 **Pending Components:**
@@ -357,6 +458,7 @@ Both bugs were fixed by following existing proven patterns in the codebase. Inte
 | 3B | Concrete processes: ChdBuildProcess, handlers | ✅ Complete |
 | 3C | Bug fixes & process flow improvements | ✅ Complete |
 | 4 | Cleanup: Remove ProcessManager, legacy code | ✅ Complete |
+| 5 | CHD Hash Validation: Validate CHDs against softwarelist | ✅ Complete |
 
 **Key Architectural Decisions:**
 1. **ResultObject-only communication** - All process/UI interactions use ResultObject
@@ -371,28 +473,26 @@ Both bugs were fixed by following existing proven patterns in the codebase. Inte
 
 Priority order (choose based on what you want to work on):
 
-1. **Phase 4: Cleanup** - Remove ProcessManager and all legacy exception-based code
-   - Remove ProcessManager usage from Platform class
-   - Remove `rom_management/processing/process_manager.py`
-   - Clean up any remaining exception-based menu handling
-
-2. **Action Functions** - Refactor to use Platform class methods
+1. **Action Functions** - Refactor to use Platform class methods
    - Replace dict access (`software_list_data`, `dat_hashes`) with Platform methods
    - This completes the menu system migration to ResultObject pattern
 
-3. **SoftwareList Update Code** - Refactor writing/updating Software Lists
+2. **SoftwareList Update Code** - Refactor writing/updating Software Lists
    - Currently only reading is refactored, writing is still exception-based
    - Move update logic into ResultObject-based processes
    - Large, complex undertaking - separate project from core processing
 
-4. **Full read/write for Softlist and DAT data** - Add write capabilities
+3. **Full read/write for Softlist and DAT data** - Add write capabilities
    - Currently refactored code is read-only
    - Add methods to Platform class for updating Software Lists and DATs
    - Enable automated mapping updates
 
+4. **Unit Tests for CHDHashValidationProcess**
+   - Create comprehensive unit tests for hash validation logic
+   - Test mismatch detection, update application, XML persistence
+
 **Suggested Approach:**
-- Start with Phase 4 (cleanup) to simplify codebase
-- Action functions refactoring builds on cleanup
+- Action functions refactoring builds on completed cleanup (Phase 4)
 - SoftwareList updating is a separate major project
 - Each phase can be completed independently
 - Test incrementally as you go
@@ -482,18 +582,62 @@ def my_menu_action(platform, menu_system):
 - Provides confidence in refactoring
 - Documents expected behavior
 
+#### **Reuse GenericQueryMenu for All Process Queries**
+
+**Principle**: All process queries should use `GenericQueryMenu` with `query_id="generic_query"` instead of creating custom query menus.
+
+**Why**: `GenericQueryMenu` + `DynamicMenuAdapter` already provide all necessary functionality:
+- `query_id="generic_query"` → `_get_or_create_query_handler()` creates GenericQueryMenu instance
+- `payload.message` → Detailed user-facing message
+- `payload.item.display_name` → Adds "Item: {name}" suffix to message
+- `payload.valid_actions` → List of Action enums displayed as choices
+- `DynamicMenuAdapter` → Converts PendingInputPayload to DisplayData
+
+**Example from CHDHashValidationProcess**:
+```python
+# Build detailed message with mismatch info
+message = f"Hash/filename mismatch for {part.part_of.name}\n"
+message += f"  Software: {part.part_of.name}\n"
+message += f"  Part: {part.name}\n"
+
+if hash_mismatch:
+    message += f"\n  HASH MISMATCH:\n"
+    message += f"    CHD SHA1:     {chd.sha1}\n"
+    message += f"    Part SHA1:    {part.disk_sha1}\n"
+
+if filename_mismatch:
+    message += f"\n  FILENAME MISMATCH:\n"
+    message += f"    CHD filename: {chd.name}\n"
+    message += f"    Part filename:{part.disk_name}\n"
+
+return ResultObject.pending_input(
+    query_id="generic_query",  # Use generic, not custom query_id
+    message=message,  # Build detailed message here
+    item=PartProcessingItem(part),
+    valid_actions=[Action.UPDATE, Action.UPDATE_ALL, Action.SKIP, Action.SKIP_ALL, Action.STOP],
+    # No options_context - not used by GenericQueryMenu
+)
+```
+
+**Benefits**:
+- No need to create custom query menu classes
+- Consistent UI/UX across all process queries
+- Less code to maintain
+- Leverages existing battle-tested architecture
+
 ---
 
 ### **10. Files to Reference for Future Work**
 
 **Key Files**:
-- **Menu system**: `menus/menu_system/menus.py` (lines 366-458)
-- **CHD menu**: `menus/chd_menus.py` (lines 247-296)
+- **Menu system**: `menus/menu_system/menus.py`
+- **CHD menu**: `menus/chd_menus.py`
 - **Process runner**: `rom_management/processing/process_runner.py`
 - **Base process**: `rom_management/processing/base_process.py`
 - **Models**: `rom_management/processing/models.py` (ResultObject, Action enum)
+- **Hash validation**: `rom_management/processing/chd_hash_validation.py`
 - **Test pattern**: `tests/integration/test_menu_item_and_handler_flow.py` (for documentation)
-- **Working example**: `menus/chd_menus.py` `_validate_roms()` (lines 221-237)
+- **Working example**: `menus/chd_menus.py` `_validate_roms()` and `_validate_chd_hashes()`
 
 **Pre-existing Issues** (noted during testing):
 - `test_progress_property` in `tests/integration/test_archive_validation.py` fails (expects 3 processed but gets 5) - this was failing before the Phase 3C bug fixes and is unrelated to the refactor work

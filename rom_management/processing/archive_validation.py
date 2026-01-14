@@ -106,7 +106,7 @@ class ArchiveValidationProcess(BaseProcess):
         rom_dir = media.dat_game_entry.dat.rom_path
         if not rom_dir or not os.path.isdir(rom_dir):
             print(
-                f"  ⚠️  ROM directory does not exist for {media.dat_game_entry.name}: Skipping - {rom_dir}"
+                f"  ⚠️  ROM directory does not exist for {media.dat_game_entry.name}: Skipping"
             )
             return ResultObject.success(
                 message=f"ROM directory missing: {media.dat_game_entry.name}",

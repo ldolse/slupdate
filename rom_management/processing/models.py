@@ -25,21 +25,24 @@ class Action(Enum):
         self._value_ = value  # Internal identifier for handle_user_action()
         self.display_name = display_name  # Human-readable for menus
 
-    # Validation actions
-    SCAN_MD5 = ("scan_md5", "Scan this archive with MD5 (slow)")
+    # Common Actions
     SKIP = ("skip", "Skip current item")
     SKIP_ALL = ("skip_all", "Skip all remaining items")
+
+    # Validation actions
+    SCAN_MD5 = ("scan_md5", "Scan this archive with MD5 (slow)")
     SCAN_ALL_MD5 = ("scan_all_md5", "Scan all with MD5")
 
     # CHD build actions
+    TRUST = ("trust_existing", "Trust this CHD")
     RETRY = ("retry", "Retry current item")
     OVERWRITE = ("overwrite", "Overwrite this CHD")
-    SKIP_EXISTING = ("skip_existing", "Skip this CHD")
     SET_OVERWRITE_PREFERENCE = ("set_overwrite_pref", "Always overwrite older CHDs")
-    SET_SKIP_PREFERENCE = ("set_skip_pref", "Always skip existing CHDs")
+    SET_TRUST_PREFERENCE = ("set_skip_pref", "Always trust existing CHDs")
 
     # Hash validation actions
     UPDATE = ("update", "Update hash and filename")
+    UPDATE_ALL = ("update_all", "Update all remaining items")
 
     # Common actions
     STOP = ("stop", "Stop processing")

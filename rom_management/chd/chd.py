@@ -26,6 +26,29 @@ class CHDAlreadyExistsException(Exception):
         self.existing_version = existing_version
         super().__init__(f"CHD already exists at {chd_path}")
 
+class CHDNotFoundException(Exception):
+    """Exception raised when a CHD file is not found"""
+
+    def __init__(self, chd_path: str):
+        self.chd_path = chd_path
+        super().__init__(f"CHD file not found at {chd_path}")
+
+class CHDInvalidException(Exception):
+    """Exception raised when a CHD file is invalid"""
+
+    def __init__(self, chd_path: str, error_message: str):
+        self.chd_path = chd_path
+        self.error_message = error_message
+        super().__init__(f"Invalid CHD at {chd_path}: {error_message}")
+
+class CHDSourceException(Exception):
+    """Exception raised when there is an issue with the CHD source data"""
+
+    def __init__(self, toc_source: str, error_message: str):
+        self.toc_source = toc_source
+        self.error_message = error_message
+        super().__init__(f"Error with CHD source {toc_source}: {error_message}")
+
 
 class CHD:
     """
@@ -102,6 +125,8 @@ class CHD:
             chd_path (str): Path to the existing CHD file
         """
         self.path = pathlib.Path(chd_path)
+        if not self.path.exists():
+            raise CHDNotFoundException(chd_path)
         self.name = self.path.stem
         self.size = os.path.getsize(chd_path)
 
@@ -114,6 +139,7 @@ class CHD:
             self.compression = info.get("compression")
         else:
             self.error = "Failed to retrieve CHD information"
+            raise CHDInvalidException(chd_path, self.error)
 
     def _initialize_for_creation(self):
         """
@@ -244,11 +270,11 @@ class CHD:
             bool: True if successful, False otherwise
         """
         if self.path and self.exists:
-            self.preexisting = True
-            self._initialize_from_existing(str(self.path))
+            raise CHDAlreadyExistsException(str(self.path))
+
         else:
             if not self.toc_source:
-                raise Exception(
+                raise CHDSourceException(
                     f"toc file not found for {self.source.dat_game_entry.name}"
                 )
 

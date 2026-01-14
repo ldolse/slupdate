@@ -104,7 +104,7 @@ class ZipProcessor:
                         zip_file.extract(file_info, self.temp_dir)
             return Path(self.temp_dir)
         except Exception as e:
-            print(f"Extraction error: {e}")
+            print(f"{zip_path} Extraction error: {e}")
             self.cleanup_tempdir()
             return None
 

@@ -13,12 +13,6 @@ from rom_management.processing.archive_validation import ArchiveValidationProces
 from rom_management.processing.chd_build_process import ChdBuildProcess
 from rom_management.processing.chd_hash_validation import CHDHashValidationProcess
 from rom_management.processing.models import ResultObject, PendingInputPayload, Action
-from typing import Optional
-
-# disabled by default, allows the script to populate chd sha1s on subsequent runs
-# only enable if CHD destination folder ONLY contains chds created by this script
-get_sha_from_existing_chd = False
-settings = {}
 
 
 def old_chd_builder(platform: Platform) -> None:
@@ -30,6 +24,8 @@ def old_chd_builder(platform: Platform) -> None:
     sources.  CHD hash is added to the soft-dict.  If a CHD already exists in the build
     directory it's skipped, but there is a flag to enable grabbing hashes for built CDs.
     """
+    get_sha_from_existing_chd = False
+    settings = {}
     if platform == "psx":
         from rom_management.handlers.libcrypt_handler import libcrypt_titles
     new_hashes = False
@@ -211,7 +207,12 @@ class CHDBuildMenu(DeclarativeMenuAdapter, BaseMenu):
                 requires_platform=True,
             ),
             MenuItem(
-                text="c. Back to Main Menu", target="main_menu", requires_platform=False
+                text="c. Validate CHD hashes against softwarelist",
+                action_func=self._validate_chd_hashes,
+                requires_platform=True,
+            ),
+            MenuItem(
+                text="d. Back to Main Menu", target="main_menu", requires_platform=False
             ),
         ]
 
@@ -265,6 +266,44 @@ class CHDBuildMenu(DeclarativeMenuAdapter, BaseMenu):
             # Run CHD build process via ProcessRunner
             result = menu_system.run_process(
                 ChdBuildProcess, destination_menu="chd_build_menu"
+            )
+
+            # If None, process is waiting for user input - return success
+            # Control will be resumed after user interaction via resume_process()
+            if result is None:
+                return ResultObject.success(message="Waiting for user input...")
+
+            # Auto-run validation after successful CHD build
+            if result.is_complete():
+                return self._validate_chd_hashes(platform, menu_system)
+
+            # Process completed or errored
+            return result
+
+        except Exception as e:
+            # Return error result with handler_error_menu as destination
+            return ResultObject.error(
+                error_type="HandlerException",
+                message=str(e),
+                exception=e,
+                destination_menu="chd_build_menu",
+            )
+
+    def _validate_chd_hashes(
+        self, platform: Platform, menu_system: "MenuSystem"
+    ) -> ResultObject:
+        """Validate CHD hashes and filenames against softwarelist entries"""
+
+        if not platform.validated_chds:
+            print("No validated CHDs found to check")
+            return ResultObject.complete(
+                total_processed=0,
+                destination_menu="chd_build_menu",
+            )
+
+        try:
+            result = menu_system.run_process(
+                CHDHashValidationProcess, destination_menu="chd_build_menu"
             )
 
             # If None, process is waiting for user input - return success

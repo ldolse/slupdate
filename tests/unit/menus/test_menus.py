@@ -96,4 +96,5 @@ class TestCHDBuildMenu:
         assert menu.name == "chd_build_menu"
         assert menu.message == "Create CHDs from ROMs"
         # Phase 4 removed "Validate source ROMs (old method)" option
-        assert len(menu.options) == 3
+        # Phase 10 added "Validate CHD hashes" option
+        assert len(menu.options) == 4

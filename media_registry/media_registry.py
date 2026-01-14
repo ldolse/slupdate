@@ -2,6 +2,7 @@ import hashlib
 from softwarelist import Software, Part
 from typing import Dict, Optional, Tuple
 from collections import OrderedDict
+import os
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -28,9 +29,20 @@ class CDMedia:
         self.softlist_part: Optional['Part'] = None
 
         # Zip processing attributes
-        self.zip_path: Optional[str] = None
-        self.chd_path: Optional[str] = None
+        self._zip_path: Optional[str] = None
+        self._chd_path: Optional[str] = None
         self.processing_status: str = "pending"  # pending, processing, complete, failed
+
+    @property
+    def chd_path(self) -> Optional[str]:
+        """Get the expected CHD path for this media"""
+        if self._chd_path is None and self.dat_game_entry is not None and self.softlist_title is not None and self.platform is not None:
+            # Generate CHD path based on dat entry and platform
+            self._chd_path = os.path.join(
+                self.platform,
+                self.softlist_title.name,
+                f"{self.dat_game_entry.name}.chd",)
+        return self._chd_path
 
     @property
     def dat_entries(self) -> list["DATGameEntry"]:

@@ -30,7 +30,10 @@ class OpticalMediaProcessor:
 
     def extract_and_process(self) -> 'OpticalMediaProcessor':
         self.filedata = ZipProcessor(tmpdsk=self.tmpdsk)
-        self.temp_dir = self.filedata.extract_to_tempdir(self.zip_path)
+        try:
+            self.temp_dir = self.filedata.extract_to_tempdir(self.zip_path)
+        except Exception as e:
+            raise RuntimeError(f"Failed to extract {self.zip_path} ZIP file: {e}")
         # Initial TOC detection
         self._detect_toc()
         self._detect_format()
