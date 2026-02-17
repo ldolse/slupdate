@@ -406,3 +406,64 @@ class TestPlatformStats:
 
         assert stats["redump"] == 2
         assert stats["no-intro"] == 1
+
+
+class TestPlatformStateMethods:
+    """Tests for PlatformState zip path persistence methods"""
+
+    def test_add_validated_zip_path(self):
+        """Test adding a validated zip path stores both signature and path"""
+        state = PlatformState()
+
+        state.add_validated_zip_path("sha1:abc123", "/path/to/game.zip")
+
+        assert "sha1:abc123" in state.matched_media_sigs
+        assert state.validated_zip_paths["sha1:abc123"] == "/path/to/game.zip"
+
+    def test_add_validated_zip_path_appends_to_matched_sigs(self):
+        """Test adding validated zip path doesn't duplicate matched_media_sigs"""
+        state = PlatformState()
+        state.matched_media_sigs = ["existing:sig"]
+
+        state.add_validated_zip_path("new:sig", "/path/to/new.zip")
+
+        assert len(state.matched_media_sigs) == 2
+        assert "existing:sig" in state.matched_media_sigs
+        assert "new:sig" in state.matched_media_sigs
+
+    def test_get_zip_path_returns_path(self):
+        """Test getting zip path for a signature"""
+        state = PlatformState()
+        state.validated_zip_paths["sig123"] = "/path/to/game.zip"
+
+        result = state.get_zip_path("sig123")
+
+        assert result == "/path/to/game.zip"
+
+    def test_get_zip_path_returns_none_for_unknown(self):
+        """Test getting zip path returns None for unknown signature"""
+        state = PlatformState()
+
+        result = state.get_zip_path("unknown:sig")
+
+        assert result is None
+
+    def test_is_validated_returns_true_for_known(self):
+        """Test is_validated returns True for known signature"""
+        state = PlatformState()
+        state.matched_media_sigs = ["known:sig"]
+
+        assert state.is_validated("known:sig") is True
+
+    def test_is_validated_returns_false_for_unknown(self):
+        """Test is_validated returns False for unknown signature"""
+        state = PlatformState()
+
+        assert state.is_validated("unknown:sig") is False
+
+    def test_validated_zip_paths_defaults_to_empty_dict(self):
+        """Test validated_zip_paths defaults to empty dict"""
+        state = PlatformState()
+
+        assert state.validated_zip_paths == {}
+        assert isinstance(state.validated_zip_paths, dict)

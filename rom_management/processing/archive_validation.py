@@ -91,21 +91,24 @@ class ArchiveValidationProcess(BaseProcess):
 
         # Check if already validated
         media_sig = media.sha1_signature or media.crc_signature
-        if media_sig in self.platform.state.matched_media_sigs:
+        if self.platform.state.is_validated(media_sig):
             print(
                 f". ✅ {media.dat_game_entry.name} already validated, skipping zip check"
             )
-            # Ensure zip_path is set (may have been set in a previous validation run)
-            # If still None, we can't build a CHD for this media
-            if not media.zip_path:
+            # Restore zip_path from saved state
+            saved_zip_path = self.platform.state.get_zip_path(media_sig)
+            if saved_zip_path:
+                media.zip_path = saved_zip_path
+                print(f"  ✅ Restored ZIP path: {saved_zip_path}")
+            elif not media.zip_path:
                 print(
-                    f"  ⚠️  Warning: zip_path not set for already-validated media {media.dat_game_entry.name}"
+                    f"  ⚠️  Warning: No ZIP path found in state for {media.dat_game_entry.name}"
                 )
             # Add to matched_buildable_media since we know it's valid
             self.platform.matched_buildable_media[media] = None
             return ResultObject.success(
                 message=f"Already validated: {media.dat_game_entry.name}",
-                metadata={"media_id": media.id},
+                metadata={"media_id": media.id, "zip_path": media.zip_path},
             )
 
         # Find ROM directory for this DAT
@@ -165,6 +168,8 @@ class ArchiveValidationProcess(BaseProcess):
         else:
             print(f"  ✅ Found valid zip: {media.dat_game_entry.name}")
             media.zip_path = zip_path
+            # Store zip_path in state for persistence across pickle saves
+            self.platform.state.add_validated_zip_path(media_sig, zip_path)
             self.platform.matched_buildable_media[media] = None
             return ResultObject.success(
                 message=f"Found valid zip: {media.dat_game_entry.name}",
