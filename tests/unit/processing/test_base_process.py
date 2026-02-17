@@ -193,7 +193,7 @@ class TestBaseProcess:
         assert result.payload.total_processed == 5
 
     def test_handle_default_action_unknown(self):
-        """Test default handling for unknown actions"""
+        """Test default handling for CONTINUE action"""
         mock_platform = Mock()
 
         class ConcreteProcess(BaseProcess):
@@ -210,11 +210,41 @@ class TestBaseProcess:
                 return None
 
         process = ConcreteProcess(mock_platform)
+        # Set a current item to verify it gets cleared
+        process.current_item = "test_item"
 
         result = process.handle_user_action(Action.CONTINUE)
 
-        assert result.is_error()
-        assert result.payload.error_type == "UnknownAction"
+        assert result.is_success()
+        assert result.payload.message == "Continuing to next item"
+        assert process.current_item is None
+
+    def test_handle_default_action_skip(self):
+        """Test default handling for SKIP action"""
+        mock_platform = Mock()
+
+        class ConcreteProcess(BaseProcess):
+            def initialize(self):
+                pass
+
+            def register_handlers(self):
+                pass
+
+            def _execute_step(self):
+                return ResultObject.success()
+
+            def _get_handler_for_action(self, action):
+                return None
+
+        process = ConcreteProcess(mock_platform)
+        # Set a current item to verify it gets cleared
+        process.current_item = "test_item"
+
+        result = process.handle_user_action(Action.SKIP)
+
+        assert result.is_success()
+        assert result.payload.message == "Skipped current item"
+        assert process.current_item is None
 
     def test_get_progress(self):
         """Test get_progress returns correct information"""

@@ -134,6 +134,19 @@ class BaseProcess(ABC):
                 total_processed=self.processed_items,
                 stopped_early=True,
             )
+        elif action == Action.CONTINUE:
+            # CONTINUE is like SKIP but doesn't set skip_all preference
+            # Clear current item so next step will get a new item
+            self.current_item = None
+            return ResultObject.success(
+                message="Continuing to next item",
+            )
+        elif action == Action.SKIP:
+            # Clear current item so next step will get a new item
+            self.current_item = None
+            return ResultObject.success(
+                message="Skipped current item",
+            )
 
         return ResultObject.error(
             error_type="UnknownAction",

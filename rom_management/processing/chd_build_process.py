@@ -63,6 +63,10 @@ class ChdBuildProcess(BaseProcess):
 
     def _execute_step(self) -> ResultObject:
         """Execute one step of CHD building"""
+        if self.current_item is None:
+            if not self._get_next_item():
+                return ResultObject.complete(total_processed=self.processed_items)
+
         media = self.current_item.media
 
         if not media.softlist_part or not media.softlist_part.part_of:
@@ -153,6 +157,21 @@ class ChdBuildProcess(BaseProcess):
         self, media, title: str, expected_chd_path: str
     ) -> ResultObject:
         """Build CHD for a single media item"""
+
+        # Check if we have a valid zip_path before attempting extraction
+        if not media.zip_path:
+            return ResultObject.pending_input(
+                query_id="generic_query",
+                message=f"Cannot build CHD for {media.dat_game_entry.name}: ZIP path not set. "
+                f"Please run 'Validate source ROMs' first.",
+                item=self.current_item,
+                valid_actions=[
+                    Action.SKIP,
+                    Action.SKIP_ALL,
+                    Action.CONTINUE,
+                    Action.STOP,
+                ],
+            )
 
         # Initialize OpticalMediaProcessor
         self._file_data = OpticalMediaProcessor(media, tmpdsk=self.platform.pm.tmpdsk)

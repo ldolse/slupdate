@@ -173,8 +173,7 @@ class CHDExistenceHandler(SpecialHandler):
         )
 
     def _handle_skip_existing(self, process: "BaseProcess") -> "ResultObject":
-        """
-        Handle SKIP_EXISTING action - skip current CHD and continue
+        """Handle SKIP action - skip current CHD and continue
 
         Args:
             process: The BaseProcess instance
@@ -184,9 +183,10 @@ class CHDExistenceHandler(SpecialHandler):
         """
         from rom_management.processing.models import ResultObject
 
-        print(
-            f"Skipping existing CHD for {process.current_item.media.dat_game_entry.name}"
-        )
+        if process.current_item and hasattr(process.current_item, "media"):
+            print(
+                f"Skipping existing CHD for {process.current_item.media.dat_game_entry.name}"
+            )
         process.current_item = None
         process.processed_items += 1
         return ResultObject.success(message="Skipped existing CHD")

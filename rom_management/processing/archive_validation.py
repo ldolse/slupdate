@@ -95,6 +95,12 @@ class ArchiveValidationProcess(BaseProcess):
             print(
                 f". ✅ {media.dat_game_entry.name} already validated, skipping zip check"
             )
+            # Ensure zip_path is set (may have been set in a previous validation run)
+            # If still None, we can't build a CHD for this media
+            if not media.zip_path:
+                print(
+                    f"  ⚠️  Warning: zip_path not set for already-validated media {media.dat_game_entry.name}"
+                )
             # Add to matched_buildable_media since we know it's valid
             self.platform.matched_buildable_media[media] = None
             return ResultObject.success(

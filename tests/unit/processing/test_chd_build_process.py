@@ -557,3 +557,31 @@ class TestChdBuildProcess:
 
         assert result.is_complete()
         assert result.payload.total_processed == 0
+
+    def test_build_single_chd_missing_zip_path(self, mock_platform, mock_media):
+        """Test _build_single_chd returns PENDING_INPUT when zip_path is None"""
+        # Ensure zip_path is None
+        mock_media.zip_path = None
+
+        # Create a mock dat_game_entry
+        mock_dat_entry = Mock()
+        mock_dat_entry.name = "test_game"
+        mock_media.dat_game_entry = mock_dat_entry
+
+        # Set up the processing item
+        process = ChdBuildProcess(mock_platform)
+        mock_item = MediaProcessingItem(mock_media)
+        process.current_item = mock_item
+
+        result = process._build_single_chd(
+            mock_media, "TestTitle", "/test/path/disk1.chd"
+        )
+
+        # Should return PENDING_INPUT, not ERROR
+        assert result.requires_input()
+        assert "ZIP path not set" in result.payload.message
+        # Verify it offers skip/continue options
+        valid_actions = result.payload.valid_actions
+        assert Action.SKIP in valid_actions
+        assert Action.CONTINUE in valid_actions
+        assert Action.STOP in valid_actions
