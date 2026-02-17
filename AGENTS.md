@@ -30,15 +30,16 @@
 - Descriptive names required (`platform_manager` over `pm`)
 
 ### Error Handling
-- Use **custom exception hierarchy** from `rom_management/exceptions.py`
-- Base: `HandlerException`, with specific types like `CHDAlreadyExistsException`  
-- Include meaningful error messages and optional menu class names for recovery
+- Use **ResultObject** pattern for all process/UI communication
+- All errors return `ResultObject.pending_input()` with user actions [CONTINUE, SKIP, STOP]
+- Internal exceptions (e.g., `CHDAlreadyExistsException`) used only for control flow within processes
 - Wrap external dependencies (requests, filesystem) in try-catch blocks
 
 ### Project Structure
 - **Modular design**: separate modules for CD processing, ROM management, UI menus
-- **Handler pattern** for different media formats (cdrdao, clonecd, bincue)
-- Configuration via user prompts through `inquirer` library
+- **Handler pattern** for media format edge cases (cdrdao, clonecd, bincue, libcrypt, etc.)
+- **Handler Registry** (`rom_management/handlers/registry.py`) manages handlers by platform, format, and DAT group
+- **ResultObject-only communication** between MenuSystem, ProcessRunner, and BaseProcess
 
 
 ### **1. Project Overview & Refactoring Goal**
@@ -315,9 +316,9 @@ Both bugs were fixed by following existing proven patterns in the codebase. Inte
 **Items Left for Future Discussion:**
 - **Handler Registry** (`rom_management/handlers/registry.py`)
   - Contains `register_special_handler()` and `get_special_handlers()` methods
-  - These methods were used by ProcessManager for dynamic handler loading
-  - Current new architecture doesn't use these methods (handlers are registered via imports in `__init__.py`)
-  - Need to discuss: Should these be removed, or are they needed for future extensibility?
+  - Currently handlers are registered via imports in `__init__.py`
+  - `get_relevant_handlers()` is the main entry point used by processes
+  - Key principle: Always check `validate_preconditions()` before applying handlers
 
 ---
 
@@ -444,7 +445,6 @@ The validation flow works as follows:
 - ⏳ Action functions refactored to use Platform class methods
 - ⏳ SoftwareList update code refactoring (currently read-only)
 - ⏳ Full read/write for Softlist and DAT data
-- **Handler Registry** (`rom_management/handlers/registry.py`) - pending discussion (see notes above)
 
 ---
 
@@ -641,13 +641,3 @@ return ResultObject.pending_input(
 
 **Pre-existing Issues** (noted during testing):
 - `test_progress_property` in `tests/integration/test_archive_validation.py` fails (expects 3 processed but gets 5) - this was failing before the Phase 3C bug fixes and is unrelated to the refactor work
-
-
-#### **Handler System Purpose Clarification**
-
-The handler system is designed for edge cases:
-- Platform-specific handling (e.g., PSX LibCrypt DRM)
-- File format conversion (e.g., CloneCD → CUE, BIN/CUE fixes)
-- DAT group-specific logic (e.g., No-Intro binary filename issues)
-
-**Key Principle**: `validate_preconditions()` MUST return `False` for handlers that don't need to do anything. The registry now respects this check.
