@@ -290,7 +290,7 @@ class MenuSystem:
         """
         result = menu.execute_custom_action(self, action)
 
-        if result.is_complete() or result.is_error():
+        if result.is_complete():
             self.navigate_to(result)
 
         return result
@@ -304,28 +304,16 @@ class MenuSystem:
     def _handle_result_navigation(self, result: "ResultObject") -> None:
         """Process-aware navigation logic"""
         if result.is_complete():
-            # Navigate to destination menu specified in payload
             target = result.payload.destination_menu
             self._navigate_to_menu(target, result.payload)
 
         elif result.requires_input():
-            # Navigate to query handler menu
             handler = self._get_or_create_query_handler(result.payload.query_id)
-
-            # Store the result for the handler to use when rendering
             handler._pending_result = result
-
-            # Navigate to the handler menu
             self._navigate_to_menu(handler.name, result.payload)
 
         elif result.is_success():
-            # SUCCESS means continue with current state - no navigation needed
             pass
-
-        elif result.is_error():
-            # Navigate to error destination or main menu
-            target = result.payload.destination_menu or "main_menu"
-            self._navigate_to_menu(target, result.payload)
 
     def _navigate_to_menu(self, target: str, payload: Optional[dict] = None) -> None:
         """Navigate to a menu with optional payload injection"""
@@ -397,20 +385,10 @@ class MenuSystem:
                     continue
 
                 elif result.requires_input():
-                    # Navigate to menu via navigate_to()
-                    # User interaction will resume loop via resume_process()
                     nav_result = self.navigate_to(result)
-                    # Return None to indicate waiting for user input
                     return None
 
                 elif result.is_complete():
-                    # Set default destination if not specified
-                    if result.payload and result.payload.destination_menu is None:
-                        result.payload.destination_menu = destination_menu
-                    return result
-
-                elif result.is_error():
-                    # Set default destination if not specified
                     if result.payload and result.payload.destination_menu is None:
                         result.payload.destination_menu = destination_menu
                     return result
@@ -436,22 +414,16 @@ class MenuSystem:
 
     def run_process_from_result(self, result: "ResultObject") -> None:
         """Continue process loop from a given ResultObject"""
-        while not result.is_complete() and not result.is_error():
+        while not result.is_complete():
             if result.requires_input():
-                # Navigate to menu for user input
                 self.navigate_to(result)
                 return
 
             if result.is_success() or result.is_progress():
-                # Auto-continue on SUCCESS or PROGRESS
                 result = self.runner.execute_next_step()
             else:
                 break
 
-        # Process finished - handle navigation
         if result.is_complete():
-            target = result.payload.destination_menu or "main_menu"
-            self._navigate_to_menu(target, result.payload)
-        elif result.is_error():
             target = result.payload.destination_menu or "main_menu"
             self._navigate_to_menu(target, result.payload)

@@ -125,10 +125,15 @@ class ChdBuildProcess(BaseProcess):
             try:
                 os.remove(expected_chd_path)
             except OSError as e:
-                return ResultObject.error(
-                    error_type="FileRemovalError",
-                    message=f"Failed to remove CHD: {str(e)}",
-                    exception=e,
+                return ResultObject.pending_input(
+                    query_id="generic_query",
+                    message=f"Failed to remove existing CHD: {str(e)}",
+                    item=self.current_item,
+                    valid_actions=[
+                        Action.SKIP,
+                        Action.SKIP_ALL,
+                        Action.STOP,
+                    ],
                 )
             return self._build_single_chd(
                 media, media.softlist_part.part_of.name, expected_chd_path
@@ -184,10 +189,16 @@ class ChdBuildProcess(BaseProcess):
             self._file_data.extract_and_process()
 
             if not self._file_data.temp_dir or not self._file_data.temp_dir.exists():
-                return ResultObject.error(
-                    error_type="TempDirectoryError",
+                return ResultObject.pending_input(
+                    query_id="generic_query",
                     message=f"Temp directory creation for {media.dat_game_entry.name} failed",
-                    context={"media_id": media.id},
+                    item=self.current_item,
+                    valid_actions=[
+                        Action.SKIP,
+                        Action.SKIP_ALL,
+                        Action.CONTINUE,
+                        Action.STOP,
+                    ],
                 )
 
             # Get and apply handlers (only handlers that pass validate_preconditions)
@@ -197,23 +208,32 @@ class ChdBuildProcess(BaseProcess):
                 result = handler.execute(media, self._file_data)
 
                 if not result.is_success():
-                    return ResultObject.error(
-                        error_type="HandlerFailed",
-                        message=f"Handler {handler.name} failed",
-                        context={
-                            "handler": handler.name,
-                            "error": result.payload.message if result.payload else None,
-                        },
+                    return ResultObject.pending_input(
+                        query_id="generic_query",
+                        message=f"Handler {handler.name} failed: {result.payload.message if result.payload else 'Unknown error'}",
+                        item=self.current_item,
+                        valid_actions=[
+                            Action.SKIP,
+                            Action.SKIP_ALL,
+                            Action.CONTINUE,
+                            Action.STOP,
+                        ],
                     )
 
             # Prepare for CHD conversion
             toc_source = self._file_data.current_toc
 
             if not toc_source:
-                return ResultObject.error(
-                    error_type="NoTOCError",
+                return ResultObject.pending_input(
+                    query_id="generic_query",
                     message=f"No TOC file found for {media.dat_game_entry.name}",
-                    context={"media_id": media.id},
+                    item=self.current_item,
+                    valid_actions=[
+                        Action.SKIP,
+                        Action.SKIP_ALL,
+                        Action.CONTINUE,
+                        Action.STOP,
+                    ],
                 )
 
             # Create CHD
@@ -237,34 +257,53 @@ class ChdBuildProcess(BaseProcess):
                     metadata={"chd_path": matched_chd.path},
                 )
             else:
-                return ResultObject.error(
-                    error_type="CHDCreationError",
+                return ResultObject.pending_input(
+                    query_id="generic_query",
                     message=f"CHD creation failed for {media.dat_game_entry.name}",
-                    context={"media_id": media.id},
+                    item=self.current_item,
+                    valid_actions=[
+                        Action.SKIP,
+                        Action.SKIP_ALL,
+                        Action.CONTINUE,
+                        Action.STOP,
+                    ],
                 )
 
         except OSError as e:
-            # Catch specific errors like no space left on device (errno 28)
-            if e.errno == 28:  # ENOSPC - No space left on device
-                return ResultObject.error(
-                    error_type="DiskSpaceError",
+            if e.errno == 28:
+                return ResultObject.pending_input(
+                    query_id="generic_query",
                     message=f"Insufficient disk space to build CHD for {media.dat_game_entry.name}. Please free up space and try again.",
-                    exception=e,
-                    context={"media_id": media.id},
+                    item=self.current_item,
+                    valid_actions=[
+                        Action.SKIP,
+                        Action.SKIP_ALL,
+                        Action.STOP,
+                    ],
                 )
             else:
-                return ResultObject.error(
-                    error_type="OSError",
+                return ResultObject.pending_input(
+                    query_id="generic_query",
                     message=f"OS error processing {media.dat_game_entry.name}: {str(e)}",
-                    exception=e,
-                    context={"media_id": media.id},
+                    item=self.current_item,
+                    valid_actions=[
+                        Action.SKIP,
+                        Action.SKIP_ALL,
+                        Action.CONTINUE,
+                        Action.STOP,
+                    ],
                 )
         except Exception as e:
-            return ResultObject.error(
-                error_type="BuildError",
+            return ResultObject.pending_input(
+                query_id="generic_query",
                 message=f"Unexpected error processing {media.dat_game_entry.name}: {str(e)}",
-                exception=e,
-                context={"media_id": media.id},
+                item=self.current_item,
+                valid_actions=[
+                    Action.SKIP,
+                    Action.SKIP_ALL,
+                    Action.CONTINUE,
+                    Action.STOP,
+                ],
             )
         finally:
             # Clean up temp directory

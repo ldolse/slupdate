@@ -276,8 +276,9 @@ class TestChdBuildProcess:
             with patch("os.remove", side_effect=OSError("Permission denied")):
                 result = process.execute_step()
 
-                assert result.is_error()
-                assert result.payload.error_type == "FileRemovalError"
+                assert result.requires_input()
+                assert result.payload.query_id == "generic_query"
+                assert "Permission denied" in result.payload.message
 
     @patch("os.path.exists")
     def test_execute_step_chd_exists_pending_input(
@@ -356,8 +357,9 @@ class TestChdBuildProcess:
             mock_media, "TestTitle", "/test/path/disk1.chd"
         )
 
-        assert result.is_error()
-        assert result.payload.error_type == "TempDirectoryError"
+        assert result.requires_input()
+        assert result.payload.query_id == "generic_query"
+        assert "Temp directory creation" in result.payload.message
 
     @patch("rom_management.processing.chd_build_process.OpticalMediaProcessor")
     def test_build_single_chd_no_toc_error(
@@ -378,8 +380,9 @@ class TestChdBuildProcess:
             mock_media, "TestTitle", "/test/path/disk1.chd"
         )
 
-        assert result.is_error()
-        assert result.payload.error_type == "NoTOCError"
+        assert result.requires_input()
+        assert result.payload.query_id == "generic_query"
+        assert "No TOC file" in result.payload.message
 
     @patch("rom_management.processing.chd_build_process.OpticalMediaProcessor")
     @patch("rom_management.processing.chd_build_process.CHD")
@@ -405,8 +408,9 @@ class TestChdBuildProcess:
             mock_media, "TestTitle", "/test/path/disk1.chd"
         )
 
-        assert result.is_error()
-        assert result.payload.error_type == "CHDCreationError"
+        assert result.requires_input()
+        assert result.payload.query_id == "generic_query"
+        assert "CHD creation failed" in result.payload.message
 
     @patch("rom_management.processing.chd_build_process.OpticalMediaProcessor")
     def test_build_single_chd_disk_space_error(
@@ -425,8 +429,9 @@ class TestChdBuildProcess:
             mock_media, "TestTitle", "/test/path/disk1.chd"
         )
 
-        assert result.is_error()
-        assert result.payload.error_type == "DiskSpaceError"
+        assert result.requires_input()
+        assert result.payload.query_id == "generic_query"
+        assert "disk space" in result.payload.message.lower()
 
     @patch("rom_management.processing.chd_build_process.OpticalMediaProcessor")
     @patch("rom_management.processing.chd_build_process.CHD")
@@ -444,7 +449,6 @@ class TestChdBuildProcess:
 
         process = ChdBuildProcess(mock_platform)
 
-        # Mock CHD to raise an exception
         with patch("rom_management.processing.chd_build_process.CHD") as mock_chd_class:
             mock_chd = Mock()
             mock_chd.exists = False
@@ -454,9 +458,8 @@ class TestChdBuildProcess:
                 mock_media, "TestTitle", "/test/path/disk1.chd"
             )
 
-        # Cleanup should have been called even on error
         mock_optical.cleanup.assert_called_once()
-        assert result.is_error()
+        assert result.requires_input()
 
     @patch("rom_management.processing.chd_build_process.OpticalMediaProcessor")
     @patch("rom_management.processing.chd_build_process.CHD")
@@ -470,7 +473,6 @@ class TestChdBuildProcess:
         mock_optical.current_toc = "/tmp/test/disc.toc"
         mock_optical_class.return_value = mock_optical
 
-        # Mock handler that fails
         mock_handler = Mock()
         mock_handler.name = "test_handler"
         mock_handler.execute.return_value = ResultObject.error(
@@ -485,9 +487,9 @@ class TestChdBuildProcess:
             mock_media, "TestTitle", "/test/path/disk1.chd"
         )
 
-        assert result.is_error()
-        assert result.payload.error_type == "HandlerFailed"
-        assert "test_handler" in result.payload.context["handler"]
+        assert result.requires_input()
+        assert result.payload.query_id == "generic_query"
+        assert "test_handler" in result.payload.message
 
     @patch("rom_management.processing.chd_build_process.OpticalMediaProcessor")
     @patch("rom_management.processing.chd_build_process.CHD")

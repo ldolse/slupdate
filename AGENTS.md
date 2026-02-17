@@ -643,3 +643,11 @@ return ResultObject.pending_input(
 - `test_progress_property` in `tests/integration/test_archive_validation.py` fails (expects 3 processed but gets 5) - this was failing before the Phase 3C bug fixes and is unrelated to the refactor work
 
 
+#### **Handler System Purpose Clarification**
+
+The handler system is designed for edge cases:
+- Platform-specific handling (e.g., PSX LibCrypt DRM)
+- File format conversion (e.g., CloneCD → CUE, BIN/CUE fixes)
+- DAT group-specific logic (e.g., No-Intro binary filename issues)
+
+**Key Principle**: `validate_preconditions()` MUST return `False` for handlers that don't need to do anything. The registry now respects this check.
