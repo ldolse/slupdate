@@ -26,12 +26,14 @@ class CHDAlreadyExistsException(Exception):
         self.existing_version = existing_version
         super().__init__(f"CHD already exists at {chd_path}")
 
+
 class CHDNotFoundException(Exception):
     """Exception raised when a CHD file is not found"""
 
     def __init__(self, chd_path: str):
         self.chd_path = chd_path
         super().__init__(f"CHD file not found at {chd_path}")
+
 
 class CHDInvalidException(Exception):
     """Exception raised when a CHD file is invalid"""
@@ -40,6 +42,7 @@ class CHDInvalidException(Exception):
         self.chd_path = chd_path
         self.error_message = error_message
         super().__init__(f"Invalid CHD at {chd_path}: {error_message}")
+
 
 class CHDSourceException(Exception):
     """Exception raised when there is an issue with the CHD source data"""
@@ -155,6 +158,11 @@ class CHD:
         if not self.name:
             raise ValueError("Source must have a filename name for CHD creation")
         self.path = f"{self.output_path}/{self.name}.chd"
+
+        print(
+            f"  [CHD DEBUG] Initializing creation: output_path={self.output_path}, name={self.name}, path={self.path}"
+        )
+        print(f"  [CHD DEBUG] TOC source: {self.toc_source}")
 
         self._create()
 
@@ -294,15 +302,27 @@ class CHD:
                     "-o",
                     str(self.path),
                 ]
-                subprocess.run(command, check=True)
+                print(f"  [CHD DEBUG] Running command: {' '.join(command)}")
+                result = subprocess.run(
+                    command, capture_output=True, text=True, check=True
+                )
+                print(f"  [CHD DEBUG] chdman stdout: {result.stdout}")
+                if result.stderr:
+                    print(f"  [CHD DEBUG] chdman stderr: {result.stderr}")
 
                 # Update properties after creation
                 if self.exists:
                     self._initialize_from_existing(str(self.path))
                     self.preexisting = False
                     return True
+                else:
+                    print(f"  [CHD DEBUG] CHD file does not exist after creation!")
+                    return False
 
             except subprocess.CalledProcessError as e:
+                print(f"  [CHD DEBUG] chdman failed with return code {e.returncode}")
+                print(f"  [CHD DEBUG] chdman stdout: {e.stdout}")
+                print(f"  [CHD DEBUG] chdman stderr: {e.stderr}")
                 raise CHDCreationException(str(self.path), str(e))
                 # print(f'CHD creation failed: {e}')
 

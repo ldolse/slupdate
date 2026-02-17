@@ -277,6 +277,7 @@ class TestPlatformHandlers:
 
         mock_file_data = Mock(spec=OpticalMediaProcessor)
         mock_file_data.format = "ccd"
+        mock_file_data.file_list = []  # Empty file list so format handlers return False
 
         mock_platform.handler_registry = registry
 
@@ -284,7 +285,103 @@ class TestPlatformHandlers:
         handlers = mock_platform.get_relevant_handlers(mock_media, mock_file_data)
 
         # Verify handlers are returned (specific handlers depend on registry)
+        # With empty file_list, CCD handler should be filtered out
         assert isinstance(handlers, list)
+
+    def test_get_relevant_handlers_filters_by_validate_preconditions(
+        self, mock_platform
+    ):
+        """Test get_relevant_handlers filters out handlers that return False from validate_preconditions"""
+        from optical_media.utils import OpticalMediaProcessor
+        from rom_management.handlers.base import SpecialHandler
+        from rom_management.handlers import registry
+        from rom_management.processing.models import ResultObject
+
+        # Create a test handler that always returns False from validate_preconditions
+        class TestFilterHandler(SpecialHandler):
+            def __init__(self):
+                super().__init__("TestFilter")
+
+            def validate_preconditions(self, media, file_data):
+                return False  # This handler should be filtered out
+
+            def execute(self, media, file_data):
+                return ResultObject.success(message="Test handler executed")
+
+        # Temporarily register our test handler for redump dat_group
+        registry.handlers["dat_group"]["test_filter"] = TestFilterHandler
+
+        try:
+            # Create mock media with test_filter dat_group
+            mock_media = Mock(spec=CDMedia)
+            mock_media.platform = "unknown_platform"
+            mock_media.id = "test_id"
+            mock_media.dat_game_entry = Mock()
+            mock_media.dat_game_entry.dat = Mock()
+            mock_media.dat_game_entry.dat.dat_group = "test_filter"
+
+            mock_file_data = Mock(spec=OpticalMediaProcessor)
+            mock_file_data.format = None  # No format handler
+
+            mock_platform.handler_registry = registry
+
+            # Should NOT return the TestFilterHandler because validate_preconditions returns False
+            handlers = mock_platform.get_relevant_handlers(mock_media, mock_file_data)
+            handler_names = [h.name for h in handlers]
+
+            assert "TestFilter" not in handler_names, (
+                "Handler with validate_preconditions=False should be filtered out"
+            )
+        finally:
+            # Clean up: remove our test handler
+            if "test_filter" in registry.handlers["dat_group"]:
+                del registry.handlers["dat_group"]["test_filter"]
+
+    def test_get_relevant_handlers_includes_valid_handlers(self, mock_platform):
+        """Test get_relevant_handlers includes handlers that return True from validate_preconditions"""
+        from optical_media.utils import OpticalMediaProcessor
+        from rom_management.handlers.base import SpecialHandler
+        from rom_management.handlers import registry
+        from rom_management.processing.models import ResultObject
+
+        # Create a test handler that returns True from validate_preconditions
+        class TestValidHandler(SpecialHandler):
+            def __init__(self):
+                super().__init__("TestValid")
+
+            def validate_preconditions(self, media, file_data):
+                return True  # This handler should be included
+
+            def execute(self, media, file_data):
+                return ResultObject.success(message="Test handler executed")
+
+        # Temporarily register our test handler for a unique platform
+        test_platform_key = "unique_test_platform_xyz"
+        registry.handlers["platform"][test_platform_key] = TestValidHandler
+
+        try:
+            # Create mock media with our test platform
+            mock_media = Mock(spec=CDMedia)
+            mock_media.platform = test_platform_key
+            mock_media.id = "test_id"
+            mock_media.dat_game_entry = None  # No dat_game_entry
+
+            mock_file_data = Mock(spec=OpticalMediaProcessor)
+            mock_file_data.format = None  # No format handler
+
+            mock_platform.handler_registry = registry
+
+            # Should return the TestValidHandler because validate_preconditions returns True
+            handlers = mock_platform.get_relevant_handlers(mock_media, mock_file_data)
+            handler_names = [h.name for h in handlers]
+
+            assert "TestValid" in handler_names, (
+                "Handler with validate_preconditions=True should be included"
+            )
+        finally:
+            # Clean up: remove our test handler
+            if test_platform_key in registry.handlers["platform"]:
+                del registry.handlers["platform"][test_platform_key]
 
 
 class TestPlatformDATManagement:

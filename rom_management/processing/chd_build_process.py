@@ -190,11 +190,10 @@ class ChdBuildProcess(BaseProcess):
                     context={"media_id": media.id},
                 )
 
-            # Get and apply handlers
+            # Get and apply handlers (only handlers that pass validate_preconditions)
             handlers = self.platform.get_relevant_handlers(media, self._file_data)
 
             for handler in handlers:
-                # Call handler directly (no exception handling for control flow)
                 result = handler.execute(media, self._file_data)
 
                 if not result.is_success():
@@ -218,10 +217,15 @@ class ChdBuildProcess(BaseProcess):
                 )
 
             # Create CHD
+            print(f"  Creating CHD at: {expected_chd_path}")
             matched_chd = CHD(
                 source=media,
                 base_path=self.platform.chd_path,
                 toc_source=str(toc_source),
+            )
+
+            print(
+                f"  CHD object created, checking exists={matched_chd.exists}, is_valid={matched_chd.is_valid}"
             )
 
             if matched_chd.exists and matched_chd.is_valid:
