@@ -1,10 +1,9 @@
 import os
-from typing import List, TYPE_CHECKING
+from typing import TYPE_CHECKING
 from .base_process import BaseProcess
 from .models import (
     ResultObject,
     Action,
-    ProcessStatus,
     MediaProcessingItem,
 )
 from optical_media.utils import OpticalMediaProcessor
@@ -51,9 +50,12 @@ class ChdBuildProcess(BaseProcess):
         """Map CHD-related actions to CHDExistenceHandler"""
         chd_actions = [
             Action.OVERWRITE,
-            Action.SKIP_EXISTING,
+            Action.TRUST_EXISTING,
             Action.SET_OVERWRITE_PREFERENCE,
-            Action.SET_SKIP_PREFERENCE,
+            Action.SET_TRUST_PREFERENCE,
+            Action.SKIP,
+            Action.SKIP_ALL,
+            Action.STOP,
         ]
         if action in chd_actions:
             return self._chd_handler
@@ -61,10 +63,8 @@ class ChdBuildProcess(BaseProcess):
 
     def _execute_step(self) -> ResultObject:
         """Execute one step of CHD building"""
-        # Get current media item
         media = self.current_item.media
 
-        # Check if media has necessary attributes
         if not media.softlist_part or not media.softlist_part.part_of:
             print(
                 f"  ⚠️  Skipping - No valid softlist part or title for media ID {media.id}"
@@ -74,25 +74,26 @@ class ChdBuildProcess(BaseProcess):
                 metadata={"media_id": media.id},
             )
 
-        title = media.softlist_part.part_of.name
+        soft_title = media.softlist_part.part_of.name
+        file_name = media.dat_game_entry.name
 
         expected_chd_path = os.path.join(
-            self.platform.chd_path, title, f"{media.softlist_part.disk_name}.chd"
+            self.platform.chd_path, soft_title, f"{file_name}.chd"
         )
 
-        # Check if CHD exists
-        if not os.path.exists(expected_chd_path):
-            # No CHD exists - proceed to build
-            return self._build_single_chd(media, title, expected_chd_path)
+        if os.path.exists(expected_chd_path):
+            return self._handle_existing_chd(media, expected_chd_path)
 
-        # CHD exists - determine if it's validated
+        return self._build_single_chd(media, soft_title, expected_chd_path)
+
+    def _handle_existing_chd(self, media, expected_chd_path: str) -> ResultObject:
+        """Handle case where CHD already exists - check if validated, ask user, or respect preference"""
         matched_chd = CHD(chd_path=expected_chd_path)
-        is_valid = matched_chd.is_valid if matched_chd.exists else False
+        is_valid = matched_chd.exists and matched_chd.is_valid
         is_in_validated_set = any(
             matched_chd.path == chd.path for chd in self.platform.validated_chds
         )
 
-        # A valid CHD is one that: 1) passes is_valid check, AND 2) is in validated_chds set
         if is_valid and is_in_validated_set:
             print(f"✅ CHD already validated for {media.dat_game_entry.name}")
             return ResultObject.success(
@@ -100,16 +101,13 @@ class ChdBuildProcess(BaseProcess):
                 metadata={"chd_path": expected_chd_path},
             )
 
-        # CHD exists but is NOT fully validated - handle via handler or preference
         print(f"⚠️  CHD already exists for {media.dat_game_entry.name}")
 
-        # Get existing version info
         existing_version = None
-        if matched_chd.exists and is_valid:
+        if is_valid:
             chd_info = matched_chd._get_chd_info()
             existing_version = chd_info.get("file_version")
 
-        # Check for platform preference
         pref = self.platform.chd_handling_preference
 
         if pref == "skip":
@@ -122,38 +120,34 @@ class ChdBuildProcess(BaseProcess):
             print(f"Overwriting existing CHD per platform preference")
             try:
                 os.remove(expected_chd_path)
-                # Remove from validated tracking since we're rebuilding
-                if expected_chd_path in self.platform.state.validated_chds_paths:
-                    self.platform.state.remove_validated_chd_path(expected_chd_path)
             except OSError as e:
                 return ResultObject.error(
                     error_type="FileRemovalError",
                     message=f"Failed to remove CHD: {str(e)}",
                     exception=e,
                 )
-            # Proceed to build after removing
-            return self._build_single_chd(media, title, expected_chd_path)
+            return self._build_single_chd(
+                media, media.softlist_part.part_of.name, expected_chd_path
+            )
         else:
-            # No preference set - require user intervention
-            exception = CHDAlreadyExistsException(expected_chd_path, existing_version)
-
-            result = ResultObject.pending_input(
+            return ResultObject.pending_input(
                 query_id="generic_query",
                 message=f"CHD already exists for {media.dat_game_entry.name}",
                 item=self.current_item,
                 valid_actions=[
                     Action.OVERWRITE,
-                    Action.SKIP_EXISTING,
+                    Action.TRUST_EXISTING,
                     Action.SET_OVERWRITE_PREFERENCE,
-                    Action.SET_SKIP_PREFERENCE,
+                    Action.SET_TRUST_PREFERENCE,
+                    Action.SKIP,
+                    Action.SKIP_ALL,
                     Action.STOP,
                 ],
                 options_context={
                     "existing_version": existing_version,
-                    "exception": exception,
+                    "chd_path": expected_chd_path,
                 },
             )
-            return result
 
     def _build_single_chd(
         self, media, title: str, expected_chd_path: str
