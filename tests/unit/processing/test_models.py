@@ -49,20 +49,20 @@ class TestAction:
         """Test that CHD build actions have correct internal values"""
         assert Action.RETRY.value == "retry"
         assert Action.OVERWRITE.value == "overwrite"
-        assert Action.SKIP_EXISTING.value == "skip_existing"
+        assert Action.TRUST_EXISTING.value == "trust_existing"
         assert Action.SET_OVERWRITE_PREFERENCE.value == "set_overwrite_pref"
-        assert Action.SET_SKIP_PREFERENCE.value == "set_skip_pref"
+        assert Action.SET_TRUST_PREFERENCE.value == "set_trust_pref"
 
     def test_chd_build_actions_display_names(self):
         """Test that CHD build actions have human-readable display names"""
         assert Action.RETRY.display_name == "Retry current item"
         assert Action.OVERWRITE.display_name == "Overwrite this CHD"
-        assert Action.SKIP_EXISTING.display_name == "Skip this CHD"
+        assert Action.TRUST_EXISTING.display_name == "Trust this existing CHD"
         assert (
             Action.SET_OVERWRITE_PREFERENCE.display_name
             == "Always overwrite older CHDs"
         )
-        assert Action.SET_SKIP_PREFERENCE.display_name == "Always skip existing CHDs"
+        assert Action.SET_TRUST_PREFERENCE.display_name == "Always trust existing CHDs"
 
     def test_common_actions_values(self):
         """Test that common actions have correct internal values"""
@@ -257,7 +257,7 @@ class TestResultObjectPendingInput:
 
     def test_create_pending_input_with_options_context(self):
         mock_item = BaseProcessingItem("test")
-        actions = [Action.OVERWRITE, Action.SKIP_EXISTING, Action.STOP]
+        actions = [Action.OVERWRITE, Action.SKIP, Action.STOP]
         options_context = {"existing_version": "5.0"}
 
         result = ResultObject.pending_input(

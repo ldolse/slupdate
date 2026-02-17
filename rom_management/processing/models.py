@@ -34,11 +34,11 @@ class Action(Enum):
     SCAN_ALL_MD5 = ("scan_all_md5", "Scan all with MD5")
 
     # CHD build actions
-    TRUST = ("trust_existing", "Trust this CHD")
+    TRUST_EXISTING = ("trust_existing", "Trust this existing CHD")
     RETRY = ("retry", "Retry current item")
     OVERWRITE = ("overwrite", "Overwrite this CHD")
     SET_OVERWRITE_PREFERENCE = ("set_overwrite_pref", "Always overwrite older CHDs")
-    SET_TRUST_PREFERENCE = ("set_skip_pref", "Always trust existing CHDs")
+    SET_TRUST_PREFERENCE = ("set_trust_pref", "Always trust existing CHDs")
 
     # Hash validation actions
     UPDATE = ("update", "Update hash and filename")

@@ -69,7 +69,7 @@ class TestCHDExistenceHandler:
         """Test OVERWRITE action removes existing CHD"""
         # Setup
         mock_process.current_item = MediaProcessingItem(mock_media)
-        chd_path = "/test/chd/path/Test Game/Test Game.chd"
+        chd_path = "/test/chd/path/TestTitle/Test Game.chd"
         mock_exists.return_value = True
 
         with patch.object(handler, "_execute_step_and_advance") as mock_execute_step:
@@ -121,12 +121,12 @@ class TestCHDExistenceHandler:
         assert result.payload.error_type == "InvalidState"
 
     def test_action_skip_existing(self, handler, mock_process, mock_media):
-        """Test SKIP_EXISTING action"""
+        """Test SKIP action"""
         # Setup
         mock_process.current_item = MediaProcessingItem(mock_media)
         mock_process.processed_items = 5
 
-        result = handler.execute_action(Action.SKIP_EXISTING, mock_process)
+        result = handler.execute_action(Action.SKIP, mock_process)
 
         assert result.is_success()
         assert "Skipped existing CHD" in result.payload.message
@@ -152,17 +152,17 @@ class TestCHDExistenceHandler:
             )
             mock_execute_step.assert_called_once()
 
-    def test_action_set_skip_preference(self, handler, mock_process, mock_media):
-        """Test SET_SKIP_PREFERENCE action"""
+    def test_action_set_trust_preference(self, handler, mock_process, mock_media):
+        """Test SET_TRUST_PREFERENCE action"""
         # Setup
         mock_process.current_item = MediaProcessingItem(mock_media)
         mock_process.processed_items = 5
         mock_process.platform.set_chd_preference = Mock()
 
-        result = handler.execute_action(Action.SET_SKIP_PREFERENCE, mock_process)
+        result = handler.execute_action(Action.SET_TRUST_PREFERENCE, mock_process)
 
         assert result.is_success()
-        assert "Set skip preference" in result.payload.message
+        assert "Set trust preference" in result.payload.message
         mock_process.platform.set_chd_preference.assert_called_once_with("skip")
         assert mock_process.current_item is None
         assert mock_process.processed_items == 6
@@ -190,7 +190,7 @@ class TestCHDExistenceHandler:
         """Test _get_expected_chd_path returns correct path"""
         chd_path = handler._get_expected_chd_path(mock_process, mock_media)
 
-        expected = "/test/chd/path/Test Game/Test Game.chd"
+        expected = "/test/chd/path/TestTitle/Test Game.chd"
         assert chd_path == expected
 
     def test_get_expected_chd_path_no_dat_entry(self, handler, mock_process):
@@ -271,9 +271,9 @@ class TestCHDExistenceHandler:
                 result = handler.execute_action(Action.OVERWRITE, mock_process)
                 assert result.is_success()
 
-        # Test SKIP_EXISTING
+        # Test SKIP
         mock_process.current_item = MediaProcessingItem(mock_media)
-        result = handler.execute_action(Action.SKIP_EXISTING, mock_process)
+        result = handler.execute_action(Action.SKIP, mock_process)
         assert result.is_success()
         assert mock_process.current_item is None
 
@@ -291,9 +291,11 @@ class TestCHDExistenceHandler:
         """Test that all documented actions are implemented"""
         documented_actions = [
             Action.OVERWRITE,
-            Action.SKIP_EXISTING,
+            Action.TRUST_EXISTING,
             Action.SET_OVERWRITE_PREFERENCE,
-            Action.SET_SKIP_PREFERENCE,
+            Action.SET_TRUST_PREFERENCE,
+            Action.SKIP,
+            Action.SKIP_ALL,
             Action.STOP,
         ]
 

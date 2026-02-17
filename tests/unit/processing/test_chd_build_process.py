@@ -115,9 +115,12 @@ class TestChdBuildProcess:
 
         chd_actions = [
             Action.OVERWRITE,
-            Action.SKIP_EXISTING,
+            Action.TRUST_EXISTING,
             Action.SET_OVERWRITE_PREFERENCE,
-            Action.SET_SKIP_PREFERENCE,
+            Action.SET_TRUST_PREFERENCE,
+            Action.SKIP,
+            Action.SKIP_ALL,
+            Action.STOP,
         ]
 
         for action in chd_actions:
@@ -130,7 +133,6 @@ class TestChdBuildProcess:
         process.register_handlers()
 
         assert process._get_handler_for_action(Action.SCAN_MD5) is None
-        assert process._get_handler_for_action(Action.STOP) is None
 
     @patch("os.path.exists")
     def test_execute_step_media_no_softlist(
@@ -301,7 +303,9 @@ class TestChdBuildProcess:
             assert result.requires_input()
             assert result.payload.query_id == "generic_query"
             assert Action.OVERWRITE in result.payload.valid_actions
-            assert Action.SKIP_EXISTING in result.payload.valid_actions
+            assert Action.TRUST_EXISTING in result.payload.valid_actions
+            assert Action.SKIP in result.payload.valid_actions
+            assert Action.SKIP_ALL in result.payload.valid_actions
             assert Action.STOP in result.payload.valid_actions
 
     @patch("rom_management.processing.chd_build_process.OpticalMediaProcessor")
