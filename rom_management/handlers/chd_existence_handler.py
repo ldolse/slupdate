@@ -187,9 +187,7 @@ class CHDExistenceHandler(SpecialHandler):
             print(
                 f"Skipping existing CHD for {process.current_item.media.dat_game_entry.name}"
             )
-        process.current_item = None
-        process.processed_items += 1
-        return ResultObject.success(message="Skipped existing CHD")
+        return process._handle_skip("Skipped existing CHD")
 
     def _handle_set_overwrite_preference(
         self, process: "BaseProcess"
@@ -245,6 +243,4 @@ class CHDExistenceHandler(SpecialHandler):
                 f"Skipping existing CHD for {process.current_item.media.dat_game_entry.name}"
             )
         print("Set to skip all remaining existing CHDs")
-        process.current_item = None
-        process.processed_items += 1
-        return ResultObject.success(message="Skipped current, will skip all remaining")
+        return process._handle_skip("Skipped current, will skip all remaining")

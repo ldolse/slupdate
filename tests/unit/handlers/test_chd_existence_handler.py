@@ -20,13 +20,16 @@ class TestCHDExistenceHandler:
 
     @pytest.fixture
     def mock_process(self):
-        """Create mock process"""
+        """Create mock process with properly configured _handle_skip method"""
         process = Mock()
         process.processed_items = 0
         process.current_item = None
         process.platform = Mock()
         process.platform.chd_path = "/test/chd/path"
         process.platform.state = Mock()
+        process._handle_skip = Mock(
+            return_value=ResultObject.success(message="Skipped existing CHD")
+        )
         return process
 
     @pytest.fixture
@@ -129,9 +132,13 @@ class TestCHDExistenceHandler:
         result = handler.execute_action(Action.SKIP, mock_process)
 
         assert result.is_success()
-        assert "Skipped existing CHD" in result.payload.message
-        assert mock_process.current_item is None
-        assert mock_process.processed_items == 6
+        mock_process._handle_skip.assert_called_once_with("Skipped existing CHD")
+        assert (
+            mock_process.current_item is not None
+        )  # Not cleared directly, handled by _handle_skip
+        assert (
+            mock_process.processed_items == 5
+        )  # Not incremented directly, handled by _handle_skip
 
     def test_action_set_overwrite_preference(self, handler, mock_process, mock_media):
         """Test SET_OVERWRITE_PREFERENCE action"""
@@ -266,16 +273,16 @@ class TestCHDExistenceHandler:
         """Test that actions are executed in the correct order"""
         # Test OVERWRITE first
         mock_process.current_item = MediaProcessingItem(mock_media)
-        with patch.object(handler, "_execute_step_and_advance") as mock_execute:
+        with patch.object(handler, "_execute_step_and_advance") as mock_execute_step:
             with patch("os.remove"):
                 result = handler.execute_action(Action.OVERWRITE, mock_process)
                 assert result.is_success()
 
-        # Test SKIP
+        # Test SKIP - verify _handle_skip is called
         mock_process.current_item = MediaProcessingItem(mock_media)
         result = handler.execute_action(Action.SKIP, mock_process)
         assert result.is_success()
-        assert mock_process.current_item is None
+        mock_process._handle_skip.assert_called_once_with("Skipped existing CHD")
 
         # Test STOP
         result = handler.execute_action(Action.STOP, mock_process)

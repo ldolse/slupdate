@@ -49,6 +49,33 @@ class BaseProcess(ABC):
         """
         pass
 
+    def _advance_after_success(self) -> None:
+        """
+        Advance to next item after successful step completion.
+        Called by execute_step() after _execute_step() returns SUCCESS.
+        """
+        self.processed_items += 1
+        self.current_item = None
+
+    def _handle_skip(self, message: str = "Skipped current item") -> ResultObject:
+        """
+        Standard skip behavior - clears current item and advances.
+
+        All process SKIP actions should use this method for consistent behavior.
+        """
+        self.current_item = None
+        self.processed_items += 1
+        return ResultObject.success(message=message)
+
+    def _complete_process(self) -> ResultObject:
+        """
+        Called when all items have been processed.
+        Override in subclasses for custom completion logic (e.g., save XML).
+
+        Base implementation returns standard completion result.
+        """
+        return ResultObject.complete(total_processed=self.processed_items)
+
     def execute_step(self) -> ResultObject:
         """
         Execute one step of the process
@@ -59,21 +86,19 @@ class BaseProcess(ABC):
         # Get next item if we don't have a current item
         if self.current_item is None:
             if not self._get_next_item():
-                return ResultObject.complete(total_processed=self.processed_items)
+                return self._complete_process()
 
         result = self._execute_step()
 
         # Only advance on SUCCESS
         if result.is_success():
-            self.processed_items += 1
-            self.current_item = None
+            self._advance_after_success()
 
         return result
 
     def _get_next_item(self) -> bool:
         """Get next item from iterator - preserves state between calls"""
         if self._items_iterator is None:
-            # Initialize iterator if not already done
             self._items_iterator = iter(self.items_to_process)
 
         try:
@@ -96,13 +121,11 @@ class BaseProcess(ABC):
         Returns:
             ResultObject from handling the action
         """
-        # Find handler for this action type
         handler = self._get_handler_for_action(action)
 
         if handler:
             return handler.execute_action(action, self, params)
         else:
-            # Handle default actions
             return self._handle_default_action(action)
 
     def _get_handler_for_action(self, action: "Action"):
@@ -140,10 +163,7 @@ class BaseProcess(ABC):
                 message="Continuing to next item",
             )
         elif action == Action.SKIP:
-            self.current_item = None
-            return ResultObject.success(
-                message="Skipped current item",
-            )
+            return self._handle_skip("Skipped current item")
 
         return ResultObject.complete(
             total_processed=self.processed_items,
@@ -168,5 +188,4 @@ class BaseProcess(ABC):
         """Set the list of items to process"""
         self.items_to_process = items
         self.total_items = len(items)
-        # Reset iterator when new items are set
         self._items_iterator = None

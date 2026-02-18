@@ -60,10 +60,7 @@ class MD5ScanHandler(SpecialHandler):
             return self._execute_step_and_advance(process)
 
         elif action == Action.SKIP:
-            # Skip current item
-            process.current_item = None
-            process.processed_items += 1
-            return ResultObject.success(message="Skipped MD5 scan for current item")
+            return process._handle_skip("Skipped MD5 scan for current item")
 
         elif action == Action.SKIP_ALL:
             # Skip all remaining MD5-required items

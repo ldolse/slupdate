@@ -60,13 +60,18 @@ class TestMD5ScanHandler:
         mock_process = Mock()
         mock_process.current_item = "test_item"
         mock_process.processed_items = 5
+        mock_process._handle_skip = Mock(
+            return_value=ResultObject.success(
+                message="Skipped MD5 scan for current item"
+            )
+        )
 
         result = handler.execute_action(Action.SKIP, mock_process)
 
         assert result.is_success()
-        assert result.payload.message == "Skipped MD5 scan for current item"
-        assert mock_process.current_item is None
-        assert mock_process.processed_items == 6
+        mock_process._handle_skip.assert_called_once_with(
+            "Skipped MD5 scan for current item"
+        )
 
     def test_action_skip_all(self):
         """Test SKIP_ALL action"""

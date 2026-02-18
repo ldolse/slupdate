@@ -113,7 +113,6 @@ class CHDHashValidationProcess(BaseProcess):
         filename_mismatch = chd.name != part.disk_name
 
         if not hash_mismatch and not filename_mismatch:
-            print(f"✅ {chd.name} matches softwarelist")
             return ResultObject.success(
                 message=f"Hash and filename match: {chd.name}",
                 metadata={"chd_path": str(chd.path)},
@@ -209,10 +208,7 @@ class CHDHashValidationProcess(BaseProcess):
     def _handle_skip_all_action(self, params: dict) -> ResultObject:
         """Handle SKIP_ALL action"""
         self.skip_all = True
-
-        return ResultObject.success(
-            message="Skip all remaining updates",
-        )
+        return self._handle_skip("Skip all remaining updates")
 
     def _handle_stop_action(self, params: dict) -> ResultObject:
         """Handle STOP action"""
@@ -273,8 +269,8 @@ class CHDHashValidationProcess(BaseProcess):
                 return self._handle_update_action(part, params)
 
         elif action == Action.SKIP:
-            return ResultObject.success(
-                message=f"Skipped: {part.disk_name if part else 'unknown'}",
+            return self._handle_skip(
+                f"Skipped: {part.disk_name if part else 'unknown'}"
             )
 
         elif action == Action.SKIP_ALL:
