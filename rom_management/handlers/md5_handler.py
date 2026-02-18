@@ -63,19 +63,10 @@ class MD5ScanHandler(SpecialHandler):
             return process._handle_skip("Skipped MD5 scan for current item")
 
         elif action == Action.SKIP_ALL:
-            # Skip all remaining MD5-required items
-            process.skip_all = True
-            process.current_item = None
-            process.processed_items += 1
-            return ResultObject.success(
-                message="Set skip_all preference for remaining items"
-            )
+            return process._handle_skip_all("Skip all remaining MD5 scans")
 
         elif action == Action.STOP:
-            return ResultObject.complete(
-                total_processed=process.processed_items,
-                stopped_early=True,
-            )
+            return process._handle_stop()
 
         return ResultObject.error(
             error_type="UnknownAction",

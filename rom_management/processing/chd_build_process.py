@@ -7,7 +7,7 @@ from .models import (
     MediaProcessingItem,
 )
 from optical_media.utils import OpticalMediaProcessor
-from rom_management import CHD, CHDAlreadyExistsException
+from rom_management import CHD
 
 if TYPE_CHECKING:
     from consoles import Platform

@@ -452,7 +452,7 @@ class TestArchiveValidationProcess:
 
         # Verify skip_all set
         assert result.is_success()
-        assert "skip_all preference" in result.payload.message
+        assert "Skip all remaining" in result.payload.message
         assert process.skip_all is True
         assert process.processed_items == 1
 

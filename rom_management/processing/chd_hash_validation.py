@@ -1,9 +1,8 @@
-from typing import List, TYPE_CHECKING, Optional, Dict, Any
+from typing import TYPE_CHECKING, Optional, Dict, Any
 from .base_process import BaseProcess
 from .models import (
     ResultObject,
     Action,
-    ProcessStatus,
     PartProcessingItem,
 )
 from rom_management import CHD
@@ -205,22 +204,6 @@ class CHDHashValidationProcess(BaseProcess):
             metadata={"chd_path": str(chd.path)},
         )
 
-    def _handle_skip_all_action(self, params: dict) -> ResultObject:
-        """Handle SKIP_ALL action"""
-        self.skip_all = True
-        return self._handle_skip("Skip all remaining updates")
-
-    def _handle_stop_action(self, params: dict) -> ResultObject:
-        """Handle STOP action"""
-        if self.pending_updates:
-            self._save_xml_updates()
-
-        return ResultObject.complete(
-            total_processed=self.processed_items,
-            succeeded=len(self.pending_updates),
-            stopped_early=True,
-        )
-
     def _save_xml_updates(self) -> None:
         """Save pending updates to softwarelist XML"""
         if not self.pending_updates:
@@ -233,18 +216,10 @@ class CHDHashValidationProcess(BaseProcess):
         self.platform.softwarelist.write_to_file(self.platform.softlist_xml_path)
         print("Updates saved successfully")
 
-    def _complete_process(self) -> ResultObject:
-        """Complete the process and save updates"""
+    def _post_process(self) -> None:
+        """Save pending updates to softwarelist XML"""
         if self.pending_updates:
             self._save_xml_updates()
-
-        progress = self.progress
-
-        return ResultObject.complete(
-            total_processed=self.processed_items,
-            succeeded=len(self.pending_updates),
-            metadata=progress,
-        )
 
     def handle_user_action(
         self, action: Action, params: Optional[Dict[str, Any]] = None
@@ -274,10 +249,10 @@ class CHDHashValidationProcess(BaseProcess):
             )
 
         elif action == Action.SKIP_ALL:
-            return self._handle_skip_all_action(params)
+            return self._handle_skip_all("Skip all remaining updates")
 
         elif action == Action.STOP:
-            return self._handle_stop_action(params)
+            return self._handle_stop()
 
         return ResultObject.error(
             error_type="UnknownAction",

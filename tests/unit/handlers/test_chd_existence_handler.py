@@ -20,7 +20,7 @@ class TestCHDExistenceHandler:
 
     @pytest.fixture
     def mock_process(self):
-        """Create mock process with properly configured _handle_skip method"""
+        """Create mock process with properly configured methods"""
         process = Mock()
         process.processed_items = 0
         process.current_item = None
@@ -29,6 +29,12 @@ class TestCHDExistenceHandler:
         process.platform.state = Mock()
         process._handle_skip = Mock(
             return_value=ResultObject.success(message="Skipped existing CHD")
+        )
+        process._handle_skip_all = Mock(
+            return_value=ResultObject.success(message="Skip all remaining items")
+        )
+        process._handle_stop = Mock(
+            return_value=ResultObject.complete(total_processed=0, stopped_early=True)
         )
         return process
 
@@ -182,8 +188,7 @@ class TestCHDExistenceHandler:
         result = handler.execute_action(Action.STOP, mock_process)
 
         assert result.is_complete()
-        assert result.payload.stopped_early is True
-        assert result.payload.total_processed == 10
+        mock_process._handle_stop.assert_called_once()
 
     def test_action_unknown(self, handler, mock_process):
         """Test unknown action returns error"""

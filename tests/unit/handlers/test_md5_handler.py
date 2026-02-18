@@ -79,25 +79,30 @@ class TestMD5ScanHandler:
         mock_process = Mock()
         mock_process.current_item = "test_item"
         mock_process.processed_items = 5
+        mock_process._handle_skip_all = Mock(
+            return_value=ResultObject.success(message="Skip all remaining MD5 scans")
+        )
 
         result = handler.execute_action(Action.SKIP_ALL, mock_process)
 
         assert result.is_success()
-        assert result.payload.message == "Set skip_all preference for remaining items"
-        assert mock_process.skip_all is True
-        assert mock_process.processed_items == 6
+        mock_process._handle_skip_all.assert_called_once_with(
+            "Skip all remaining MD5 scans"
+        )
 
     def test_action_stop(self):
         """Test STOP action"""
         handler = MD5ScanHandler()
         mock_process = Mock()
         mock_process.processed_items = 10
+        mock_process._handle_stop = Mock(
+            return_value=ResultObject.complete(total_processed=10, stopped_early=True)
+        )
 
         result = handler.execute_action(Action.STOP, mock_process)
 
         assert result.is_complete()
-        assert result.payload.stopped_early is True
-        assert result.payload.total_processed == 10
+        mock_process._handle_stop.assert_called_once()
 
     def test_action_unknown(self):
         """Test unknown action returns error"""

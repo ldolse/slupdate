@@ -60,13 +60,10 @@ class CHDExistenceHandler(SpecialHandler):
             return self._handle_skip_existing(process)
 
         elif action == Action.SKIP_ALL:
-            return self._handle_skip_all(process)
+            return process._handle_skip_all("Skip all remaining existing CHDs")
 
         elif action == Action.STOP:
-            return ResultObject.complete(
-                total_processed=process.processed_items,
-                stopped_early=True,
-            )
+            return process._handle_stop()
 
         return ResultObject.error(
             error_type="UnknownAction",

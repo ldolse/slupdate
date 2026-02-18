@@ -67,13 +67,47 @@ class BaseProcess(ABC):
         self.processed_items += 1
         return ResultObject.success(message=message)
 
+    def _handle_skip_all(
+        self, message: str = "Skip all remaining items"
+    ) -> ResultObject:
+        """
+        Handle SKIP_ALL action - sets skip_all flag and skips current item.
+
+        All process SKIP_ALL actions should use this method for consistent behavior.
+        """
+        self.skip_all = True
+        return self._handle_skip(message)
+
+    def _post_process(self) -> None:
+        """
+        Hook for cleanup/save operations after processing completes.
+        Called by _complete_process() and _handle_stop().
+
+        Override in subclasses for custom behavior (e.g., save XML).
+        Default: pass
+        """
+        pass
+
+    def _handle_stop(self) -> ResultObject:
+        """
+        Handle STOP action - calls _post_process then returns COMPLETE.
+
+        Subclasses can override if they need different STOP behavior.
+        """
+        self._post_process()
+        return ResultObject.complete(
+            total_processed=self.processed_items,
+            stopped_early=True,
+        )
+
     def _complete_process(self) -> ResultObject:
         """
         Called when all items have been processed.
-        Override in subclasses for custom completion logic (e.g., save XML).
+        Calls _post_process() for cleanup/save operations.
 
-        Base implementation returns standard completion result.
+        Override in subclasses for custom completion logic.
         """
+        self._post_process()
         return ResultObject.complete(total_processed=self.processed_items)
 
     def execute_step(self) -> ResultObject:
@@ -153,10 +187,7 @@ class BaseProcess(ABC):
             ResultObject from handling the action
         """
         if action == Action.STOP:
-            return ResultObject.complete(
-                total_processed=self.processed_items,
-                stopped_early=True,
-            )
+            return self._handle_stop()
         elif action == Action.CONTINUE:
             self.current_item = None
             return ResultObject.success(
@@ -165,10 +196,7 @@ class BaseProcess(ABC):
         elif action == Action.SKIP:
             return self._handle_skip("Skipped current item")
 
-        return ResultObject.complete(
-            total_processed=self.processed_items,
-            stopped_early=True,
-        )
+        return self._handle_stop()
 
     def get_progress(self) -> dict:
         """Return current progress information"""
