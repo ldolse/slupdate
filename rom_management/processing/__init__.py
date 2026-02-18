@@ -1,3 +1,9 @@
+"""Processing utilities for slupdate"""
+
+import logging
+
+logger = logging.getLogger(__name__)
+
 from .base_process import BaseProcess
 from .archive_validation import ArchiveValidationProcess
 from .chd_build_process import ChdBuildProcess

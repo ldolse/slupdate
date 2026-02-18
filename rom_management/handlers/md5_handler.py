@@ -1,7 +1,16 @@
 from .base import SpecialHandler
 from media_registry import CDMedia
-from rom_management.archive.zip_processor import MD5ScanRequiredException
+from rom_management.archive.zip_processor import (
+    MD5ScanRequiredException,
+    TimeoutError,
+    calculate_timeout,
+    with_timeout,
+)
 from typing import Optional, Dict, Any, TYPE_CHECKING
+import logging
+import os
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from rom_management.processing.models import Action, ResultObject
@@ -41,23 +50,17 @@ class MD5ScanHandler(SpecialHandler):
         )
 
         if action == Action.SCAN_MD5:
-            # Temporarily enable MD5 for this item
             original_use_md5 = process.use_md5
             process.use_md5 = True
 
             try:
-                # Execute step with MD5 enabled
-                return self._execute_step_and_advance(process)
+                return self._execute_step_with_timeout(process)
             finally:
-                # Restore original settings
                 process.use_md5 = original_use_md5
 
         elif action == Action.SCAN_ALL_MD5:
-            # Set the preference to use MD5 for all items
             process.use_md5 = True
-
-            # Execute step with MD5 enabled
-            return self._execute_step_and_advance(process)
+            return self._execute_step_with_timeout(process)
 
         elif action == Action.SKIP:
             return process._handle_skip("Skipped MD5 scan for current item")
@@ -72,6 +75,37 @@ class MD5ScanHandler(SpecialHandler):
             error_type="UnknownAction",
             message=f"Unknown action for MD5ScanHandler: {action.value}",
         )
+
+    def _execute_step_with_timeout(self, process: "BaseProcess") -> "ResultObject":
+        """Execute step with size-based timeout for MD5 scanning"""
+        zip_path = None
+        media_name = "unknown"
+
+        if process.current_item and hasattr(process.current_item, "part"):
+            media = process.current_item.part.cdmedia
+            zip_path = getattr(media, "zip_path", None)
+            media_name = (
+                getattr(media.dat_game_entry, "name", "unknown")
+                if media and hasattr(media, "dat_game_entry")
+                else "unknown"
+            )
+
+        if zip_path and os.path.exists(zip_path):
+            timeout = calculate_timeout(zip_path)
+            logger.debug(f"MD5 scan timeout for {timeout}s: {zip_path}")
+        else:
+            timeout = 300
+            logger.debug(f"Using default timeout {timeout}s (no ZIP path)")
+
+        @with_timeout(timeout)
+        def do_md5_scan():
+            return self._execute_step_and_advance(process)
+
+        try:
+            return do_md5_scan()
+        except TimeoutError:
+            logger.warning(f"MD5 scan timeout, skipping: {media_name}")
+            return process._handle_skip("MD5 scan timed out")
 
     def validate_preconditions(self, media: CDMedia, file_data=None) -> bool:
         """Check if this handler should be applied"""

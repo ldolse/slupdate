@@ -8,6 +8,8 @@ https://github.com/ldolse/slupdate
 
 import os
 import sys
+import logging
+import argparse
 from consoles import PlatformManager, Platform
 from utils.utils import get_script_path
 from menus.menu_system import MenuSystem
@@ -26,6 +28,24 @@ from modules.mapping import print_source_stats
 
 __version__ = ".2"
 script_dir = get_script_path()
+
+
+def setup_logging(debug: bool = False) -> None:
+    """Configure logging based on debug flag
+
+    Args:
+        debug: If True, enables DEBUG level logging
+    """
+    level = logging.DEBUG if debug else logging.INFO
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        datefmt="%H:%M:%S",
+    )
+    logger = logging.getLogger(__name__)
+    if debug:
+        logger.debug("Debug logging enabled")
+
 
 # Require at least Python 3.7
 assert sys.version_info >= (3, 7)
@@ -217,6 +237,14 @@ def configure_initial_platform(platform_manager: PlatformManager):
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="slupdate - Optical Media Software List Updater"
+    )
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
+    args = parser.parse_args()
+
+    setup_logging(args.debug)
+
     platform_manager = load_or_create_platform_manager()
 
     system = MenuSystem()

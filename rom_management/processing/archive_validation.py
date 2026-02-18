@@ -1,5 +1,6 @@
 from typing import List, TYPE_CHECKING
 import os
+import logging
 from .base_process import BaseProcess
 from .models import (
     ResultObject,
@@ -8,7 +9,13 @@ from .models import (
     PartProcessingItem,
     ProgressPayload,
 )
-from rom_management.archive.zip_processor import ZipProcessor, MD5ScanRequiredException
+from rom_management.archive.zip_processor import (
+    ZipProcessor,
+    MD5ScanRequiredException,
+    TimeoutError,
+)
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from media_registry import CDMedia
@@ -23,7 +30,7 @@ class ArchiveValidationProcess(BaseProcess):
         super().__init__(platform)
         self.zip_processor = ZipProcessor()
         self._md5_handler = None
-        self.use_md5 = False  # Default to fast validation
+        self.use_md5 = False
         self.skip_all = False
 
     @property
@@ -34,7 +41,6 @@ class ArchiveValidationProcess(BaseProcess):
 
         for i, item in enumerate(self.items_to_process):
             if i < self.processed_items:
-                # Check if this item was processed successfully
                 media = self.items_to_process[i].part.cdmedia
                 if media in self.platform.matched_buildable_media:
                     success_count += 1
@@ -54,15 +60,13 @@ class ArchiveValidationProcess(BaseProcess):
         if not self.platform.mr:
             raise Exception("MediaRegistry not initialized")
 
-        # Get all media items to process
         self.items_to_process = [
             PartProcessingItem(part) for part in self.platform.all_parts
         ]
 
         self.total_items = len(self.items_to_process)
-        print(f"{self.total_items} to process")
+        logger.info(f"{self.total_items} items to process")
 
-        # Register handlers
         self.register_handlers()
 
     def register_handlers(self):
@@ -85,58 +89,57 @@ class ArchiveValidationProcess(BaseProcess):
 
     def _execute_step(self) -> ResultObject:
         """Execute one validation step"""
-        # Get current media item
         current_part: "Part" = self.current_item.part
         media: "CDMedia" = current_part.cdmedia
 
-        # Check if already validated
+        logger.info(
+            f"[{self.processed_items}/{self.total_items}] {media.dat_game_entry.name}"
+        )
+
         media_sig = media.sha1_signature or media.crc_signature
         if self.platform.state.is_validated(media_sig):
-            print(
-                f". ✅ {media.dat_game_entry.name} already validated, skipping zip check"
-            )
-            # Restore zip_path from saved state
+            logger.debug(f"Already validated, skipping")
             saved_zip_path = self.platform.state.get_zip_path(media_sig)
             if saved_zip_path:
                 media.zip_path = saved_zip_path
-                print(f"  ✅ Restored ZIP path: {saved_zip_path}")
+                logger.debug(f"Restored ZIP path: {saved_zip_path}")
             elif not media.zip_path:
-                print(
-                    f"  ⚠️  Warning: No ZIP path found in state for {media.dat_game_entry.name}"
+                logger.warning(
+                    f"No ZIP path found in state for {media.dat_game_entry.name}"
                 )
-            # Add to matched_buildable_media since we know it's valid
             self.platform.matched_buildable_media[media] = None
             return ResultObject.success(
                 message=f"Already validated: {media.dat_game_entry.name}",
                 metadata={"media_id": media.id, "zip_path": media.zip_path},
             )
 
-        # Find ROM directory for this DAT
         rom_dir = media.dat_game_entry.dat.rom_path
         if not rom_dir or not os.path.isdir(rom_dir):
-            print(
-                f"  ⚠️  ROM directory does not exist for {media.dat_game_entry.name}: Skipping"
-            )
+            logger.warning(f"ROM directory missing: {rom_dir}")
             return ResultObject.success(
                 message=f"ROM directory missing: {media.dat_game_entry.name}",
                 metadata={"rom_dir": rom_dir},
             )
 
-        # Try to find valid zip
         try:
             zip_path = self.zip_processor.find_valid_zip(
                 media.dat_game_entry, rom_dir, md5=self.use_md5
             )
+        except TimeoutError:
+            logger.warning(
+                f"Timeout reading ZIP, skipping: {media.dat_game_entry.name}"
+            )
+            return self._handle_skip("Skipped due to timeout")
         except MD5ScanRequiredException:
-            # Check skip_all preference
             if self.skip_all:
-                print(f"skipping md5 scan for {media.dat_game_entry.name}")
+                logger.info(
+                    f"Skipping MD5 scan (skip_all): {media.dat_game_entry.name}"
+                )
                 return ResultObject.success(
                     message=f"Skipped MD5 scan (skip_all)",
                     metadata={"media_id": media.id},
                 )
 
-            # Return pending input for user decision
             return ResultObject.pending_input(
                 query_id="generic_query",
                 message=f"{media.dat_game_entry.name} requires full MD5 scan (slow)",
@@ -151,27 +154,26 @@ class ArchiveValidationProcess(BaseProcess):
                 options_context={"existing_use_md5": self.use_md5},
             )
         except Exception as e:
-            # Return error for unexpected exceptions
+            logger.error(f"Error validating {media.dat_game_entry.name}: {e}")
             return ResultObject.error(
                 error_type="ValidationError",
-                message=f"Error validating {media.dat_game_entry.name}: {str(e)}",
+                message=f"Error validating: {str(e)}",
                 exception=e,
                 context={"media_id": media.id},
             )
 
         if not zip_path:
-            print(f"  ⚠️  No valid zip found: {media.dat_game_entry.name}")
+            logger.warning(f"No valid ZIP found: {media.dat_game_entry.name}")
             return ResultObject.success(
                 message=f"No valid zip found: {media.dat_game_entry.name}",
                 metadata={"media_id": media.id},
             )
-        else:
-            print(f"  ✅ Found valid zip: {media.dat_game_entry.name}")
-            media.zip_path = zip_path
-            # Store zip_path in state for persistence across pickle saves
-            self.platform.state.add_validated_zip_path(media_sig, zip_path)
-            self.platform.matched_buildable_media[media] = None
-            return ResultObject.success(
-                message=f"Found valid zip: {media.dat_game_entry.name}",
-                metadata={"zip_path": zip_path, "media_id": media.id},
-            )
+
+        logger.info(f"✓ Found valid ZIP: {zip_path}")
+        media.zip_path = zip_path
+        self.platform.state.add_validated_zip_path(media_sig, zip_path)
+        self.platform.matched_buildable_media[media] = None
+        return ResultObject.success(
+            message=f"Found valid zip: {media.dat_game_entry.name}",
+            metadata={"zip_path": zip_path, "media_id": media.id},
+        )

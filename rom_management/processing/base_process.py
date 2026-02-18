@@ -1,6 +1,9 @@
 from typing import Dict, List, Any, Optional, TYPE_CHECKING
 from abc import ABC, abstractmethod
 from rom_management.processing.models import Action, ResultObject
+import logging
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from consoles import Platform
@@ -23,6 +26,7 @@ class BaseProcess(ABC):
         self.items_to_process = []
         self.skip_all = False
         self._items_iterator = None
+        self._timeout_seconds = 30
 
     @abstractmethod
     def initialize(self):
@@ -50,19 +54,13 @@ class BaseProcess(ABC):
         pass
 
     def _advance_after_success(self) -> None:
-        """
-        Advance to next item after successful step completion.
-        Called by execute_step() after _execute_step() returns SUCCESS.
-        """
+        """Advance to next item after successful step completion"""
         self.processed_items += 1
         self.current_item = None
 
     def _handle_skip(self, message: str = "Skipped current item") -> ResultObject:
-        """
-        Standard skip behavior - clears current item and advances.
-
-        All process SKIP actions should use this method for consistent behavior.
-        """
+        """Standard skip behavior - clears current item and advances"""
+        logger.info(f"SKIP: {message}")
         self.current_item = None
         self.processed_items += 1
         return ResultObject.success(message=message)
@@ -70,30 +68,18 @@ class BaseProcess(ABC):
     def _handle_skip_all(
         self, message: str = "Skip all remaining items"
     ) -> ResultObject:
-        """
-        Handle SKIP_ALL action - sets skip_all flag and skips current item.
-
-        All process SKIP_ALL actions should use this method for consistent behavior.
-        """
+        """Handle SKIP_ALL action - sets skip_all flag and skips current item"""
+        logger.info(f"SKIP_ALL: {message}")
         self.skip_all = True
         return self._handle_skip(message)
 
     def _post_process(self) -> None:
-        """
-        Hook for cleanup/save operations after processing completes.
-        Called by _complete_process() and _handle_stop().
-
-        Override in subclasses for custom behavior (e.g., save XML).
-        Default: pass
-        """
+        """Hook for cleanup/save operations after processing completes"""
         pass
 
     def _handle_stop(self) -> ResultObject:
-        """
-        Handle STOP action - calls _post_process then returns COMPLETE.
-
-        Subclasses can override if they need different STOP behavior.
-        """
+        """Handle STOP action - calls _post_process then returns COMPLETE"""
+        logger.info(f"STOP: Processed {self.processed_items} items")
         self._post_process()
         return ResultObject.complete(
             total_processed=self.processed_items,
@@ -101,32 +87,26 @@ class BaseProcess(ABC):
         )
 
     def _complete_process(self) -> ResultObject:
-        """
-        Called when all items have been processed.
-        Calls _post_process() for cleanup/save operations.
-
-        Override in subclasses for custom completion logic.
-        """
+        """Called when all items have been processed"""
+        logger.info(f"Process complete: {self.processed_items} items processed")
         self._post_process()
         return ResultObject.complete(total_processed=self.processed_items)
 
     def execute_step(self) -> ResultObject:
-        """
-        Execute one step of the process
+        """Execute one step of the process"""
+        logger.debug(
+            f"execute_step: processed={self.processed_items}, total={self.total_items}"
+        )
 
-        Returns:
-            ResultObject from executing the step
-        """
-        # Get next item if we don't have a current item
         if self.current_item is None:
             if not self._get_next_item():
                 return self._complete_process()
 
         result = self._execute_step()
 
-        # Only advance on SUCCESS
         if result.is_success():
             self._advance_after_success()
+            logger.debug(f"Advanced: processed={self.processed_items}")
 
         return result
 
@@ -134,6 +114,7 @@ class BaseProcess(ABC):
         """Get next item from iterator - preserves state between calls"""
         if self._items_iterator is None:
             self._items_iterator = iter(self.items_to_process)
+            logger.debug(f"Iterator created with {len(self.items_to_process)} items")
 
         try:
             self.current_item = next(self._items_iterator)
@@ -145,16 +126,7 @@ class BaseProcess(ABC):
     def handle_user_action(
         self, action: "Action", params: Optional[Dict[str, Any]] = None
     ) -> ResultObject:
-        """
-        Handle user actions from menus
-
-        Args:
-            action: The Action enum representing user's choice
-            params: Optional parameters for the action
-
-        Returns:
-            ResultObject from handling the action
-        """
+        """Handle user actions from menus"""
         handler = self._get_handler_for_action(action)
 
         if handler:
@@ -163,29 +135,11 @@ class BaseProcess(ABC):
             return self._handle_default_action(action)
 
     def _get_handler_for_action(self, action: "Action"):
-        """
-        Find handler for given action type.
-
-        Override in subclasses if needed to map actions to handlers.
-
-        Args:
-            action: The Action enum
-
-        Returns:
-            Handler instance or None
-        """
+        """Find handler for given action type"""
         return None
 
     def _handle_default_action(self, action: "Action") -> ResultObject:
-        """
-        Handle actions not tied to specific handlers
-
-        Args:
-            action: The Action enum
-
-        Returns:
-            ResultObject from handling the action
-        """
+        """Handle actions not tied to specific handlers"""
         if action == Action.STOP:
             return self._handle_stop()
         elif action == Action.CONTINUE:
@@ -217,3 +171,4 @@ class BaseProcess(ABC):
         self.items_to_process = items
         self.total_items = len(items)
         self._items_iterator = None
+        logger.debug(f"Items set: {len(items)} total")
