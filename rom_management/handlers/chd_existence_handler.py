@@ -95,7 +95,7 @@ class CHDExistenceHandler(SpecialHandler):
         chd_path = self._get_expected_chd_path(process, media)
 
         if chd_path and os.path.exists(chd_path):
-            matched_chd = CHD(chd_path=chd_path)
+            matched_chd = CHD(chd_path=chd_path, source=media)
             if matched_chd.exists and matched_chd.is_valid:
                 process.platform.validated_chds.add(matched_chd)
                 process.platform.state.add_validated_chd_path(str(matched_chd.path))
