@@ -47,13 +47,15 @@ class ProcessRunner:
                 error_type="NoActiveProcess", message="No active process"
             )
 
-        result = self._active_process.execute_step()
+        # ITERATIVE loop instead of recursion to avoid hitting Python's recursion limit
+        while True:
+            result = self._active_process.execute_step()
 
-        # Auto-continue on SUCCESS or PROGRESS
-        if result.is_success() or result.is_progress():
-            return self.execute_next_step()
+            # Auto-continue on SUCCESS or PROGRESS
+            if result.is_success() or result.is_progress():
+                continue
 
-        return result
+            return result
 
     def handle_user_action(
         self, action: "Action", params: Optional[Dict[str, Any]] = None
@@ -77,8 +79,10 @@ class ProcessRunner:
 
         result = self._active_process.handle_user_action(action, params)
 
-        # Auto-continue after handling action
-        if result.is_success():
-            return self.execute_next_step()
+        # Auto-continue after handling action - use iterative approach
+        while result.is_success():
+            result = self._active_process.execute_step()
+            if not result.is_success() and not result.is_progress():
+                break
 
         return result
