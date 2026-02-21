@@ -18,11 +18,14 @@ class MdFHandler(SpecialHandler):
 
     def validate_preconditions(
         self, media: CDMedia, file_data: OpticalMediaProcessor
-    ) -> bool:
+    ) -> "ResultObject":
         """Check if this handler should be applied"""
-        # Verify we have MDF files
+        from rom_management.processing.models import ResultObject
+
         mdf_files = [f for f in file_data.file_list if f.suffix.lower() == ".mdf"]
-        return len(mdf_files) > 0
+        if len(mdf_files) > 0:
+            return ResultObject.success()
+        return ResultObject.not_applicable(message="No MDF files found")
 
     def execute(
         self, media: CDMedia, file_data: OpticalMediaProcessor

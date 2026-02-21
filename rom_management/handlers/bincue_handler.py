@@ -18,13 +18,16 @@ class BinCueHandler(SpecialHandler):
 
     def validate_preconditions(
         self, media: CDMedia, file_data: OpticalMediaProcessor
-    ) -> bool:
+    ) -> "ResultObject":
         """Check if this handler should be applied"""
-        # Verify we have bin/cue files
+        from rom_management.processing.models import ResultObject
+
         cue_files = [f for f in file_data.file_list if f.suffix.lower() == ".cue"]
         bin_files = [f for f in file_data.file_list if f.suffix.lower() == ".bin"]
 
-        return len(cue_files) > 0 and len(bin_files) > 0
+        if len(cue_files) > 0 and len(bin_files) > 0:
+            return ResultObject.success()
+        return ResultObject.not_applicable(message="No BIN/CUE files found")
 
     def execute(
         self, media: CDMedia, file_data: OpticalMediaProcessor

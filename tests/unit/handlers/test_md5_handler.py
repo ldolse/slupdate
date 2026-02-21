@@ -87,7 +87,7 @@ class TestMD5ScanHandler:
 
         assert result.is_success()
         mock_process._handle_skip_all.assert_called_once_with(
-            "Skip all remaining MD5 scans"
+            "Skip all MD5 scanning", category="MD5 scanning"
         )
 
     def test_action_stop(self):

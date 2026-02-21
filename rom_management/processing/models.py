@@ -16,6 +16,8 @@ class ProcessStatus(Enum):
     COMPLETE = "complete"
     ERROR = "error"
     PROGRESS = "progress"
+    SKIP = "skip"
+    NOT_APPLICABLE = "not_applicable"
 
 
 class Action(Enum):
@@ -157,6 +159,7 @@ class PendingInputPayload(BasePayload):
     item: BaseProcessingItem  # The object being processed
     valid_actions: List[Action]  # List of valid user actions
     options_context: Optional[dict] = None  # Additional context for menu options
+    skip_category: Optional[str] = None  # Category name for contextual SKIP labels
 
 
 @dataclass
@@ -225,6 +228,14 @@ class ResultObject:
         """Check if this is a progress update"""
         return self.status == ProcessStatus.PROGRESS
 
+    def is_skip(self) -> bool:
+        """Check if this is a skip result"""
+        return self.status == ProcessStatus.SKIP
+
+    def is_not_applicable(self) -> bool:
+        """Check if this handler is not applicable for this item"""
+        return self.status == ProcessStatus.NOT_APPLICABLE
+
     @staticmethod
     def progress(
         processed: int,
@@ -256,6 +267,7 @@ class ResultObject:
         item: BaseProcessingItem,
         valid_actions: List[Action],
         options_context: Optional[dict] = None,
+        skip_category: Optional[str] = None,
     ) -> "ResultObject":
         """Create a result requiring user input"""
         return ResultObject(
@@ -266,6 +278,7 @@ class ResultObject:
                 item=item,
                 valid_actions=valid_actions,
                 options_context=options_context,
+                skip_category=skip_category,
             ),
         )
 
@@ -299,6 +312,39 @@ class ResultObject:
         return ResultObject(
             status=ProcessStatus.SUCCESS,
             payload=SuccessPayload(message=message, metadata=metadata),
+        )
+
+    @staticmethod
+    def skip(
+        message: Optional[str] = None,
+        category: Optional[str] = None,
+        metadata: Optional[dict] = None,
+    ) -> "ResultObject":
+        """Create a skip result.
+
+        Args:
+            message: Message to display when skipping
+            category: Category name for contextual SKIP menu labels (e.g., "MD5 scanning")
+            metadata: Additional metadata
+        """
+        return ResultObject(
+            status=ProcessStatus.SKIP,
+            payload=SuccessPayload(message=message, metadata=metadata),
+        )
+
+    @staticmethod
+    def not_applicable(message: Optional[str] = None) -> "ResultObject":
+        """Create a not applicable result - handler not relevant for this item.
+
+        This is used in validate_preconditions() to indicate the handler
+        should not be included, without prompting the user.
+
+        Args:
+            message: Optional message explaining why handler is not applicable
+        """
+        return ResultObject(
+            status=ProcessStatus.NOT_APPLICABLE,
+            payload=SuccessPayload(message=message),
         )
 
     @staticmethod

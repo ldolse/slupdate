@@ -18,11 +18,14 @@ class CloneCdHandler(SpecialHandler):
 
     def validate_preconditions(
         self, media: CDMedia, file_data: OpticalMediaProcessor
-    ) -> bool:
+    ) -> "ResultObject":
         """Check if this handler should be applied"""
-        # Verify we have CCD files
+        from rom_management.processing.models import ResultObject
+
         ccd_files = [f for f in file_data.file_list if f.suffix.lower() == ".ccd"]
-        return len(ccd_files) > 0
+        if len(ccd_files) > 0:
+            return ResultObject.success()
+        return ResultObject.not_applicable(message="No CCD files found")
 
     def execute(
         self, media: CDMedia, file_data: OpticalMediaProcessor

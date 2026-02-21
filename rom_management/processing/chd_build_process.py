@@ -202,7 +202,17 @@ class ChdBuildProcess(BaseProcess):
                 )
 
             # Get and apply handlers (only handlers that pass validate_preconditions)
-            handlers = self.platform.get_relevant_handlers(media, self._file_data)
+            handlers, skip_result = self.platform.get_relevant_handlers(
+                media, self._file_data
+            )
+
+            if skip_result:
+                if skip_result.is_skip():
+                    # Handler says to skip this item
+                    return skip_result
+                elif skip_result.requires_input():
+                    # Handler needs user input (e.g., MD5 scanning required)
+                    return skip_result
 
             for handler in handlers:
                 result = handler.execute(media, self._file_data)

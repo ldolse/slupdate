@@ -384,6 +384,14 @@ class MenuSystem:
                     # Continue loop to process the new result
                     continue
 
+                elif result.is_skip():
+                    # Item was skipped, display message and continue automatically
+                    if result.message:
+                        print(f"⚠️  {result.message}")
+                    # Get next result
+                    result = self.runner.execute_next_step()
+                    continue
+
                 elif result.requires_input():
                     nav_result = self.navigate_to(result)
                     return None
@@ -415,6 +423,13 @@ class MenuSystem:
     def run_process_from_result(self, result: "ResultObject") -> None:
         """Continue process loop from a given ResultObject"""
         while not result.is_complete():
+            if result.is_skip():
+                # Item was skipped, display message and continue automatically
+                if result.message:
+                    print(f"⚠️  {result.message}")
+                result = self.runner.execute_next_step()
+                continue
+
             if result.requires_input():
                 self.navigate_to(result)
                 return

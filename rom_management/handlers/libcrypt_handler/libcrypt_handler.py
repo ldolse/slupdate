@@ -3,6 +3,7 @@ from rom_management.handlers.base import SpecialHandler
 from .libcrypt import libcrypt_titles
 from media_registry import CDMedia
 from optical_media.utils import OpticalMediaProcessor
+from rom_management.processing.models import ResultObject
 
 logger = logging.getLogger(__name__)
 
@@ -15,19 +16,14 @@ class LibCryptHandler(SpecialHandler):
     This handler skips itself for non-matching titles to avoid wasted processing.
     """
 
+    SKIP_CATEGORY = "LibCrypt"
+
     def __init__(self):
         super().__init__("LibCrypt")
 
-    def handle(self, media: CDMedia, file_data: OpticalMediaProcessor) -> dict:
-        """Handle libcrypt DRM insertion"""
-        try:
-            return {"success": True}
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-
     def validate_preconditions(
         self, media: CDMedia, file_data: OpticalMediaProcessor
-    ) -> bool:
+    ) -> ResultObject:
         """Check if this handler should be applied to this media.
 
         LibCrypt only applies to:
@@ -36,35 +32,33 @@ class LibCryptHandler(SpecialHandler):
         3. Games with serial numbers that match libcrypt_titles
 
         Returns:
-            True only for known LibCrypt titles (~14% of PSX Redump games)
+            - ResultObject.skip() if this is a LibCrypt title (not yet implemented)
+            - ResultObject.not_applicable() if not a LibCrypt title (handler not needed)
         """
         if not media.softlist_part or not media.softlist_part.part_of:
-            logger.debug(f"LibCrypt: Skipping {media.id} - no softlist part reference")
-            return False
+            logger.debug(f"LibCrypt: No softlist reference, not applying handler")
+            return ResultObject.not_applicable(message="No softlist reference")
 
         if not media.dat_game_entry or not media.dat_game_entry.dat:
-            logger.debug(f"LibCrypt: Skipping {media.id} - no DAT reference")
-            return False
+            logger.debug(f"LibCrypt: No DAT reference, not applying handler")
+            return ResultObject.not_applicable(message="No DAT reference")
 
         if media.dat_game_entry.dat.dat_group != "redump":
-            logger.debug(
-                f"LibCrypt: Skipping {media.id} - not Redump (group: {media.dat_game_entry.dat.dat_group})"
-            )
-            return False
+            logger.debug(f"LibCrypt: Not Redump DAT group, not applying handler")
+            return ResultObject.not_applicable(message="Not Redump DAT group")
 
         serials = media.softlist_part.part_of.serial
         if not serials:
-            logger.debug(f"LibCrypt: Skipping {media.id} - no serials found")
-            return False
+            logger.debug(f"LibCrypt: No serials found, not applying handler")
+            return ResultObject.not_applicable(message="No serials found")
 
         for serial in serials:
             if serial in libcrypt_titles:
-                logger.debug(
-                    f"LibCrypt: Applying to {media.id} - matched serial {serial}"
+                logger.info(f"LibCrypt: Detected LibCrypt title - {serial}")
+                return ResultObject.skip(
+                    message=f"LibCrypt not yet implemented for {serial}",
+                    category=self.SKIP_CATEGORY,
                 )
-                return True
 
-        logger.debug(
-            f"LibCrypt: Skipping {media.id} - no matching serials (checked: {serials})"
-        )
-        return False
+        logger.debug(f"LibCrypt: No matching serials (checked: {serials})")
+        return ResultObject.not_applicable(message="Not a LibCrypt title")

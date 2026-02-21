@@ -25,6 +25,9 @@ class BaseProcess(ABC):
         self.current_item = None
         self.items_to_process = []
         self.skip_all = False
+        self._skipped_categories: set[str] = (
+            set()
+        )  # Track skipped categories for contextual SKIP_ALL
         self._items_iterator = None
         self._timeout_seconds = 30
 
@@ -66,11 +69,13 @@ class BaseProcess(ABC):
         return ResultObject.success(message=message)
 
     def _handle_skip_all(
-        self, message: str = "Skip all remaining items"
+        self, message: str = "Skip all remaining items", category: Optional[str] = None
     ) -> ResultObject:
         """Handle SKIP_ALL action - sets skip_all flag and skips current item"""
         logger.info(f"SKIP_ALL: {message}")
         self.skip_all = True
+        if category:
+            self._skipped_categories.add(category)
         return self._handle_skip(message)
 
     def _post_process(self) -> None:

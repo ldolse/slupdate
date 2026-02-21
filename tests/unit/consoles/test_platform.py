@@ -282,7 +282,9 @@ class TestPlatformHandlers:
         mock_platform.handler_registry = registry
 
         # Should return handlers based on media and file_data
-        handlers = mock_platform.get_relevant_handlers(mock_media, mock_file_data)
+        handlers, skip_result = mock_platform.get_relevant_handlers(
+            mock_media, mock_file_data
+        )
 
         # Verify handlers are returned (specific handlers depend on registry)
         # With empty file_list, CCD handler should be filtered out
@@ -291,19 +293,20 @@ class TestPlatformHandlers:
     def test_get_relevant_handlers_filters_by_validate_preconditions(
         self, mock_platform
     ):
-        """Test get_relevant_handlers filters out handlers that return False from validate_preconditions"""
+        """Test get_relevant_handlers filters out handlers that return SKIP from validate_preconditions"""
         from optical_media.utils import OpticalMediaProcessor
         from rom_management.handlers.base import SpecialHandler
         from rom_management.handlers import registry
         from rom_management.processing.models import ResultObject
 
-        # Create a test handler that always returns False from validate_preconditions
+        # Create a test handler that returns SKIP from validate_preconditions
         class TestFilterHandler(SpecialHandler):
             def __init__(self):
                 super().__init__("TestFilter")
 
             def validate_preconditions(self, media, file_data):
-                return False  # This handler should be filtered out
+                # Return SKIP - handler says to skip this item
+                return ResultObject.skip(message="Test handler says skip")
 
             def execute(self, media, file_data):
                 return ResultObject.success(message="Test handler executed")
@@ -325,32 +328,38 @@ class TestPlatformHandlers:
 
             mock_platform.handler_registry = registry
 
-            # Should NOT return the TestFilterHandler because validate_preconditions returns False
-            handlers = mock_platform.get_relevant_handlers(mock_media, mock_file_data)
+            # Should NOT return handlers because handler returned SKIP
+            handlers, skip_result = mock_platform.get_relevant_handlers(
+                mock_media, mock_file_data
+            )
             handler_names = [h.name for h in handlers]
 
             assert "TestFilter" not in handler_names, (
-                "Handler with validate_preconditions=False should be filtered out"
+                "Handler with validate_preconditions=SKIP should be filtered out"
             )
+            assert skip_result is not None, (
+                "Skip result should be returned when handler says skip"
+            )
+            assert skip_result.is_skip(), "Skip result should have SKIP status"
         finally:
             # Clean up: remove our test handler
             if "test_filter" in registry.handlers["dat_group"]:
                 del registry.handlers["dat_group"]["test_filter"]
 
     def test_get_relevant_handlers_includes_valid_handlers(self, mock_platform):
-        """Test get_relevant_handlers includes handlers that return True from validate_preconditions"""
+        """Test get_relevant_handlers includes handlers that return SUCCESS from validate_preconditions"""
         from optical_media.utils import OpticalMediaProcessor
         from rom_management.handlers.base import SpecialHandler
         from rom_management.handlers import registry
         from rom_management.processing.models import ResultObject
 
-        # Create a test handler that returns True from validate_preconditions
+        # Create a test handler that returns SUCCESS from validate_preconditions
         class TestValidHandler(SpecialHandler):
             def __init__(self):
                 super().__init__("TestValid")
 
             def validate_preconditions(self, media, file_data):
-                return True  # This handler should be included
+                return ResultObject.success()  # This handler should be included
 
             def execute(self, media, file_data):
                 return ResultObject.success(message="Test handler executed")
@@ -371,8 +380,10 @@ class TestPlatformHandlers:
 
             mock_platform.handler_registry = registry
 
-            # Should return the TestValidHandler because validate_preconditions returns True
-            handlers = mock_platform.get_relevant_handlers(mock_media, mock_file_data)
+            # Should return the TestValidHandler
+            handlers, skip_result = mock_platform.get_relevant_handlers(
+                mock_media, mock_file_data
+            )
             handler_names = [h.name for h in handlers]
 
             assert "TestValid" in handler_names, (

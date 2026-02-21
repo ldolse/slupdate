@@ -1,19 +1,18 @@
 from .base import SpecialHandler
 from media_registry import CDMedia
+from rom_management.processing.models import Action, ResultObject
 from rom_management.archive.zip_processor import (
-    MD5ScanRequiredException,
     TimeoutError,
     calculate_timeout,
     with_timeout,
 )
-from typing import Optional, Dict, Any, TYPE_CHECKING
+from typing import TYPE_CHECKING
 import logging
 import os
 
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from rom_management.processing.models import Action, ResultObject
     from rom_management.processing.base_process import BaseProcess
 
 
@@ -23,6 +22,8 @@ class MD5ScanHandler(SpecialHandler):
     Provides options to scan current item, scan all, skip, or stop.
     """
 
+    SKIP_CATEGORY = "MD5 scanning"
+
     def __init__(self):
         super().__init__("md5_scan_handler")
 
@@ -30,7 +31,6 @@ class MD5ScanHandler(SpecialHandler):
         self,
         action: "Action",
         process: "BaseProcess",
-        params: Optional[Dict[str, Any]] = None,
     ) -> "ResultObject":
         """
         Execute MD5 scanning actions
@@ -43,12 +43,6 @@ class MD5ScanHandler(SpecialHandler):
         Returns:
             ResultObject from executing the action
         """
-        from rom_management.processing.models import (
-            ResultObject,
-            ProcessStatus,
-            Action,
-        )
-
         if action == Action.SCAN_MD5:
             original_use_md5 = process.use_md5
             process.use_md5 = True
@@ -66,7 +60,9 @@ class MD5ScanHandler(SpecialHandler):
             return process._handle_skip("Skipped MD5 scan for current item")
 
         elif action == Action.SKIP_ALL:
-            return process._handle_skip_all("Skip all remaining MD5 scans")
+            return process._handle_skip_all(
+                f"Skip all {self.SKIP_CATEGORY}", category=self.SKIP_CATEGORY
+            )
 
         elif action == Action.STOP:
             return process._handle_stop()
@@ -107,7 +103,23 @@ class MD5ScanHandler(SpecialHandler):
             logger.warning(f"MD5 scan timeout, skipping: {media_name}")
             return process._handle_skip("MD5 scan timed out")
 
-    def validate_preconditions(self, media: CDMedia, file_data=None) -> bool:
-        """Check if this handler should be applied"""
+    def validate_preconditions(self, media: CDMedia, file_data=None) -> "ResultObject":
+        """Check if this handler should be applied.
+
+        Returns:
+            - ResultObject.success() if MD5 scanning might be needed (include handler)
+            - ResultObject.not_applicable() if no MD5 scanning needed (don't include handler)
+        """
+        if not media.dat_game_entry or not media.dat_game_entry.dat:
+            return ResultObject.not_applicable(message="No DAT entry")
+
         dat = media.dat_game_entry.dat
-        return any(hasattr(rom, "md5") and not hasattr(rom, "crc") for rom in dat.roms)
+        needs_md5_scan = any(
+            hasattr(rom, "md5") and rom.md5 and not (hasattr(rom, "crc") and rom.crc)
+            for rom in dat.roms
+        )
+
+        if needs_md5_scan:
+            return ResultObject.success()
+
+        return ResultObject.not_applicable(message="No MD5 scanning needed")

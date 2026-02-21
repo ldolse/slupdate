@@ -81,13 +81,28 @@ class DynamicMenuAdapter:
             return DisplayData(message="No pending query", choices=[])
 
         payload = self._pending_result.payload
-        choices = [(act.display_name, act) for act in payload.valid_actions]
+        choices = []
+        for act in payload.valid_actions:
+            display_name = self._get_action_display_name(act, payload.skip_category)
+            choices.append((display_name, act))
 
         message = payload.message
         if hasattr(payload.item, "display_name"):
             message += f"\nItem: {payload.item.display_name}"
 
         return DisplayData(message=message, choices=choices)
+
+    def _get_action_display_name(self, action, skip_category: str = None) -> str:
+        """Get display name for an action, with contextual labels for SKIP actions."""
+        from rom_management.processing.models import Action
+
+        if skip_category:
+            if action == Action.SKIP:
+                return f"Skip this {skip_category}"
+            elif action == Action.SKIP_ALL:
+                return f"Skip all {skip_category}"
+
+        return action.display_name
 
     def execute_custom_action(
         self, menu_system: "MenuSystem", action: Any

@@ -15,9 +15,15 @@ class SpecialHandler(ABC):
 
     def validate_preconditions(
         self, media: CDMedia, file_data: OpticalMediaProcessor
-    ) -> bool:
-        """Check if this handler should be applied"""
-        return True
+    ) -> "ResultObject":
+        """Check if this handler should be applied.
+
+        Returns:
+            - ResultObject.success(): Include handler
+            - ResultObject.not_applicable(): Don't include handler (not relevant for this media)
+            - ResultObject.skip(): Skip this item entirely (handler relevant but can't process)
+        """
+        return ResultObject.success()
 
     def _execute_step_and_advance(self, process: "BaseProcess") -> "ResultObject":
         """
@@ -78,30 +84,6 @@ class SpecialHandler(ABC):
 
         Returns:
             ResultObject with SUCCESS or ERROR status
-        """
-        raise NotImplementedError(
-            f"Handler {self.name} must implement execute() "
-            "if it performs automated processing"
-        )
-
-    def execute(
-        self, media: CDMedia, file_data: OpticalMediaProcessor
-    ) -> "ResultObject":
-        """
-        Execute automated handler logic.
-
-        This is used by automated handlers that perform conversions
-        without user interaction (e.g., CloneCDHandler, BinCueHandler, MdFHandler).
-
-        Args:
-            media: The CDMedia object being processed
-            file_data: The OpticalMediaProcessor with extracted files
-
-        Returns:
-            ResultObject with SUCCESS or ERROR status
-
-        DEPRECATED: Use execute() in subclasses. This default implementation
-        raises NotImplementedError.
         """
         raise NotImplementedError(
             f"Handler {self.name} must implement execute() "
