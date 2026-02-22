@@ -25,9 +25,17 @@ class SpecialHandler(ABC):
         return False
 
     def validate_preconditions(
-        self, media: CDMedia, file_data: OpticalMediaProcessor = None
+        self,
+        media: CDMedia,
+        file_data: Optional[OpticalMediaProcessor] = None,
+        process: "BaseProcess" = None,
     ) -> "ResultObject":
         """Check if this handler should be applied.
+
+        Args:
+            media: The CDMedia object being processed
+            file_data: Optional file data from extraction
+            process: Optional BaseProcess instance (for process-type-specific logic)
 
         Returns:
             - ResultObject.success(): Include handler

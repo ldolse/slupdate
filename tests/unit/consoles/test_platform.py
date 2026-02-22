@@ -304,11 +304,11 @@ class TestPlatformHandlers:
             def __init__(self):
                 super().__init__("TestFilter")
 
-            def validate_preconditions(self, media, file_data):
+            def validate_preconditions(self, media, file_data, process=None):
                 # Return SKIP - handler says to skip this item
                 return ResultObject.skip(message="Test handler says skip")
 
-            def execute(self, media, file_data):
+            def execute(self, media, file_data, process=None):
                 return ResultObject.success(message="Test handler executed")
 
         # Temporarily register our test handler for redump dat_group
@@ -358,10 +358,10 @@ class TestPlatformHandlers:
             def __init__(self):
                 super().__init__("TestValid")
 
-            def validate_preconditions(self, media, file_data):
+            def validate_preconditions(self, media, file_data, process=None):
                 return ResultObject.success()  # This handler should be included
 
-            def execute(self, media, file_data):
+            def execute(self, media, file_data, process=None):
                 return ResultObject.success(message="Test handler executed")
 
         # Temporarily register our test handler for a unique platform

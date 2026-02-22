@@ -119,31 +119,8 @@ class ArchiveValidationProcess(BaseProcess):
                 metadata={"rom_dir": rom_dir},
             )
 
-        handlers, skip_result = self.platform.get_relevant_handlers(media, None)
+        handlers, skip_result = self.platform.get_relevant_handlers(media, None, self)
         logger.debug(f"Handler check: handlers={handlers}, skip_result={skip_result}")
-
-        # Skip handler check if already in handler execution (prevents infinite loop)
-        if self._skip_handler_check:
-            logger.debug(f"Skipping handler check - handler is executing step")
-            handlers = []
-            skip_result = None
-        else:
-            # Also check special handlers (like MD5ScanHandler) - these don't need file_data
-            from rom_management.handlers import registry
-
-            special_handlers = registry.get_special_handlers()
-            logger.debug(f"Special handlers: {[h.name for h in special_handlers]}")
-
-            for handler in special_handlers:
-                result = handler.validate_preconditions(media, None)
-                logger.debug(f"Special handler {handler.name}: result={result.status}")
-                if result.is_success():
-                    handlers.append(handler)
-                    logger.debug(f"Added special handler: {handler.name}")
-                elif result.is_skip():
-                    return result
-                elif result.requires_input():
-                    return result
 
         if skip_result:
             logger.debug(
@@ -154,15 +131,18 @@ class ArchiveValidationProcess(BaseProcess):
             elif skip_result.requires_input():
                 return skip_result
 
-        for handler in handlers:
-            logger.debug(f"Running handler: {handler.name}")
-            result = handler.execute(media, None)
-            logger.debug(f"Handler result: status={result.status}")
-            return result
+        # Run handlers using the base process method (handles auto-skip for completed handlers)
+        handler_result = self._run_handlers(handlers, media, None)
+        if handler_result.requires_input():
+            return handler_result
+
+        # Check process-level use_md5 flag (set by MD5ScanHandler actions)
+        use_md5 = getattr(self, "use_md5", False)
+        logger.debug(f"MD5 required from process level: {use_md5}")
 
         try:
             zip_path = self.zip_processor.find_valid_zip(
-                media.dat_game_entry, rom_dir, md5=self.use_md5
+                media.dat_game_entry, rom_dir, md5=use_md5
             )
         except TimeoutError:
             logger.warning(

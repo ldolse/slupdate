@@ -1,10 +1,11 @@
 from .base import SpecialHandler
 from media_registry import CDMedia
 from optical_media.utils import OpticalMediaProcessor
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from rom_management.processing.models import ResultObject
+    from rom_management.processing.base_process import BaseProcess
 
 
 class BinCueHandler(SpecialHandler):
@@ -17,7 +18,10 @@ class BinCueHandler(SpecialHandler):
         super().__init__("BinCue")
 
     def validate_preconditions(
-        self, media: CDMedia, file_data: OpticalMediaProcessor
+        self,
+        media: CDMedia,
+        file_data: Optional[OpticalMediaProcessor] = None,
+        process: Optional["BaseProcess"] = None,
     ) -> "ResultObject":
         """Check if this handler should be applied"""
         from rom_management.processing.models import ResultObject
@@ -30,7 +34,10 @@ class BinCueHandler(SpecialHandler):
         return ResultObject.not_applicable(message="No BIN/CUE files found")
 
     def execute(
-        self, media: CDMedia, file_data: OpticalMediaProcessor
+        self,
+        media: CDMedia,
+        file_data: Optional[OpticalMediaProcessor] = None,
+        process: Optional["BaseProcess"] = None,
     ) -> "ResultObject":
         """Handle bin/cue processing"""
         from rom_management.processing.models import ResultObject

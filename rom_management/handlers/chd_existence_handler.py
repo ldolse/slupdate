@@ -1,15 +1,13 @@
 import os
 from typing import Optional, Dict, Any, TYPE_CHECKING
 from rom_management.processing.models import ResultObject
-
+from rom_management.processing.models import Action, MediaProcessingItem
 from .base import SpecialHandler
 
 if TYPE_CHECKING:
-    from rom_management.processing.models import Action, MediaProcessingItem
     from rom_management.processing.base_process import BaseProcess
     from media_registry import CDMedia
-else:
-    from rom_management.processing.models import MediaProcessingItem
+
 
 
 class CHDExistenceHandler(SpecialHandler):
@@ -22,6 +20,30 @@ class CHDExistenceHandler(SpecialHandler):
 
     def __init__(self):
         super().__init__("chd_existence")
+
+    def validate_preconditions(
+        self, media: "CDMedia", file_data: Any = None, process: Any = None
+    ) -> "ResultObject":
+        """Check if this handler should be applied.
+
+        CHDExistenceHandler only applies during CHD build process
+
+        Returns:
+            - ResultObject.not_applicable() for non-CHDBuildProcess
+            - ResultObject.success() for CHDBuildProcess
+        """
+        from rom_management.processing.models import ResultObject
+
+        # Check if this is CHDBuildProcess - CHD existence handler only applies to this
+        if process is not None:
+            from rom_management.processing.chd_build_process import ChdBuildProcess
+
+            if not isinstance(process, ChdBuildProcess):
+                return ResultObject.not_applicable(
+                    message="CHD existence handler is for CHD build process only"
+                )
+
+        return ResultObject.success()
 
     def execute_action(
         self,
@@ -60,7 +82,9 @@ class CHDExistenceHandler(SpecialHandler):
             return self._handle_skip_existing(process)
 
         elif action == Action.SKIP_ALL:
-            return process._handle_skip_all("Skip all remaining existing CHDs")
+            return process._handle_skip_all(
+                "Skip all remaining existing CHDs", category="existing CHDs"
+            )
 
         elif action == Action.STOP:
             return process._handle_stop()
@@ -222,22 +246,3 @@ class CHDExistenceHandler(SpecialHandler):
         process.current_item = None
         process.processed_items += 1
         return ResultObject.success(message="Set trust preference for remaining CHDs")
-
-    def _handle_skip_all(self, process: "BaseProcess") -> "ResultObject":
-        """Handle SKIP_ALL action - set skip_all flag and skip current item
-
-        Args:
-            process: The BaseProcess instance
-
-        Returns:
-            ResultObject.success() after skipping current and setting skip_all
-        """
-        from rom_management.processing.models import ResultObject
-
-        process.skip_all = True
-        if process.current_item and hasattr(process.current_item, "media"):
-            print(
-                f"Skipping existing CHD for {process.current_item.media.dat_game_entry.name}"
-            )
-        print("Set to skip all remaining existing CHDs")
-        return process._handle_skip("Skipped current, will skip all remaining")

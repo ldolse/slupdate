@@ -4,8 +4,12 @@ from .libcrypt import libcrypt_titles
 from media_registry import CDMedia
 from optical_media.utils import OpticalMediaProcessor
 from rom_management.processing.models import ResultObject
+from typing import TYPE_CHECKING, Optional
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from rom_management.processing.base_process import BaseProcess
 
 
 class LibCryptHandler(SpecialHandler):
@@ -22,7 +26,10 @@ class LibCryptHandler(SpecialHandler):
         super().__init__("LibCrypt")
 
     def validate_preconditions(
-        self, media: CDMedia, file_data: OpticalMediaProcessor
+        self,
+        media: CDMedia,
+        file_data: Optional[OpticalMediaProcessor] = None,
+        process: Optional["BaseProcess"] = None,
     ) -> ResultObject:
         """Check if this handler should be applied to this media.
 

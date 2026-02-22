@@ -48,31 +48,21 @@ class MD5ScanHandler(SpecialHandler):
             ResultObject with SUCCESS or ERROR status
         """
         if action == Action.SCAN_MD5:
-            # Store MD5 requirement in handler state on current item
-            current_item = process.current_item
-            if hasattr(current_item, "_handler_state"):
-                current_item._handler_state["require_md5"] = True
-            else:
-                # Fallback for tests or items without handler state
-                logger.warning(f"current_item does not have _handler_state attribute")
-
+            # Set process-level MD5 flag for current item only
+            process.use_md5 = True
             return self._execute_step_with_timeout(process)
 
         elif action == Action.SCAN_ALL_MD5:
-            # Store MD5 requirement in handler state on current item
-            current_item = process.current_item
-            if hasattr(current_item, "_handler_state"):
-                current_item._handler_state["require_md5"] = True
-            else:
-                # Fallback for tests or items without handler state
-                logger.warning(f"current_item does not have _handler_state attribute")
-
+            # Set process-level MD5 flag for all remaining items
+            process.use_md5 = True
             return self._execute_step_with_timeout(process)
 
         elif action == Action.SKIP:
             return process._handle_skip("Skipped MD5 scan for current item")
 
         elif action == Action.SKIP_ALL:
+            # Store category at PROCESS level, not item
+            process._skipped_categories.add(self.SKIP_CATEGORY)
             return process._handle_skip_all(
                 f"Skip all {self.SKIP_CATEGORY}", category=self.SKIP_CATEGORY
             )
@@ -121,6 +111,7 @@ class MD5ScanHandler(SpecialHandler):
                 Action.SKIP_ALL,
                 Action.STOP,
             ],
+            skip_category=self.SKIP_CATEGORY,
         )
 
     def _execute_step_with_timeout(self, process: "BaseProcess") -> "ResultObject":
@@ -155,7 +146,7 @@ class MD5ScanHandler(SpecialHandler):
             return process._handle_skip("MD5 scan timed out")
 
     def validate_preconditions(
-        self, media: CDMedia, file_data: Any = None
+        self, media: CDMedia, file_data: Any = None, process: Any = None
     ) -> "ResultObject":
         """Check if this handler should be applied.
 
@@ -164,6 +155,17 @@ class MD5ScanHandler(SpecialHandler):
             - ResultObject.not_applicable() if no MD5 scanning needed (don't include handler)
         """
         from rom_management.processing.models import ResultObject
+
+        # Check if this is ArchiveValidationProcess - MD5 handler only applies to this
+        if process is not None:
+            from rom_management.processing.archive_validation import (
+                ArchiveValidationProcess,
+            )
+
+            if not isinstance(process, ArchiveValidationProcess):
+                return ResultObject.not_applicable(
+                    message="MD5 handler only for ArchiveValidationProcess"
+                )
 
         if not media.dat_game_entry:
             return ResultObject.not_applicable(message="No DAT entry")

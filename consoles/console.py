@@ -10,11 +10,12 @@ from game_metadata import RedumpDB
 from collections import OrderedDict
 from .platform_state import PlatformState
 
-from typing import TYPE_CHECKING, Optional, List
+from typing import TYPE_CHECKING, Optional, List, Any, Tuple
 
 if TYPE_CHECKING:
     from consoles.platform_manager import PlatformManager
     from dat import RomDat
+    from rom_management.processing.models import ResultObject
 
 
 class Platform:
@@ -103,10 +104,10 @@ class Platform:
         self._chd_build_index = 0
 
     def get_relevant_handlers(
-        self, media: CDMedia, file_data: OpticalMediaProcessor
-    ) -> List[SpecialHandler]:
+        self, media: CDMedia, file_data: Any = None, process: Any = None
+    ) -> Tuple[List[SpecialHandler], Optional["ResultObject"]]:
         """Get all relevant handlers for a media item"""
-        return self.handler_registry.get_relevant_handlers(media, file_data)
+        return self.handler_registry.get_relevant_handlers(media, file_data, process)
 
     @property
     def _media_to_process(self) -> list[CDMedia]:

@@ -1,6 +1,6 @@
 from media_registry import CDMedia
 from optical_media.utils import OpticalMediaProcessor as file_data
-from typing import List, Type, Optional, Tuple, TYPE_CHECKING
+from typing import List, Type, Optional, Tuple, TYPE_CHECKING, Any
 from .base import SpecialHandler
 
 if TYPE_CHECKING:
@@ -17,7 +17,7 @@ class HandlerRegistry:
         }
 
     def get_relevant_handlers(
-        self, media: CDMedia, file_data: file_data
+        self, media: CDMedia, file_data: file_data, process: Any = None
     ) -> Tuple[List[SpecialHandler], Optional["ResultObject"]]:
         """
         Get relevant handlers for a media item.
@@ -35,7 +35,7 @@ class HandlerRegistry:
         # Add platform handler if exists
         if media.platform in self.handlers["platform"]:
             handler = self.handlers["platform"][media.platform]()
-            result = handler.validate_preconditions(media, file_data)
+            result = handler.validate_preconditions(media, file_data, process)
 
             if result.is_not_applicable():
                 pass  # Handler not relevant, don't include
@@ -50,7 +50,7 @@ class HandlerRegistry:
         format_type = file_data.format if file_data else None
         if format_type and format_type in self.handlers["format"]:
             handler = self.handlers["format"][format_type]()
-            result = handler.validate_preconditions(media, file_data)
+            result = handler.validate_preconditions(media, file_data, process)
 
             if result.is_not_applicable():
                 pass  # Handler not relevant, don't include
@@ -68,10 +68,24 @@ class HandlerRegistry:
             and media.dat_game_entry.dat.dat_group in self.handlers["dat_group"]
         ):
             handler = self.handlers["dat_group"][media.dat_game_entry.dat.dat_group]()
-            result = handler.validate_preconditions(media, file_data)
+            result = handler.validate_preconditions(media, file_data, process)
 
             if result.is_not_applicable():
                 pass  # Handler not relevant, don't include
+            elif result.is_skip():
+                return [], result  # Item should be skipped
+            elif result.is_success():
+                handlers.append(handler)
+            elif result.requires_input():
+                return [], result  # Handler needs user input
+
+        # Add special handlers (e.g., MD5ScanHandler, CHDExistenceHandler)
+        special_handlers = self.get_special_handlers()
+        for handler in special_handlers:
+            result = handler.validate_preconditions(media, file_data, process)
+
+            if result.is_not_applicable():
+                pass  # Handler not relevant
             elif result.is_skip():
                 return [], result  # Item should be skipped
             elif result.is_success():
