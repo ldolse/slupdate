@@ -371,10 +371,9 @@ class TestArchiveValidationProcess:
             assert "No valid zip found" in result.payload.message
 
     def test_handle_user_action_scan_md5(self, mock_platform, create_mock_media):
-        """Test handle_user_action() with SCAN_MD5 action"""
+        """Test handle_user_action() with HANDLE action"""
         process = ArchiveValidationProcess(mock_platform)
         process.register_handlers()  # Initialize handler
-        process.use_md5 = False
 
         # Create mock media
         media = create_mock_media("media1", "Test Game")
@@ -384,16 +383,16 @@ class TestArchiveValidationProcess:
         with patch.object(process, "_execute_step") as mock_step:
             mock_step.return_value = ResultObject.success()
 
-            # Handle SCAN_MD5 action
-            result = process.handle_user_action(Action.SCAN_MD5, {})
+            # Handle HANDLE action
+            result = process.handle_user_action(Action.HANDLE, {})
 
             assert result.is_success()
             mock_step.assert_called_once()
-            # Verify item was advanced (handler manually advances on success)
-            assert process.current_item is None
+            # Verify handler state was set
+            assert process._handler_state.get("md5_enabled") is True
 
     def test_handle_user_action_scan_all_md5(self, mock_platform, create_mock_media):
-        """Test handle_user_action() with SCAN_ALL_MD5 action"""
+        """Test handle_user_action() with HANDLE_ALL action"""
         process = ArchiveValidationProcess(mock_platform)
         process.register_handlers()  # Initialize handler
 
@@ -405,12 +404,13 @@ class TestArchiveValidationProcess:
         with patch.object(process, "_execute_step") as mock_step:
             mock_step.return_value = ResultObject.success()
 
-            # Handle SCAN_ALL_MD5 action
-            result = process.handle_user_action(Action.SCAN_ALL_MD5, {})
+            # Handle HANDLE_ALL action
+            result = process.handle_user_action(Action.HANDLE_ALL, {})
 
             # Verify _execute_step was called
             assert result.is_success()
             mock_step.assert_called_once()
+            assert process._handler_state.get("md5_enabled") is True
 
     def test_handle_user_action_skip(self, mock_platform, create_mock_media):
         """Test handle_user_action() with SKIP action"""
@@ -424,12 +424,11 @@ class TestArchiveValidationProcess:
         process.current_item = media.softlist_part
         process.processed_items = 0
 
-        # Handle SKIP action
+        # Handle SKIP action - uses default handling now
         result = process.handle_user_action(Action.SKIP, {})
 
         # Verify skipped
         assert result.is_success()
-        assert "Skipped MD5 scan" in result.payload.message
         assert process.current_item is None
         assert process.processed_items == 1
 
@@ -445,27 +444,30 @@ class TestArchiveValidationProcess:
         process.current_item = media.softlist_part
         process.processed_items = 0
 
-        # Handle SKIP_ALL action
+        # Simulate that a pending_input was returned with category
+        # (this would normally be set by ProcessRunner when pending_input is returned)
+        process._current_category = "MD5 hash"
+
+        # Handle SKIP_ALL action - uses default handling now
         result = process.handle_user_action(Action.SKIP_ALL, {})
 
         # Verify skip_all set
         assert result.is_success()
-        assert "Skip all MD5 scanning" in result.payload.message
         assert process.skip_all is True
-        assert "MD5 scanning" in process._skipped_categories
+        assert "MD5 hash" in process._skipped_categories
 
     def test_get_handler_for_action(self, mock_platform):
         """Test _get_handler_for_action() returns correct handler"""
         process = ArchiveValidationProcess(mock_platform)
         process.register_handlers()  # Initialize MD5 handler
 
-        # MD5-related actions should return MD5ScanHandler
-        assert process._get_handler_for_action(Action.SCAN_MD5) is not None
-        assert process._get_handler_for_action(Action.SKIP) is not None
-        assert process._get_handler_for_action(Action.SKIP_ALL) is not None
-        assert process._get_handler_for_action(Action.SCAN_ALL_MD5) is not None
+        # HANDLE actions should return MD5ScanHandler
+        assert process._get_handler_for_action(Action.HANDLE) is not None
+        assert process._get_handler_for_action(Action.HANDLE_ALL) is not None
 
-        # Other actions should return None
+        # Other actions should return None (use default handling)
+        assert process._get_handler_for_action(Action.SKIP) is None
+        assert process._get_handler_for_action(Action.SKIP_ALL) is None
         assert process._get_handler_for_action(Action.OVERWRITE) is None
         assert process._get_handler_for_action(Action.STOP) is None
 

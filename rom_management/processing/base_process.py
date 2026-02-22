@@ -26,9 +26,13 @@ class BaseProcess(ABC):
         self.current_item = None
         self.items_to_process = []
         self.skip_all = False
+        self._handler_state: Dict[
+            str, Any
+        ] = {}  # Handlers store process-wide state here
         self._skipped_categories: set[str] = (
             set()
         )  # Track skipped categories for contextual SKIP_ALL
+        self._current_category: Optional[str] = None  # Category from last pending_input
         self._items_iterator = None
         self._timeout_seconds = 30
         self._last_handled_item_id = None  # Track last item that went through handlers
@@ -178,16 +182,19 @@ class BaseProcess(ABC):
         handler = self._get_handler_for_action(action)
 
         if handler:
-            return handler.execute_action(action, self, params)
-        else:
-            return self._handle_default_action(action)
+            result = handler.execute_action(action, self, params)
+            if result is not None:
+                return result
+            # Handler returned None - use default handling
+
+        return self._handle_default_action(action)
 
     def _get_handler_for_action(self, action: "Action") -> "Optional[SpecialHandler]":
         """Find handler for given action type"""
         return None
 
     def _handle_default_action(self, action: "Action") -> ResultObject:
-        """Handle actions not tied to specific handlers"""
+        """Handle standard actions - can be called by handlers or used as fallback"""
         if action == Action.STOP:
             return self._handle_stop()
         elif action == Action.CONTINUE:
@@ -197,8 +204,15 @@ class BaseProcess(ABC):
             )
         elif action == Action.SKIP:
             return self._handle_skip("Skipped current item")
+        elif action == Action.SKIP_ALL:
+            return self._handle_skip_all(
+                "Skip all remaining items", category=self._current_category
+            )
 
-        return self._handle_stop()
+        return ResultObject.error(
+            error_type="UnknownAction",
+            message=f"Unknown action: {action.value}",
+        )
 
     def get_progress(self) -> dict:
         """Return current progress information"""

@@ -33,17 +33,17 @@ class TestAction:
 
     def test_validation_actions_values(self):
         """Test that validation actions have correct internal values"""
-        assert Action.SCAN_MD5.value == "scan_md5"
+        assert Action.HANDLE.value == "handle"
         assert Action.SKIP.value == "skip"
         assert Action.SKIP_ALL.value == "skip_all"
-        assert Action.SCAN_ALL_MD5.value == "scan_all_md5"
+        assert Action.HANDLE_ALL.value == "handle_all"
 
     def test_validation_actions_display_names(self):
         """Test that validation actions have human-readable display names"""
-        assert Action.SCAN_MD5.display_name == "Scan this archive with MD5 (slow)"
+        assert Action.HANDLE.display_name == "Handle this item"
         assert Action.SKIP.display_name == "Skip current item"
         assert Action.SKIP_ALL.display_name == "Skip all remaining items"
-        assert Action.SCAN_ALL_MD5.display_name == "Scan all with MD5"
+        assert Action.HANDLE_ALL.display_name == "Handle all remaining items"
 
     def test_chd_build_actions_values(self):
         """Test that CHD build actions have correct internal values"""
@@ -238,7 +238,7 @@ class TestResultObjectPendingInput:
 
     def test_create_pending_input(self):
         mock_item = BaseProcessingItem("test")
-        actions = [Action.SCAN_MD5, Action.SKIP, Action.STOP]
+        actions = [Action.HANDLE, Action.SKIP, Action.STOP]
 
         result = ResultObject.pending_input(
             query_id="confirm_scan_md5",

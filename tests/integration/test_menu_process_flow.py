@@ -67,7 +67,7 @@ class TestMenuProcessFlow:
                 query_id="generic_query",
                 message="Test message",
                 item=Mock(),
-                valid_actions=[Action.SKIP, Action.SCAN_MD5],
+                valid_actions=[Action.SKIP, Action.HANDLE],
             )
             MockRunner.return_value = mock_runner
 
@@ -125,7 +125,7 @@ class TestMenuProcessFlow:
             query_id="test_query",
             message="Test message",
             item=Mock(display_name="Test Item"),
-            valid_actions=[Action.SKIP, Action.SCAN_MD5, Action.STOP],
+            valid_actions=[Action.SKIP, Action.HANDLE, Action.STOP],
         )
 
         generic_menu._pending_result = mock_result
@@ -140,7 +140,7 @@ class TestMenuProcessFlow:
         assert len(display_data.choices) == 3
         expected_choices = [
             (Action.SKIP.display_name, Action.SKIP),
-            (Action.SCAN_MD5.display_name, Action.SCAN_MD5),
+            (Action.HANDLE.display_name, Action.HANDLE),
             (Action.STOP.display_name, Action.STOP),
         ]
         assert display_data.choices == expected_choices

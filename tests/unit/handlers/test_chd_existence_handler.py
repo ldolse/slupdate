@@ -155,7 +155,7 @@ class TestCHDExistenceHandler:
 
         assert result.is_success()
         mock_process._handle_skip_all.assert_called_once_with(
-            "Skip all remaining existing CHDs", category="existing CHDs"
+            f"Skip all {handler.PROCESS_CATEGORY}", category=handler.PROCESS_CATEGORY
         )
 
     def test_action_set_overwrite_preference(self, handler, mock_process, mock_media):
@@ -204,7 +204,7 @@ class TestCHDExistenceHandler:
 
     def test_action_unknown(self, handler, mock_process):
         """Test unknown action returns error"""
-        result = handler.execute_action(Action.SCAN_MD5, mock_process, {})
+        result = handler.execute_action(Action.HANDLE, mock_process, {})
 
         assert result.is_error()
         assert result.payload.error_type == "UnknownAction"

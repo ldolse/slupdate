@@ -83,7 +83,7 @@ class DynamicMenuAdapter:
         payload = self._pending_result.payload
         choices = []
         for act in payload.valid_actions:
-            display_name = self._get_action_display_name(act, payload.skip_category)
+            display_name = self._get_action_display_name(act, payload.category)
             choices.append((display_name, act))
 
         message = payload.message
@@ -92,15 +92,19 @@ class DynamicMenuAdapter:
 
         return DisplayData(message=message, choices=choices)
 
-    def _get_action_display_name(self, action, skip_category: str = None) -> str:
-        """Get display name for an action, with contextual labels for SKIP actions."""
+    def _get_action_display_name(self, action, category: str = None) -> str:
+        """Get display name with category context for HANDLE/SKIP actions."""
         from rom_management.processing.models import Action
 
-        if skip_category:
-            if action == Action.SKIP:
-                return f"Skip this {skip_category}"
+        if category:
+            if action == Action.HANDLE:
+                return f"Handle this {category}"
+            elif action == Action.HANDLE_ALL:
+                return f"Handle all {category}"
+            elif action == Action.SKIP:
+                return f"Skip this {category}"
             elif action == Action.SKIP_ALL:
-                return f"Skip all {skip_category}"
+                return f"Skip all {category}"
 
         return action.display_name
 

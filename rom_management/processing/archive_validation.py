@@ -29,7 +29,6 @@ class ArchiveValidationProcess(BaseProcess):
         super().__init__(platform)
         self.zip_processor = ZipProcessor()
         self._md5_handler = None
-        self.use_md5 = False
 
     @property
     def progress(self) -> dict:
@@ -74,14 +73,8 @@ class ArchiveValidationProcess(BaseProcess):
         self._md5_handler = MD5ScanHandler()
 
     def _get_handler_for_action(self, action: Action):
-        """Map MD5-related actions to MD5ScanHandler"""
-        md5_actions = [
-            Action.SCAN_MD5,
-            Action.SKIP,
-            Action.SKIP_ALL,
-            Action.SCAN_ALL_MD5,
-        ]
-        if action in md5_actions:
+        """Map handler-related actions to MD5ScanHandler"""
+        if action in [Action.HANDLE, Action.HANDLE_ALL]:
             return self._md5_handler
         return None
 
@@ -136,8 +129,8 @@ class ArchiveValidationProcess(BaseProcess):
         if handler_result.requires_input():
             return handler_result
 
-        # Check process-level use_md5 flag (set by MD5ScanHandler actions)
-        use_md5 = getattr(self, "use_md5", False)
+        # Check process-level MD5 flag (set by MD5ScanHandler HANDLE_ALL action)
+        use_md5 = self._handler_state.get("md5_enabled", False)
         logger.debug(f"MD5 required from process level: {use_md5}")
 
         try:

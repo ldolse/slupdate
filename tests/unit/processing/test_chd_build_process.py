@@ -132,7 +132,8 @@ class TestChdBuildProcess:
         process = ChdBuildProcess(mock_platform)
         process.register_handlers()
 
-        assert process._get_handler_for_action(Action.SCAN_MD5) is None
+        assert process._get_handler_for_action(Action.HANDLE) is None
+        assert process._get_handler_for_action(Action.HANDLE_ALL) is None
 
     @patch("os.path.exists")
     def test_execute_step_media_no_softlist(
@@ -328,7 +329,7 @@ class TestChdBuildProcess:
         mock_chd.path = "/test/chd/path/TestTitle/disk1.chd"
         mock_chd_class.return_value = mock_chd
 
-        mock_platform.get_relevant_handlers.return_value = []
+        mock_platform.get_relevant_handlers.return_value = ([], None)
 
         process = ChdBuildProcess(mock_platform)
 
@@ -349,7 +350,7 @@ class TestChdBuildProcess:
         mock_optical.temp_dir = None
         mock_optical_class.return_value = mock_optical
 
-        mock_platform.get_relevant_handlers.return_value = []
+        mock_platform.get_relevant_handlers.return_value = ([], None)
 
         process = ChdBuildProcess(mock_platform)
 
@@ -372,7 +373,7 @@ class TestChdBuildProcess:
         mock_optical.current_toc = None
         mock_optical_class.return_value = mock_optical
 
-        mock_platform.get_relevant_handlers.return_value = []
+        mock_platform.get_relevant_handlers.return_value = ([], None)
 
         process = ChdBuildProcess(mock_platform)
 
@@ -400,7 +401,7 @@ class TestChdBuildProcess:
         mock_chd.exists = False
         mock_chd_class.return_value = mock_chd
 
-        mock_platform.get_relevant_handlers.return_value = []
+        mock_platform.get_relevant_handlers.return_value = ([], None)
 
         process = ChdBuildProcess(mock_platform)
 
@@ -445,7 +446,7 @@ class TestChdBuildProcess:
         mock_optical.current_toc = "/tmp/test/disc.toc"
         mock_optical_class.return_value = mock_optical
 
-        mock_platform.get_relevant_handlers.return_value = []
+        mock_platform.get_relevant_handlers.return_value = ([], None)
 
         process = ChdBuildProcess(mock_platform)
 
@@ -479,7 +480,7 @@ class TestChdBuildProcess:
             error_type="HandlerError", message="Handler failed"
         )
 
-        mock_platform.get_relevant_handlers.return_value = [mock_handler]
+        mock_platform.get_relevant_handlers.return_value = ([mock_handler], None)
 
         process = ChdBuildProcess(mock_platform)
 
@@ -508,7 +509,7 @@ class TestChdBuildProcess:
         mock_handler.name = "test_handler"
         mock_handler.execute.return_value = ResultObject.success()
 
-        mock_platform.get_relevant_handlers.return_value = [mock_handler]
+        mock_platform.get_relevant_handlers.return_value = ([mock_handler], None)
 
         mock_chd = Mock()
         mock_chd.exists = True

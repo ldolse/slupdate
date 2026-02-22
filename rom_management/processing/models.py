@@ -31,9 +31,9 @@ class Action(Enum):
     SKIP = ("skip", "Skip current item")
     SKIP_ALL = ("skip_all", "Skip all remaining items")
 
-    # Validation actions
-    SCAN_MD5 = ("scan_md5", "Scan this archive with MD5 (slow)")
-    SCAN_ALL_MD5 = ("scan_all_md5", "Scan all with MD5")
+    # Handler actions (generic, used with category context)
+    HANDLE = ("handle", "Handle this item")
+    HANDLE_ALL = ("handle_all", "Handle all remaining items")
 
     # CHD build actions
     TRUST_EXISTING = ("trust_existing", "Trust this existing CHD")
@@ -163,7 +163,7 @@ class PendingInputPayload(BasePayload):
     item: BaseProcessingItem  # The object being processed
     valid_actions: List[Action]  # List of valid user actions
     options_context: Optional[dict] = None  # Additional context for menu options
-    skip_category: Optional[str] = None  # Category name for contextual SKIP labels
+    category: Optional[str] = None  # Category name for contextual HANDLE/SKIP labels
 
 
 @dataclass
@@ -271,7 +271,7 @@ class ResultObject:
         item: BaseProcessingItem,
         valid_actions: List[Action],
         options_context: Optional[dict] = None,
-        skip_category: Optional[str] = None,
+        category: Optional[str] = None,
     ) -> "ResultObject":
         """Create a result requiring user input"""
         return ResultObject(
@@ -282,7 +282,7 @@ class ResultObject:
                 item=item,
                 valid_actions=valid_actions,
                 options_context=options_context,
-                skip_category=skip_category,
+                category=category,
             ),
         )
 
@@ -328,7 +328,7 @@ class ResultObject:
 
         Args:
             message: Message to display when skipping
-            category: Category name for contextual SKIP menu labels (e.g., "MD5 scanning")
+            category: Category name for contextual menu labels (e.g., "MD5 hash")
             metadata: Additional metadata
         """
         return ResultObject(

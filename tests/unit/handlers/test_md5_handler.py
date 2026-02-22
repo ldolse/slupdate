@@ -17,96 +17,72 @@ class TestMD5ScanHandler:
 
         assert handler.name == "md5_scan_handler"
         assert handler.menu is None
+        assert handler.PROCESS_CATEGORY == "MD5 hash"
+        assert handler.HANDLER_STATE_KEY == "md5_enabled"
 
-    def test_action_scan_md5(self):
-        """Test SCAN_MD5 action"""
+    def test_action_handle(self):
+        """Test HANDLE action sets handler state and executes step"""
         handler = MD5ScanHandler()
         mock_process = Mock()
-        mock_process.use_md5 = False
+        mock_process._handler_state = {}
         mock_process._execute_step = Mock(return_value=ResultObject.success())
         mock_process.processed_items = 5
         mock_process.current_item = "test_item"
 
-        result = handler.execute_action(Action.SCAN_MD5, mock_process, {})
+        result = handler.execute_action(Action.HANDLE, mock_process, {})
 
         assert result.is_success()
+        assert mock_process._handler_state["md5_enabled"] is True
         mock_process._execute_step.assert_called_once()
-        # Verify item was advanced on success
-        assert mock_process.current_item is None
-        assert mock_process.processed_items == 6
 
-    def test_action_scan_all_md5(self):
-        """Test SCAN_ALL_MD5 action"""
+    def test_action_handle_all(self):
+        """Test HANDLE_ALL action sets process-level handler state"""
         handler = MD5ScanHandler()
         mock_process = Mock()
+        mock_process._handler_state = {}
         mock_process._execute_step = Mock(return_value=ResultObject.success())
         mock_process.processed_items = 5
         mock_process.current_item = "test_item"
 
-        result = handler.execute_action(Action.SCAN_ALL_MD5, mock_process, {})
+        result = handler.execute_action(Action.HANDLE_ALL, mock_process, {})
 
         assert result.is_success()
+        assert mock_process._handler_state["md5_enabled"] is True
         mock_process._execute_step.assert_called_once()
-        # Verify item was advanced on success
-        assert mock_process.current_item is None
-        assert mock_process.processed_items == 6
 
-    def test_action_skip(self):
-        """Test SKIP action"""
+    def test_action_skip_returns_none(self):
+        """Test SKIP action returns None for default handling"""
         handler = MD5ScanHandler()
         mock_process = Mock()
-        mock_process.current_item = "test_item"
-        mock_process.processed_items = 5
-        mock_process._handle_skip = Mock(
-            return_value=ResultObject.success(
-                message="Skipped MD5 scan for current item"
-            )
-        )
 
         result = handler.execute_action(Action.SKIP, mock_process, {})
 
-        assert result.is_success()
-        mock_process._handle_skip.assert_called_once_with(
-            "Skipped MD5 scan for current item"
-        )
+        assert result is None
 
-    def test_action_skip_all(self):
-        """Test SKIP_ALL action"""
+    def test_action_skip_all_returns_none(self):
+        """Test SKIP_ALL action returns None for default handling"""
         handler = MD5ScanHandler()
         mock_process = Mock()
-        mock_process.current_item = "test_item"
-        mock_process.processed_items = 5
-        mock_process._handle_skip_all = Mock(
-            return_value=ResultObject.success(message="Skip all remaining MD5 scans")
-        )
 
         result = handler.execute_action(Action.SKIP_ALL, mock_process, {})
 
-        assert result.is_success()
-        mock_process._handle_skip_all.assert_called_once_with(
-            "Skip all MD5 scanning", category="MD5 scanning"
-        )
+        assert result is None
 
-    def test_action_stop(self):
-        """Test STOP action"""
+    def test_action_stop_returns_none(self):
+        """Test STOP action returns None for default handling"""
         handler = MD5ScanHandler()
         mock_process = Mock()
-        mock_process.processed_items = 10
-        mock_process._handle_stop = Mock(
-            return_value=ResultObject.complete(total_processed=10, stopped_early=True)
-        )
 
         result = handler.execute_action(Action.STOP, mock_process, {})
 
-        assert result.is_complete()
-        mock_process._handle_stop.assert_called_once()
+        assert result is None
 
-    def test_action_unknown(self):
-        """Test unknown action returns error"""
+    def test_action_unknown_returns_none(self):
+        """Test unknown action returns None (will be handled by default handler)"""
         handler = MD5ScanHandler()
         mock_process = Mock()
 
         result = handler.execute_action(Action.OVERWRITE, mock_process, {})
 
-        assert result.is_error()
-        assert result.payload.error_type == "UnknownAction"
+        # Unknown actions should return None for default handling
+        assert result is None

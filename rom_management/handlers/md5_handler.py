@@ -19,10 +19,11 @@ if TYPE_CHECKING:
 class MD5ScanHandler(SpecialHandler):
     """
     Handles MD5 scan requirements during archive validation.
-    Provides options to scan current item, scan all, skip, or stop.
+    Provides options to handle current item, handle all, skip, or stop.
     """
 
-    SKIP_CATEGORY = "MD5 scanning"
+    PROCESS_CATEGORY = "MD5 hash"
+    HANDLER_STATE_KEY = "md5_enabled"
 
     def __init__(self):
         super().__init__("md5_scan_handler")
@@ -36,44 +37,24 @@ class MD5ScanHandler(SpecialHandler):
         """
         Execute an action for this handler.
 
-        This is used by interactive handlers that respond to user actions
-        (e.g., MD5ScanHandler, CHDExistenceHandler).
-
         Args:
             action: The Action enum representing user's choice
             process: The BaseProcess instance
             params: Optional parameters for the action
 
         Returns:
-            ResultObject with SUCCESS or ERROR status
+            ResultObject with SUCCESS or ERROR status, or None to use default handling
         """
-        if action == Action.SCAN_MD5:
-            # Set process-level MD5 flag for current item only
-            process.use_md5 = True
+        if action == Action.HANDLE:
+            process._handler_state[self.HANDLER_STATE_KEY] = True
             return self._execute_step_with_timeout(process)
 
-        elif action == Action.SCAN_ALL_MD5:
-            # Set process-level MD5 flag for all remaining items
-            process.use_md5 = True
+        elif action == Action.HANDLE_ALL:
+            process._handler_state[self.HANDLER_STATE_KEY] = True
             return self._execute_step_with_timeout(process)
 
-        elif action == Action.SKIP:
-            return process._handle_skip("Skipped MD5 scan for current item")
-
-        elif action == Action.SKIP_ALL:
-            # Store category at PROCESS level, not item
-            process._skipped_categories.add(self.SKIP_CATEGORY)
-            return process._handle_skip_all(
-                f"Skip all {self.SKIP_CATEGORY}", category=self.SKIP_CATEGORY
-            )
-
-        elif action == Action.STOP:
-            return process._handle_stop()
-
-        return ResultObject.error(
-            error_type="UnknownAction",
-            message=f"Unknown action for MD5ScanHandler: {action.value}",
-        )
+        # SKIP, SKIP_ALL, STOP - return None to use BaseProcess default handling
+        return None
 
     def execute(
         self, media: "CDMedia", file_data: Any = None, process: Any = None
@@ -102,16 +83,16 @@ class MD5ScanHandler(SpecialHandler):
         # Return pending_input to prompt user
         return ResultObject.pending_input(
             query_id="generic_query",
-            message=f"MD5 scan required for {media.dat_game_entry.name}",
+            message=f"MD5 hash required for {media.dat_game_entry.name}",
             item=item,
             valid_actions=[
-                Action.SCAN_MD5,
-                Action.SCAN_ALL_MD5,
+                Action.HANDLE,
+                Action.HANDLE_ALL,
                 Action.SKIP,
                 Action.SKIP_ALL,
                 Action.STOP,
             ],
-            skip_category=self.SKIP_CATEGORY,
+            category=self.PROCESS_CATEGORY,
         )
 
     def _execute_step_with_timeout(self, process: "BaseProcess") -> "ResultObject":
@@ -166,6 +147,14 @@ class MD5ScanHandler(SpecialHandler):
                 return ResultObject.not_applicable(
                     message="MD5 handler only for ArchiveValidationProcess"
                 )
+
+            # Check if category already skipped
+            if self.PROCESS_CATEGORY in process._skipped_categories:
+                return ResultObject.not_applicable(message="MD5 hash already skipped")
+
+            # Check if already enabled at process level (HANDLE_ALL was selected)
+            if process._handler_state.get(self.HANDLER_STATE_KEY):
+                return ResultObject.not_applicable(message="MD5 hash already enabled")
 
         if not media.dat_game_entry:
             return ResultObject.not_applicable(message="No DAT entry")

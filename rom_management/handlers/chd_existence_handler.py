@@ -9,14 +9,13 @@ if TYPE_CHECKING:
     from media_registry import CDMedia
 
 
-
 class CHDExistenceHandler(SpecialHandler):
     """
     Handles scenarios where a CHD already exists during CHD build process.
     Provides options to overwrite, skip, or set preferences.
-
-    This handler follows the MD5ScanHandler pattern for user interaction.
     """
+
+    PROCESS_CATEGORY = "existing CHD"
 
     def __init__(self):
         super().__init__("chd_existence")
@@ -29,7 +28,7 @@ class CHDExistenceHandler(SpecialHandler):
         CHDExistenceHandler only applies during CHD build process
 
         Returns:
-            - ResultObject.not_applicable() for non-CHDBuildProcess
+            - ResultObject.not_applicable() for non-CHDBuildProcess or if already handled
             - ResultObject.success() for CHDBuildProcess
         """
         from rom_management.processing.models import ResultObject
@@ -42,6 +41,19 @@ class CHDExistenceHandler(SpecialHandler):
                 return ResultObject.not_applicable(
                     message="CHD existence handler is for CHD build process only"
                 )
+
+            # Check if category already skipped
+            if self.PROCESS_CATEGORY in process._skipped_categories:
+                return ResultObject.not_applicable(
+                    message="Existing CHDs already skipped"
+                )
+
+            # Check platform preferences
+            pref = getattr(process.platform, "chd_preference", None)
+            if pref == "overwrite":
+                return ResultObject.not_applicable(message="Overwrite preference set")
+            elif pref == "skip":
+                return ResultObject.not_applicable(message="Trust preference set")
 
         return ResultObject.success()
 
@@ -83,7 +95,7 @@ class CHDExistenceHandler(SpecialHandler):
 
         elif action == Action.SKIP_ALL:
             return process._handle_skip_all(
-                "Skip all remaining existing CHDs", category="existing CHDs"
+                f"Skip all {self.PROCESS_CATEGORY}", category=self.PROCESS_CATEGORY
             )
 
         elif action == Action.STOP:

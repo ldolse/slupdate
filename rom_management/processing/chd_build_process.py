@@ -152,6 +152,7 @@ class ChdBuildProcess(BaseProcess):
                     Action.SKIP_ALL,
                     Action.STOP,
                 ],
+                category="existing CHD",
                 options_context={
                     "existing_version": existing_version,
                     "chd_path": expected_chd_path,
@@ -203,7 +204,7 @@ class ChdBuildProcess(BaseProcess):
 
             # Get and apply handlers (only handlers that pass validate_preconditions)
             handlers, skip_result = self.platform.get_relevant_handlers(
-                media, self._file_data
+                media, self._file_data, process=self
             )
 
             if skip_result:

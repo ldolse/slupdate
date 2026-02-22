@@ -55,6 +55,10 @@ class ProcessRunner:
             if result.is_success() or result.is_progress():
                 continue
 
+            # Store category from pending_input for use in default action handling
+            if result.requires_input() and hasattr(result.payload, "category"):
+                self._active_process._current_category = result.payload.category
+
             return result
 
     def handle_user_action(
