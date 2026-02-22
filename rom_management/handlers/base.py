@@ -14,7 +14,7 @@ class SpecialHandler(ABC):
         self.menu = menu  # Associated menu for user interaction
 
     def validate_preconditions(
-        self, media: CDMedia, file_data: OpticalMediaProcessor
+        self, media: CDMedia, file_data: OpticalMediaProcessor = None
     ) -> "ResultObject":
         """Check if this handler should be applied.
 
@@ -23,6 +23,8 @@ class SpecialHandler(ABC):
             - ResultObject.not_applicable(): Don't include handler (not relevant for this media)
             - ResultObject.skip(): Skip this item entirely (handler relevant but can't process)
         """
+        from rom_management.processing.models import ResultObject
+
         return ResultObject.success()
 
     def _execute_step_and_advance(self, process: "BaseProcess") -> "ResultObject":
@@ -70,7 +72,7 @@ class SpecialHandler(ABC):
         )
 
     def execute(
-        self, media: CDMedia, file_data: OpticalMediaProcessor
+        self, media: CDMedia, file_data: OpticalMediaProcessor = None
     ) -> "ResultObject":
         """
         Execute automated handler logic.

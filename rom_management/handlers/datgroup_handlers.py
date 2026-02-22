@@ -15,7 +15,7 @@ class RedumpHandler(SpecialHandler):
     def validate_preconditions(
         self, media: CDMedia, file_data: file_data
     ) -> ResultObject:
-        return ResultObject.success()
+        return ResultObject.not_applicable()
 
 
 class NoIntroHandler(SpecialHandler):
@@ -29,4 +29,4 @@ class NoIntroHandler(SpecialHandler):
     def validate_preconditions(
         self, media: CDMedia, file_data: file_data
     ) -> ResultObject:
-        return ResultObject.success()
+        return ResultObject.not_applicable()

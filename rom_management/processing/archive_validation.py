@@ -11,7 +11,6 @@ from .models import (
 )
 from rom_management.archive.zip_processor import (
     ZipProcessor,
-    MD5ScanRequiredException,
     TimeoutError,
 )
 
@@ -31,7 +30,6 @@ class ArchiveValidationProcess(BaseProcess):
         self.zip_processor = ZipProcessor()
         self._md5_handler = None
         self.use_md5 = False
-        self.skip_all = False
 
     @property
     def progress(self) -> dict:
@@ -121,6 +119,47 @@ class ArchiveValidationProcess(BaseProcess):
                 metadata={"rom_dir": rom_dir},
             )
 
+        handlers, skip_result = self.platform.get_relevant_handlers(media, None)
+        logger.debug(f"Handler check: handlers={handlers}, skip_result={skip_result}")
+
+        # Skip handler check if already in handler execution (prevents infinite loop)
+        if self._skip_handler_check:
+            logger.debug(f"Skipping handler check - handler is executing step")
+            handlers = []
+            skip_result = None
+        else:
+            # Also check special handlers (like MD5ScanHandler) - these don't need file_data
+            from rom_management.handlers import registry
+
+            special_handlers = registry.get_special_handlers()
+            logger.debug(f"Special handlers: {[h.name for h in special_handlers]}")
+
+            for handler in special_handlers:
+                result = handler.validate_preconditions(media, None)
+                logger.debug(f"Special handler {handler.name}: result={result.status}")
+                if result.is_success():
+                    handlers.append(handler)
+                    logger.debug(f"Added special handler: {handler.name}")
+                elif result.is_skip():
+                    return result
+                elif result.requires_input():
+                    return result
+
+        if skip_result:
+            logger.debug(
+                f"Skip result: is_skip={skip_result.is_skip()}, requires_input={skip_result.requires_input()}"
+            )
+            if skip_result.is_skip():
+                return skip_result
+            elif skip_result.requires_input():
+                return skip_result
+
+        for handler in handlers:
+            logger.debug(f"Running handler: {handler.name}")
+            result = handler.execute(media, None)
+            logger.debug(f"Handler result: status={result.status}")
+            return result
+
         try:
             zip_path = self.zip_processor.find_valid_zip(
                 media.dat_game_entry, rom_dir, md5=self.use_md5
@@ -130,29 +169,6 @@ class ArchiveValidationProcess(BaseProcess):
                 f"Timeout reading ZIP, skipping: {media.dat_game_entry.name}"
             )
             return self._handle_skip("Skipped due to timeout")
-        except MD5ScanRequiredException:
-            if self.skip_all:
-                logger.info(
-                    f"Skipping MD5 scan (skip_all): {media.dat_game_entry.name}"
-                )
-                return ResultObject.success(
-                    message=f"Skipped MD5 scan (skip_all)",
-                    metadata={"media_id": media.id},
-                )
-
-            return ResultObject.pending_input(
-                query_id="generic_query",
-                message=f"{media.dat_game_entry.name} requires full MD5 scan (slow)",
-                item=PartProcessingItem(current_part),
-                valid_actions=[
-                    Action.SCAN_MD5,
-                    Action.SKIP,
-                    Action.SKIP_ALL,
-                    Action.SCAN_ALL_MD5,
-                    Action.STOP,
-                ],
-                options_context={"existing_use_md5": self.use_md5},
-            )
         except Exception as e:
             logger.error(f"Error validating {media.dat_game_entry.name}: {e}")
             return ResultObject.error(

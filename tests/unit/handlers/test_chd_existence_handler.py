@@ -65,7 +65,7 @@ class TestCHDExistenceHandler:
         with patch.object(handler, "_execute_step_and_advance") as mock_execute_step:
             mock_execute_step.return_value = ResultObject.success()
 
-            result = handler.execute_action(Action.OVERWRITE, mock_process)
+            result = handler.execute_action(Action.OVERWRITE, mock_process, {})
 
             assert result.is_success()
             mock_execute_step.assert_called_once()
@@ -84,7 +84,7 @@ class TestCHDExistenceHandler:
         with patch.object(handler, "_execute_step_and_advance") as mock_execute_step:
             mock_execute_step.return_value = ResultObject.success()
 
-            result = handler.execute_action(Action.OVERWRITE, mock_process)
+            result = handler.execute_action(Action.OVERWRITE, mock_process, {})
 
             assert result.is_success()
             mock_remove.assert_called_once_with(chd_path)
@@ -100,7 +100,7 @@ class TestCHDExistenceHandler:
         mock_exists.return_value = True
         mock_remove.side_effect = OSError("Permission denied")
 
-        result = handler.execute_action(Action.OVERWRITE, mock_process)
+        result = handler.execute_action(Action.OVERWRITE, mock_process, {})
 
         assert result.is_error()
         assert result.payload.error_type == "FileRemovalError"
@@ -114,7 +114,7 @@ class TestCHDExistenceHandler:
         with patch.object(handler, "_execute_step_and_advance") as mock_execute_step:
             mock_execute_step.return_value = ResultObject.success()
             with patch("os.path.exists", return_value=False):
-                result = handler.execute_action(Action.OVERWRITE, mock_process)
+                result = handler.execute_action(Action.OVERWRITE, mock_process, {})
 
                 assert result.is_success()
                 # Should still call execute_step even if file doesn't exist
@@ -124,7 +124,7 @@ class TestCHDExistenceHandler:
         """Test OVERWRITE action when current_item is not MediaProcessingItem"""
         mock_process.current_item = Mock()  # Not MediaProcessingItem
 
-        result = handler.execute_action(Action.OVERWRITE, mock_process)
+        result = handler.execute_action(Action.OVERWRITE, mock_process, {})
 
         assert result.is_error()
         assert result.payload.error_type == "InvalidState"
@@ -135,7 +135,7 @@ class TestCHDExistenceHandler:
         mock_process.current_item = MediaProcessingItem(mock_media)
         mock_process.processed_items = 5
 
-        result = handler.execute_action(Action.SKIP, mock_process)
+        result = handler.execute_action(Action.SKIP, mock_process, {})
 
         assert result.is_success()
         mock_process._handle_skip.assert_called_once_with("Skipped existing CHD")
@@ -145,6 +145,18 @@ class TestCHDExistenceHandler:
         assert (
             mock_process.processed_items == 5
         )  # Not incremented directly, handled by _handle_skip
+
+    def test_action_skip_all(self, handler, mock_process, mock_media):
+        """Test SKIP_ALL action passes category to process._handle_skip_all"""
+        mock_process.current_item = MediaProcessingItem(mock_media)
+        mock_process.processed_items = 5
+
+        result = handler.execute_action(Action.SKIP_ALL, mock_process, {})
+
+        assert result.is_success()
+        mock_process._handle_skip_all.assert_called_once_with(
+            "Skip all remaining existing CHDs", category="existing CHDs"
+        )
 
     def test_action_set_overwrite_preference(self, handler, mock_process, mock_media):
         """Test SET_OVERWRITE_PREFERENCE action"""
@@ -156,7 +168,7 @@ class TestCHDExistenceHandler:
             mock_execute_step.return_value = ResultObject.success()
 
             result = handler.execute_action(
-                Action.SET_OVERWRITE_PREFERENCE, mock_process
+                Action.SET_OVERWRITE_PREFERENCE, mock_process, {}
             )
 
             assert result.is_success()
@@ -172,7 +184,7 @@ class TestCHDExistenceHandler:
         mock_process.processed_items = 5
         mock_process.platform.set_chd_preference = Mock()
 
-        result = handler.execute_action(Action.SET_TRUST_PREFERENCE, mock_process)
+        result = handler.execute_action(Action.SET_TRUST_PREFERENCE, mock_process, {})
 
         assert result.is_success()
         assert "Set trust preference" in result.payload.message
@@ -185,14 +197,14 @@ class TestCHDExistenceHandler:
         # Setup
         mock_process.processed_items = 10
 
-        result = handler.execute_action(Action.STOP, mock_process)
+        result = handler.execute_action(Action.STOP, mock_process, {})
 
         assert result.is_complete()
         mock_process._handle_stop.assert_called_once()
 
     def test_action_unknown(self, handler, mock_process):
         """Test unknown action returns error"""
-        result = handler.execute_action(Action.SCAN_MD5, mock_process)
+        result = handler.execute_action(Action.SCAN_MD5, mock_process, {})
 
         assert result.is_error()
         assert result.payload.error_type == "UnknownAction"
@@ -280,17 +292,17 @@ class TestCHDExistenceHandler:
         mock_process.current_item = MediaProcessingItem(mock_media)
         with patch.object(handler, "_execute_step_and_advance") as mock_execute_step:
             with patch("os.remove"):
-                result = handler.execute_action(Action.OVERWRITE, mock_process)
+                result = handler.execute_action(Action.OVERWRITE, mock_process, {})
                 assert result.is_success()
 
         # Test SKIP - verify _handle_skip is called
         mock_process.current_item = MediaProcessingItem(mock_media)
-        result = handler.execute_action(Action.SKIP, mock_process)
+        result = handler.execute_action(Action.SKIP, mock_process, {})
         assert result.is_success()
         mock_process._handle_skip.assert_called_once_with("Skipped existing CHD")
 
         # Test STOP
-        result = handler.execute_action(Action.STOP, mock_process)
+        result = handler.execute_action(Action.STOP, mock_process, {})
         assert result.is_complete()
 
     def test_handler_extends_special_handler(self, handler):
@@ -315,7 +327,7 @@ class TestCHDExistenceHandler:
             mock_process = Mock()
             mock_process.processed_items = 0  # Initialize as int
             with patch.object(handler, "_execute_step_and_advance"):
-                result = handler.execute_action(action, mock_process)
+                result = handler.execute_action(action, mock_process, {})
                 # Should not raise UnknownAction error
                 if result.is_error():
                     assert result.payload.error_type != "UnknownAction"

@@ -17,7 +17,7 @@ class MdFHandler(SpecialHandler):
         super().__init__("MDF")
 
     def validate_preconditions(
-        self, media: CDMedia, file_data: OpticalMediaProcessor
+        self, media: CDMedia, file_data: OpticalMediaProcessor = None
     ) -> "ResultObject":
         """Check if this handler should be applied"""
         from rom_management.processing.models import ResultObject

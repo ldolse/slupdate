@@ -81,6 +81,28 @@ class HandlerRegistry:
 
         return handlers, skip_result
 
+    def get_all_handlers(self) -> List["SpecialHandler"]:
+        """Get all registered handlers (platform, format, dat_group, and special)"""
+        all_handlers = []
+
+        # Add all platform handlers
+        for handler_class in self.handlers["platform"].values():
+            all_handlers.append(handler_class())
+
+        # Add all format handlers
+        for handler_class in self.handlers["format"].values():
+            all_handlers.append(handler_class())
+
+        # Add all DAT group handlers
+        for handler_class in self.handlers["dat_group"].values():
+            all_handlers.append(handler_class())
+
+        # Add all special handlers
+        for handler_class in self.handlers.get("special_handlers", {}).values():
+            all_handlers.append(handler_class())
+
+        return all_handlers
+
     def register_platform_handler(
         self, platform_key: str, handler_class: Type[SpecialHandler]
     ):
@@ -98,17 +120,14 @@ class HandlerRegistry:
 
     def register_special_handler(self, name: str, handler_class: Type[SpecialHandler]):
         """Register a special case handler"""
-        # Special handlers are stored separately and checked in ProcessManager
-        if not hasattr(self, "special_handlers"):
-            self.special_handlers = {}
-        self.special_handlers[name] = handler_class
+        if "special_handlers" not in self.handlers:
+            self.handlers["special_handlers"] = {}
+        self.handlers["special_handlers"][name] = handler_class
 
     def get_special_handlers(self) -> List[SpecialHandler]:
         """Get all registered special handlers"""
-        if not hasattr(self, "special_handlers"):
-            return []
-
         handlers = []
-        for handler_class in self.special_handlers.values():
+        special_dict = self.handlers.get("special_handlers", {})
+        for handler_class in special_dict.values():
             handlers.append(handler_class())
         return handlers

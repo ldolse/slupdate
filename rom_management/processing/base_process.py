@@ -7,6 +7,7 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from consoles import Platform
+    from rom_management.handlers.base import SpecialHandler
 
 
 class BaseProcess(ABC):
@@ -30,6 +31,9 @@ class BaseProcess(ABC):
         )  # Track skipped categories for contextual SKIP_ALL
         self._items_iterator = None
         self._timeout_seconds = 30
+        self._skip_handler_check = (
+            False  # Flag to skip handler check when handler is executing step
+        )
 
     @abstractmethod
     def initialize(self):
@@ -139,7 +143,7 @@ class BaseProcess(ABC):
         else:
             return self._handle_default_action(action)
 
-    def _get_handler_for_action(self, action: "Action"):
+    def _get_handler_for_action(self, action: "Action") -> "Optional[SpecialHandler]":
         """Find handler for given action type"""
         return None
 

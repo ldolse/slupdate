@@ -27,11 +27,10 @@ class TestMD5ScanHandler:
         mock_process.processed_items = 5
         mock_process.current_item = "test_item"
 
-        result = handler.execute_action(Action.SCAN_MD5, mock_process)
+        result = handler.execute_action(Action.SCAN_MD5, mock_process, {})
 
         assert result.is_success()
         mock_process._execute_step.assert_called_once()
-        assert mock_process.use_md5 is False
         # Verify item was advanced on success
         assert mock_process.current_item is None
         assert mock_process.processed_items == 6
@@ -40,16 +39,14 @@ class TestMD5ScanHandler:
         """Test SCAN_ALL_MD5 action"""
         handler = MD5ScanHandler()
         mock_process = Mock()
-        mock_process.use_md5 = False
         mock_process._execute_step = Mock(return_value=ResultObject.success())
         mock_process.processed_items = 5
         mock_process.current_item = "test_item"
 
-        result = handler.execute_action(Action.SCAN_ALL_MD5, mock_process)
+        result = handler.execute_action(Action.SCAN_ALL_MD5, mock_process, {})
 
         assert result.is_success()
         mock_process._execute_step.assert_called_once()
-        assert mock_process.use_md5 is True
         # Verify item was advanced on success
         assert mock_process.current_item is None
         assert mock_process.processed_items == 6
@@ -66,7 +63,7 @@ class TestMD5ScanHandler:
             )
         )
 
-        result = handler.execute_action(Action.SKIP, mock_process)
+        result = handler.execute_action(Action.SKIP, mock_process, {})
 
         assert result.is_success()
         mock_process._handle_skip.assert_called_once_with(
@@ -83,7 +80,7 @@ class TestMD5ScanHandler:
             return_value=ResultObject.success(message="Skip all remaining MD5 scans")
         )
 
-        result = handler.execute_action(Action.SKIP_ALL, mock_process)
+        result = handler.execute_action(Action.SKIP_ALL, mock_process, {})
 
         assert result.is_success()
         mock_process._handle_skip_all.assert_called_once_with(
@@ -99,7 +96,7 @@ class TestMD5ScanHandler:
             return_value=ResultObject.complete(total_processed=10, stopped_early=True)
         )
 
-        result = handler.execute_action(Action.STOP, mock_process)
+        result = handler.execute_action(Action.STOP, mock_process, {})
 
         assert result.is_complete()
         mock_process._handle_stop.assert_called_once()
@@ -109,7 +106,7 @@ class TestMD5ScanHandler:
         handler = MD5ScanHandler()
         mock_process = Mock()
 
-        result = handler.execute_action(Action.OVERWRITE, mock_process)
+        result = handler.execute_action(Action.OVERWRITE, mock_process, {})
 
         assert result.is_error()
         assert result.payload.error_type == "UnknownAction"

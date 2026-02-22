@@ -6,7 +6,7 @@ from rom_management.archive.zip_processor import (
     calculate_timeout,
     with_timeout,
 )
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional, Dict, Any
 import logging
 import os
 
@@ -31,30 +31,43 @@ class MD5ScanHandler(SpecialHandler):
         self,
         action: "Action",
         process: "BaseProcess",
+        params: Optional[Dict[str, Any]] = None,
     ) -> "ResultObject":
         """
-        Execute MD5 scanning actions
+        Execute an action for this handler.
+
+        This is used by interactive handlers that respond to user actions
+        (e.g., MD5ScanHandler, CHDExistenceHandler).
 
         Args:
             action: The Action enum representing user's choice
             process: The BaseProcess instance
-            params: Optional parameters for action
+            params: Optional parameters for the action
 
         Returns:
-            ResultObject from executing the action
+            ResultObject with SUCCESS or ERROR status
         """
         if action == Action.SCAN_MD5:
             original_use_md5 = process.use_md5
             process.use_md5 = True
+            # Set flag to skip handler check in _execute_step (prevents infinite loop)
+            original_skip_check = getattr(process, "_skip_handler_check", False)
+            process._skip_handler_check = True
 
             try:
                 return self._execute_step_with_timeout(process)
             finally:
                 process.use_md5 = original_use_md5
+                process._skip_handler_check = original_skip_check
 
         elif action == Action.SCAN_ALL_MD5:
             process.use_md5 = True
-            return self._execute_step_with_timeout(process)
+            original_skip_check = getattr(process, "_skip_handler_check", False)
+            process._skip_handler_check = True
+            try:
+                return self._execute_step_with_timeout(process)
+            finally:
+                process._skip_handler_check = original_skip_check
 
         elif action == Action.SKIP:
             return process._handle_skip("Skipped MD5 scan for current item")
@@ -70,6 +83,42 @@ class MD5ScanHandler(SpecialHandler):
         return ResultObject.error(
             error_type="UnknownAction",
             message=f"Unknown action for MD5ScanHandler: {action.value}",
+        )
+
+    def execute(self, media: "CDMedia", file_data: Any = None) -> "ResultObject":
+        """Execute MD5 handler - returns pending_input to prompt user for action.
+
+        This is called during automated processing when validate_preconditions
+        returned success (MD5 scanning might be needed).
+        """
+        from rom_management.processing.models import (
+            Action,
+            ResultObject,
+            PartProcessingItem,
+        )
+        from softwarelist import Part
+
+        # Get the Part from media
+        part = getattr(media, "softlist_part", None)
+        if not part:
+            from softwarelist import Part
+
+            # Try to get from parent relationship
+            part = getattr(media, "part", None)
+
+        item = PartProcessingItem(part) if part else None
+
+        return ResultObject.pending_input(
+            query_id="generic_query",
+            message=f"MD5 scan required for {media.dat_game_entry.name}",
+            item=item,
+            valid_actions=[
+                Action.SCAN_MD5,
+                Action.SCAN_ALL_MD5,
+                Action.SKIP,
+                Action.SKIP_ALL,
+                Action.STOP,
+            ],
         )
 
     def _execute_step_with_timeout(self, process: "BaseProcess") -> "ResultObject":
@@ -103,23 +152,50 @@ class MD5ScanHandler(SpecialHandler):
             logger.warning(f"MD5 scan timeout, skipping: {media_name}")
             return process._handle_skip("MD5 scan timed out")
 
-    def validate_preconditions(self, media: CDMedia, file_data=None) -> "ResultObject":
+    def validate_preconditions(
+        self, media: CDMedia, file_data: Any = None
+    ) -> "ResultObject":
         """Check if this handler should be applied.
 
         Returns:
             - ResultObject.success() if MD5 scanning might be needed (include handler)
             - ResultObject.not_applicable() if no MD5 scanning needed (don't include handler)
         """
-        if not media.dat_game_entry or not media.dat_game_entry.dat:
+        from rom_management.processing.models import ResultObject
+
+        if not media.dat_game_entry:
             return ResultObject.not_applicable(message="No DAT entry")
 
-        dat = media.dat_game_entry.dat
-        needs_md5_scan = any(
-            hasattr(rom, "md5") and rom.md5 and not (hasattr(rom, "crc") and rom.crc)
-            for rom in dat.roms
-        )
+        dat_entry = media.dat_game_entry
+        logger.debug(f"MD5 validate: checking {dat_entry.name}")
+
+        try:
+            roms = dat_entry.roms
+        except (AttributeError, TypeError) as e:
+            logger.debug(f"MD5 validate: Exception accessing roms: {e}")
+            return ResultObject.not_applicable(message="No ROMs available")
+
+        try:
+            for rom in roms:
+                has_md5 = hasattr(rom, "md5") and rom.md5
+                has_crc = hasattr(rom, "crc") and rom.crc
+                logger.debug(
+                    f"MD5 validate: ROM {getattr(rom, 'name', 'unknown')}: md5={bool(has_md5)}, crc={bool(has_crc)}"
+                )
+
+            needs_md5_scan = any(
+                hasattr(rom, "md5")
+                and rom.md5
+                and not (hasattr(rom, "crc") and rom.crc)
+                for rom in roms
+            )
+        except (TypeError, AttributeError) as e:
+            logger.debug(f"MD5 validate: Exception in logic: {e}")
+            return ResultObject.not_applicable(message="Cannot iterate ROMs")
 
         if needs_md5_scan:
+            logger.debug(f"MD5 validate: MD5 scanning IS needed")
             return ResultObject.success()
 
+        logger.debug(f"MD5 validate: No MD5 scanning needed")
         return ResultObject.not_applicable(message="No MD5 scanning needed")
