@@ -46,10 +46,13 @@ class MD5ScanHandler(SpecialHandler):
             ResultObject with SUCCESS or ERROR status, or None to use default handling
         """
         if action == Action.HANDLE:
-            process._handler_state[self.HANDLER_STATE_KEY] = True
+            # Set MD5 enabled for THIS ITEM only
+            if process.current_item and hasattr(process.current_item, "_handler_state"):
+                process.current_item._handler_state[self.HANDLER_STATE_KEY] = True
             return self._execute_step_with_timeout(process)
 
         elif action == Action.HANDLE_ALL:
+            # Set MD5 enabled for ALL remaining items at process level
             process._handler_state[self.HANDLER_STATE_KEY] = True
             return self._execute_step_with_timeout(process)
 
@@ -132,8 +135,9 @@ class MD5ScanHandler(SpecialHandler):
         """Check if this handler should be applied.
 
         Returns:
-            - ResultObject.success() if MD5 scanning might be needed (include handler)
-            - ResultObject.not_applicable() if no MD5 scanning needed (don't include handler)
+            - ResultObject.success() if MD5 scanning is needed (include handler)
+            - ResultObject.not_applicable() if no MD5 scanning needed or already enabled
+            - ResultObject.skip() if category was skipped via SKIP_ALL
         """
         from rom_management.processing.models import ResultObject
 
@@ -147,10 +151,6 @@ class MD5ScanHandler(SpecialHandler):
                 return ResultObject.not_applicable(
                     message="MD5 handler only for ArchiveValidationProcess"
                 )
-
-            # Check if category already skipped
-            if self.PROCESS_CATEGORY in process._skipped_categories:
-                return ResultObject.not_applicable(message="MD5 hash already skipped")
 
             # Check if already enabled at process level (HANDLE_ALL was selected)
             if process._handler_state.get(self.HANDLER_STATE_KEY):
@@ -187,6 +187,9 @@ class MD5ScanHandler(SpecialHandler):
             return ResultObject.not_applicable(message="Cannot iterate ROMs")
 
         if needs_md5_scan:
+            # Check if category already skipped (SKIP_ALL was selected)
+            if self.PROCESS_CATEGORY in process._skipped_categories:
+                return ResultObject.skip(message="MD5 hash already skipped")
             logger.debug(f"MD5 validate: MD5 scanning IS needed")
             return ResultObject.success()
 

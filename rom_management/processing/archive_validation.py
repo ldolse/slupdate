@@ -115,23 +115,21 @@ class ArchiveValidationProcess(BaseProcess):
         handlers, skip_result = self.platform.get_relevant_handlers(media, None, self)
         logger.debug(f"Handler check: handlers={handlers}, skip_result={skip_result}")
 
-        if skip_result:
-            logger.debug(
-                f"Skip result: is_skip={skip_result.is_skip()}, requires_input={skip_result.requires_input()}"
-            )
-            if skip_result.is_skip():
-                return skip_result
-            elif skip_result.requires_input():
-                return skip_result
+        # Use centralized handler skip handling (advances item properly)
+        skip_handled = self._handle_handler_skip_result(skip_result)
+        if skip_handled:
+            return skip_handled
 
         # Run handlers using the base process method (handles auto-skip for completed handlers)
         handler_result = self._run_handlers(handlers, media, None)
         if handler_result.requires_input():
             return handler_result
 
-        # Check process-level MD5 flag (set by MD5ScanHandler HANDLE_ALL action)
-        use_md5 = self._handler_state.get("md5_enabled", False)
-        logger.debug(f"MD5 required from process level: {use_md5}")
+        # Check MD5 flag: item-level (HANDLE) or process-level (HANDLE_ALL)
+        use_md5 = self.current_item._handler_state.get(
+            "md5_enabled", False
+        ) or self._handler_state.get("md5_enabled", False)
+        logger.debug(f"MD5 required: {use_md5}")
 
         try:
             zip_path = self.zip_processor.find_valid_zip(

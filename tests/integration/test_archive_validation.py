@@ -371,45 +371,68 @@ class TestArchiveValidationProcess:
             assert "No valid zip found" in result.payload.message
 
     def test_handle_user_action_scan_md5(self, mock_platform, create_mock_media):
-        """Test handle_user_action() with HANDLE action"""
+        """Test handle_user_action() with HANDLE action sets item-level state"""
+        from rom_management.processing.models import PartProcessingItem
+
         process = ArchiveValidationProcess(mock_platform)
         process.register_handlers()  # Initialize handler
 
-        # Create mock media
+        # Create mock media and wrap in PartProcessingItem
         media = create_mock_media("media1", "Test Game")
-        mock_platform.all_parts = [media.softlist_part]
+        item = PartProcessingItem(media.softlist_part)
+        process.current_item = item
 
-        # Mock _execute_step to return success
-        with patch.object(process, "_execute_step") as mock_step:
-            mock_step.return_value = ResultObject.success()
+        # Mock _execute_step_with_timeout to return success
+        with patch.object(
+            process._md5_handler, "_execute_step_with_timeout"
+        ) as mock_exec:
+            mock_exec.return_value = ResultObject.success()
 
             # Handle HANDLE action
             result = process.handle_user_action(Action.HANDLE, {})
 
             assert result.is_success()
-            mock_step.assert_called_once()
-            # Verify handler state was set
-            assert process._handler_state.get("md5_enabled") is True
+            # Verify item-level handler state was set (not process-level)
+            assert item._handler_state.get("md5_enabled") is True
+            assert process._handler_state.get("md5_enabled") is None
 
     def test_handle_user_action_scan_all_md5(self, mock_platform, create_mock_media):
-        """Test handle_user_action() with HANDLE_ALL action"""
+        """Test handle_user_action() with HANDLE_ALL action sets process-level state"""
+        from rom_management.processing.models import PartProcessingItem
+
         process = ArchiveValidationProcess(mock_platform)
         process.register_handlers()  # Initialize handler
 
-        # Create mock media
+        # Create mock media and wrap in PartProcessingItem
         media = create_mock_media("media1", "Test Game")
-        mock_platform.all_parts = [media.softlist_part]
+        item = PartProcessingItem(media.softlist_part)
+        process.current_item = item
 
-        # Mock _execute_step to return success
-        with patch.object(process, "_execute_step") as mock_step:
-            mock_step.return_value = ResultObject.success()
+        # Mock _execute_step_with_timeout to return success
+        with patch.object(
+            process._md5_handler, "_execute_step_with_timeout"
+        ) as mock_exec:
+            mock_exec.return_value = ResultObject.success()
 
             # Handle HANDLE_ALL action
             result = process.handle_user_action(Action.HANDLE_ALL, {})
 
-            # Verify _execute_step was called
             assert result.is_success()
-            mock_step.assert_called_once()
+            # Verify process-level handler state was set
+            assert process._handler_state.get("md5_enabled") is True
+
+        # Mock _execute_step_with_timeout to return success
+        with patch.object(
+            process._md5_handler, "_execute_step_with_timeout"
+        ) as mock_exec:
+            mock_exec.return_value = ResultObject.success()
+
+            # Handle HANDLE_ALL action
+            result = process.handle_user_action(Action.HANDLE_ALL, {})
+
+            # Verify _execute_step_with_timeout was called
+            assert result.is_success()
+            mock_exec.assert_called_once()
             assert process._handler_state.get("md5_enabled") is True
 
     def test_handle_user_action_skip(self, mock_platform, create_mock_media):

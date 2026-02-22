@@ -425,8 +425,8 @@ class MenuSystem:
         while not result.is_complete():
             if result.is_skip():
                 # Item was skipped, display message and continue automatically
-                if result.message:
-                    print(f"⚠️  {result.message}")
+                if result.payload and hasattr(result.payload, "message") and result.payload.message:
+                    print(f"⚠️  {result.payload.message}")
                 result = self.runner.execute_next_step()
                 continue
 

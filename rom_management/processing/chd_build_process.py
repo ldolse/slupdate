@@ -207,13 +207,10 @@ class ChdBuildProcess(BaseProcess):
                 media, self._file_data, process=self
             )
 
-            if skip_result:
-                if skip_result.is_skip():
-                    # Handler says to skip this item
-                    return skip_result
-                elif skip_result.requires_input():
-                    # Handler needs user input (e.g., MD5 scanning required)
-                    return skip_result
+            # Use centralized handler skip handling (advances item properly)
+            skip_handled = self._handle_handler_skip_result(skip_result)
+            if skip_handled:
+                return skip_handled
 
             for handler in handlers:
                 result = handler.execute(media, self._file_data)

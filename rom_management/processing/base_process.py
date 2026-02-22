@@ -84,6 +84,29 @@ class BaseProcess(ABC):
             self._skipped_categories.add(category)
         return self._handle_skip(message)
 
+    def _handle_handler_skip_result(
+        self, skip_result: Optional[ResultObject]
+    ) -> Optional[ResultObject]:
+        """Handle skip result from handler validate_preconditions.
+
+        Centralizes the logic for handling when a handler says to skip.
+        Properly advances the item so we don't get infinite loops.
+
+        Args:
+            skip_result: The ResultObject from get_relevant_handlers()
+
+        Returns:
+            ResultObject if should skip/need input, None if should continue
+        """
+        if skip_result:
+            if skip_result.is_skip():
+                return self._handle_skip(
+                    skip_result.payload.message or "Skipped by handler"
+                )
+            elif skip_result.requires_input():
+                return skip_result
+        return None
+
     def _run_handlers(
         self,
         handlers: List["SpecialHandler"],
