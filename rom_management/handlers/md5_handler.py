@@ -48,26 +48,26 @@ class MD5ScanHandler(SpecialHandler):
             ResultObject with SUCCESS or ERROR status
         """
         if action == Action.SCAN_MD5:
-            original_use_md5 = process.use_md5
-            process.use_md5 = True
-            # Set flag to skip handler check in _execute_step (prevents infinite loop)
-            original_skip_check = getattr(process, "_skip_handler_check", False)
-            process._skip_handler_check = True
+            # Store MD5 requirement in handler state on current item
+            current_item = process.current_item
+            if hasattr(current_item, "_handler_state"):
+                current_item._handler_state["require_md5"] = True
+            else:
+                # Fallback for tests or items without handler state
+                logger.warning(f"current_item does not have _handler_state attribute")
 
-            try:
-                return self._execute_step_with_timeout(process)
-            finally:
-                process.use_md5 = original_use_md5
-                process._skip_handler_check = original_skip_check
+            return self._execute_step_with_timeout(process)
 
         elif action == Action.SCAN_ALL_MD5:
-            process.use_md5 = True
-            original_skip_check = getattr(process, "_skip_handler_check", False)
-            process._skip_handler_check = True
-            try:
-                return self._execute_step_with_timeout(process)
-            finally:
-                process._skip_handler_check = original_skip_check
+            # Store MD5 requirement in handler state on current item
+            current_item = process.current_item
+            if hasattr(current_item, "_handler_state"):
+                current_item._handler_state["require_md5"] = True
+            else:
+                # Fallback for tests or items without handler state
+                logger.warning(f"current_item does not have _handler_state attribute")
+
+            return self._execute_step_with_timeout(process)
 
         elif action == Action.SKIP:
             return process._handle_skip("Skipped MD5 scan for current item")
@@ -85,29 +85,31 @@ class MD5ScanHandler(SpecialHandler):
             message=f"Unknown action for MD5ScanHandler: {action.value}",
         )
 
-    def execute(self, media: "CDMedia", file_data: Any = None) -> "ResultObject":
+    def execute(
+        self, media: "CDMedia", file_data: Any = None, process: Any = None
+    ) -> "ResultObject":
         """Execute MD5 handler - returns pending_input to prompt user for action.
 
         This is called during automated processing when validate_preconditions
         returned success (MD5 scanning might be needed).
-        """
-        from rom_management.processing.models import (
-            Action,
-            ResultObject,
-            PartProcessingItem,
-        )
-        from softwarelist import Part
 
-        # Get the Part from media
+        Args:
+            media: The CDMedia object being processed
+            file_data: Optional file data from extraction
+            process: The BaseProcess instance (to access current_item)
+        """
+        from rom_management.processing.models import Action, ResultObject
+
+        # Get the Part from media for display
         part = getattr(media, "softlist_part", None)
         if not part:
-            from softwarelist import Part
-
-            # Try to get from parent relationship
             part = getattr(media, "part", None)
+
+        from rom_management.processing.models import PartProcessingItem
 
         item = PartProcessingItem(part) if part else None
 
+        # Return pending_input to prompt user
         return ResultObject.pending_input(
             query_id="generic_query",
             message=f"MD5 scan required for {media.dat_game_entry.name}",

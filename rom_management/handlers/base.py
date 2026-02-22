@@ -13,6 +13,17 @@ class SpecialHandler(ABC):
         self.name = name
         self.menu = menu  # Associated menu for user interaction
 
+    def mark_completed(self, item) -> None:
+        """Mark this handler as having completed for the given item"""
+        if hasattr(item, "_completed_handlers"):
+            item._completed_handlers.add(self.name)
+
+    def has_completed(self, item) -> bool:
+        """Check if this handler has already run for the item"""
+        if hasattr(item, "_completed_handlers"):
+            return self.name in item._completed_handlers
+        return False
+
     def validate_preconditions(
         self, media: CDMedia, file_data: OpticalMediaProcessor = None
     ) -> "ResultObject":
@@ -72,7 +83,10 @@ class SpecialHandler(ABC):
         )
 
     def execute(
-        self, media: CDMedia, file_data: OpticalMediaProcessor = None
+        self,
+        media: CDMedia,
+        file_data: Any = None,
+        process: Any = None,
     ) -> "ResultObject":
         """
         Execute automated handler logic.
@@ -83,6 +97,7 @@ class SpecialHandler(ABC):
         Args:
             media: The CDMedia object being processed
             file_data: The OpticalMediaProcessor with extracted files
+            process: The BaseProcess instance (for accessing current_item)
 
         Returns:
             ResultObject with SUCCESS or ERROR status

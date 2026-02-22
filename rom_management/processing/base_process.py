@@ -31,9 +31,7 @@ class BaseProcess(ABC):
         )  # Track skipped categories for contextual SKIP_ALL
         self._items_iterator = None
         self._timeout_seconds = 30
-        self._skip_handler_check = (
-            False  # Flag to skip handler check when handler is executing step
-        )
+        self._last_handled_item_id = None  # Track last item that went through handlers
 
     @abstractmethod
     def initialize(self):
@@ -81,6 +79,47 @@ class BaseProcess(ABC):
         if category:
             self._skipped_categories.add(category)
         return self._handle_skip(message)
+
+    def _run_handlers(
+        self,
+        handlers: List["SpecialHandler"],
+        media,
+        file_data,
+    ) -> ResultObject:
+        """Run handlers, skipping any that have already completed for this item.
+
+        This method handles the auto-skip logic for handlers that have already run
+        for the current item (e.g., when a handler triggers a step re-run).
+
+        Args:
+            handlers: List of handlers to run
+            media: The media object being processed
+            file_data: Optional file data from extraction
+
+        Returns:
+            ResultObject - SUCCESS if all handlers pass, PENDING_INPUT if user needed
+        """
+        for handler in handlers:
+            # Auto-skip if handler already ran for this item
+            if handler.has_completed(self.current_item):
+                logger.debug(f"Skipping handler {handler.name} - already completed")
+                continue
+
+            logger.debug(f"Running handler: {handler.name}")
+            # Pass self (process) so handler can access current_item
+            result = handler.execute(media, file_data, self)
+
+            # Mark handler as completed BEFORE checking result
+            # (so even if it returns pending_input, we don't re-run it)
+            self.current_item._completed_handlers.add(handler.name)
+
+            if result.requires_input():
+                logger.debug(f"Handler {handler.name} requires input, stopping")
+                return result
+
+            # If success, continue to next handler
+
+        return ResultObject.success()
 
     def _post_process(self) -> None:
         """Hook for cleanup/save operations after processing completes"""

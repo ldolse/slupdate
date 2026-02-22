@@ -99,6 +99,8 @@ class MediaProcessingItem(BaseProcessingItem):
     def __init__(self, media: "CDMedia"):
         super().__init__(media)
         self._media = media
+        self._handler_state = {}  # Handlers store state here
+        self._completed_handlers = set()  # Track which handlers have run
 
     @property
     def media(self) -> "CDMedia":
@@ -118,6 +120,8 @@ class PartProcessingItem(BaseProcessingItem):
     def __init__(self, part: "Part"):
         super().__init__(part)
         self._part = part
+        self._handler_state = {}  # Handlers store state here
+        self._completed_handlers = set()  # Track which handlers have run
 
     @property
     def part(self) -> "Part":
