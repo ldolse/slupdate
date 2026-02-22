@@ -25,35 +25,44 @@ class CHDExistenceHandler(SpecialHandler):
     ) -> "ResultObject":
         """Check if this handler should be applied.
 
-        CHDExistenceHandler only applies during CHD build process
+        CHDExistenceHandler only applies during CHD build process AND when a CHD already exists.
 
         Returns:
-            - ResultObject.not_applicable() for non-CHDBuildProcess or if already handled
-            - ResultObject.success() for CHDBuildProcess
+            - ResultObject.not_applicable() for non-CHDBuildProcess, no existing CHD, or if already handled
+            - ResultObject.success() for CHDBuildProcess with existing CHD
         """
         from rom_management.processing.models import ResultObject
 
-        # Check if this is CHDBuildProcess - CHD existence handler only applies to this
-        if process is not None:
-            from rom_management.processing.chd_build_process import ChdBuildProcess
+        # CHD existence handler only applies within CHDBuildProcess
+        if process is None:
+            return ResultObject.not_applicable(
+                message="CHD existence handler requires a process context"
+            )
 
-            if not isinstance(process, ChdBuildProcess):
-                return ResultObject.not_applicable(
-                    message="CHD existence handler is for CHD build process only"
-                )
+        from rom_management.processing.chd_build_process import ChdBuildProcess
 
-            # Check if category already skipped
-            if self.PROCESS_CATEGORY in process._skipped_categories:
-                return ResultObject.not_applicable(
-                    message="Existing CHDs already skipped"
-                )
+        if not isinstance(process, ChdBuildProcess):
+            return ResultObject.not_applicable(
+                message="CHD existence handler is for CHD build process only"
+            )
 
-            # Check platform preferences
-            pref = getattr(process.platform, "chd_preference", None)
-            if pref == "overwrite":
-                return ResultObject.not_applicable(message="Overwrite preference set")
-            elif pref == "skip":
-                return ResultObject.not_applicable(message="Trust preference set")
+        # Check if category already skipped
+        if self.PROCESS_CATEGORY in process._skipped_categories:
+            return ResultObject.not_applicable(message="Existing CHDs already skipped")
+
+        # Check platform preferences
+        pref = getattr(process.platform, "chd_preference", None)
+        if pref == "overwrite":
+            return ResultObject.not_applicable(message="Overwrite preference set")
+        elif pref == "skip":
+            return ResultObject.not_applicable(message="Trust preference set")
+
+        # CRITICAL: Check if CHD actually exists - if not, this handler is not applicable
+        chd_path = self._get_expected_chd_path(process, media)
+        if not chd_path or not os.path.exists(chd_path):
+            return ResultObject.not_applicable(
+                message="No existing CHD found - handler not applicable"
+            )
 
         return ResultObject.success()
 
