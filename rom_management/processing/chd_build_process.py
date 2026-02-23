@@ -1,3 +1,4 @@
+import logging
 import os
 from typing import TYPE_CHECKING
 from .base_process import BaseProcess
@@ -11,6 +12,8 @@ from rom_management import CHD
 
 if TYPE_CHECKING:
     from consoles import Platform
+
+logger = logging.getLogger(__name__)
 
 
 class ChdBuildProcess(BaseProcess):
@@ -70,8 +73,8 @@ class ChdBuildProcess(BaseProcess):
         media = self.current_item.media
 
         if not media.softlist_part or not media.softlist_part.part_of:
-            print(
-                f"  ⚠️  Skipping - No valid softlist part or title for media ID {media.id}"
+            logger.warning(
+                f"Skipping - No valid softlist part or title for media ID {media.id}"
             )
             return ResultObject.success(
                 message=f"Skipped {media.id}: Missing softlist reference",
@@ -80,84 +83,29 @@ class ChdBuildProcess(BaseProcess):
 
         soft_title = media.softlist_part.part_of.name
         file_name = media.dat_game_entry.name
-
         expected_chd_path = os.path.join(
             self.platform.chd_path, soft_title, f"{file_name}.chd"
         )
 
-        if os.path.exists(expected_chd_path):
-            return self._handle_existing_chd(media, expected_chd_path)
+        # Get handlers BEFORE any work (CHD existence check happens here)
+        handlers, skip_result = self.platform.get_relevant_handlers(media, None, self)
 
+        # Use centralized handler skip handling (advances item properly)
+        skip_handled = self._handle_handler_skip_result(skip_result)
+        if skip_handled:
+            return skip_handled
+
+        # Run handlers (CHDExistenceHandler may return pending_input, success, or skip)
+        handler_result = self._run_handlers(handlers, media, None)
+        if handler_result.requires_input():
+            return handler_result
+
+        # If handler returned skip (TRUST), item was advanced
+        if self.current_item is None:
+            return ResultObject.success(message="CHD trusted")
+
+        # Handler returned success (OVERWRITE or no existing CHD) - continue to build
         return self._build_single_chd(media, soft_title, expected_chd_path)
-
-    def _handle_existing_chd(self, media, expected_chd_path: str) -> ResultObject:
-        """Handle case where CHD already exists - check if validated, ask user, or respect preference"""
-        matched_chd = CHD(chd_path=expected_chd_path)
-        is_valid = matched_chd.exists and matched_chd.is_valid
-        is_in_validated_set = any(
-            matched_chd.path == chd.path for chd in self.platform.validated_chds
-        )
-
-        if is_valid and is_in_validated_set:
-            print(f"✅ CHD already validated for {media.dat_game_entry.name}")
-            return ResultObject.success(
-                message=f"CHD already validated: {media.dat_game_entry.name}",
-                metadata={"chd_path": expected_chd_path},
-            )
-
-        print(f"⚠️  CHD already exists for {media.dat_game_entry.name}")
-
-        existing_version = None
-        if is_valid:
-            chd_info = matched_chd._get_chd_info()
-            existing_version = chd_info.get("file_version")
-
-        pref = self.platform.chd_handling_preference
-
-        if pref == "skip":
-            print(f"Skipping existing CHD per platform preference")
-            return ResultObject.success(
-                message=f"Skipped existing CHD: {media.dat_game_entry.name}",
-                metadata={"chd_path": expected_chd_path, "reason": "preference"},
-            )
-        elif pref == "overwrite":
-            print(f"Overwriting existing CHD per platform preference")
-            try:
-                os.remove(expected_chd_path)
-            except OSError as e:
-                return ResultObject.pending_input(
-                    query_id="generic_query",
-                    message=f"Failed to remove existing CHD: {str(e)}",
-                    item=self.current_item,
-                    valid_actions=[
-                        Action.SKIP,
-                        Action.SKIP_ALL,
-                        Action.STOP,
-                    ],
-                )
-            return self._build_single_chd(
-                media, media.softlist_part.part_of.name, expected_chd_path
-            )
-        else:
-            return ResultObject.pending_input(
-                query_id="generic_query",
-                message=f"CHD already exists for {media.dat_game_entry.name}",
-                item=self.current_item,
-                valid_actions=[
-                    Action.OVERWRITE,
-                    Action.TRUST_EXISTING,
-                    Action.SET_OVERWRITE_PREFERENCE,
-                    Action.SET_TRUST_PREFERENCE,
-                    Action.SKIP,
-                    Action.SKIP_ALL,
-                    Action.STOP,
-                ],
-                category="existing CHD",
-                options_context={
-                    "existing_version": existing_version,
-                    "chd_path": expected_chd_path,
-                },
-            )
 
     def _build_single_chd(
         self, media, title: str, expected_chd_path: str
@@ -202,32 +150,6 @@ class ChdBuildProcess(BaseProcess):
                     ],
                 )
 
-            # Get and apply handlers (only handlers that pass validate_preconditions)
-            handlers, skip_result = self.platform.get_relevant_handlers(
-                media, self._file_data, process=self
-            )
-
-            # Use centralized handler skip handling (advances item properly)
-            skip_handled = self._handle_handler_skip_result(skip_result)
-            if skip_handled:
-                return skip_handled
-
-            for handler in handlers:
-                result = handler.execute(media, self._file_data)
-
-                if not result.is_success():
-                    return ResultObject.pending_input(
-                        query_id="generic_query",
-                        message=f"Handler {handler.name} failed: {result.payload.message if result.payload else 'Unknown error'}",
-                        item=self.current_item,
-                        valid_actions=[
-                            Action.SKIP,
-                            Action.SKIP_ALL,
-                            Action.CONTINUE,
-                            Action.STOP,
-                        ],
-                    )
-
             # Prepare for CHD conversion
             toc_source = self._file_data.current_toc
 
@@ -252,8 +174,8 @@ class ChdBuildProcess(BaseProcess):
                 toc_source=str(toc_source),
             )
 
-            print(
-                f"  CHD object created, checking exists={matched_chd.exists}, is_valid={matched_chd.is_valid}"
+            logger.debug(
+                f"CHD object created, exists={matched_chd.exists}, is_valid={matched_chd.is_valid}"
             )
 
             if matched_chd.exists and matched_chd.is_valid:
@@ -302,6 +224,7 @@ class ChdBuildProcess(BaseProcess):
                     ],
                 )
         except Exception as e:
+            logger.exception(f"Unexpected error processing {media.dat_game_entry.name}")
             return ResultObject.pending_input(
                 query_id="generic_query",
                 message=f"Unexpected error processing {media.dat_game_entry.name}: {str(e)}",
@@ -319,4 +242,4 @@ class ChdBuildProcess(BaseProcess):
                 try:
                     self._file_data.cleanup()
                 except Exception as e:
-                    print(f"Warning: Failed to cleanup temp directory: {e}")
+                    logger.warning(f"Failed to cleanup temp directory: {e}")

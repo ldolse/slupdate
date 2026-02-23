@@ -9,6 +9,7 @@ from media_registry import MediaRegistry, CDMedia
 from game_metadata import RedumpDB
 from collections import OrderedDict
 from .platform_state import PlatformState
+from rom_management.processing.models import CHDExistingPreference
 
 from typing import TYPE_CHECKING, Optional, List, Any, Tuple
 
@@ -37,9 +38,7 @@ class Platform:
         self.mr: MediaRegistry = None
         self.matched_buildable_media: OrderedDict[CDMedia, None] = OrderedDict()
         self.validated_chds: set[CHD] = set()
-        self._chd_handling_preference = (
-            None  # Can be "ask", "overwrite", or "skip", set via Exception
-        )
+        self._chd_handling_preference: CHDExistingPreference = CHDExistingPreference.ASK
         self._chd_build_index = 0
         self.handler_registry = registry
         self.state = PlatformState()
@@ -100,7 +99,7 @@ class Platform:
         self.mr = None
         self.matched_buildable_media = OrderedDict()
         self.validated_chds = set()
-        self._chd_handling_preference = None
+        self._chd_handling_preference = CHDExistingPreference.ASK
         self._chd_build_index = 0
 
     def get_relevant_handlers(
@@ -123,20 +122,19 @@ class Platform:
         return sum(len(e.parts) for e in self.softwarelist.software_items)
 
     @property
-    def chd_handling_preference(self) -> str:
+    def chd_handling_preference(self) -> CHDExistingPreference:
         return self._chd_handling_preference
 
-    def set_chd_preference(self, preference: str) -> None:
+    def set_chd_preference(self, preference: CHDExistingPreference) -> None:
         """
         Set the CHD handling preference for this platform.
 
         Args:
-            preference: One of "ask", "overwrite", "skip"
+            preference: A CHDExistingPreference enum value
         """
-        valid_preferences = ["ask", "overwrite", "skip"]
-        if preference not in valid_preferences:
+        if not isinstance(preference, CHDExistingPreference):
             raise ValueError(
-                f"Invalid preference: {preference}. Must be one of {valid_preferences}"
+                f"Invalid preference: {preference}. Must be a CHDExistingPreference enum value"
             )
         self._chd_handling_preference = preference
 

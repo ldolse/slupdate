@@ -20,6 +20,18 @@ class ProcessStatus(Enum):
     NOT_APPLICABLE = "not_applicable"
 
 
+class CHDExistingPreference(Enum):
+    """Preference for handling existing CHD files during CHD build process.
+
+    Precedence order (highest to lowest): TRUST > OVERWRITE > SKIP
+    """
+
+    ASK = "ask"  # Prompt user each time (default)
+    TRUST = "trust"  # Trust existing CHD, add to validated_chds
+    OVERWRITE = "overwrite"  # Remove existing CHD and rebuild
+    SKIP = "skip"  # Skip without validating (don't add to validated_chds)
+
+
 class Action(Enum):
     """Enumeration of all possible user actions across all processes"""
 

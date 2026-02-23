@@ -140,12 +140,7 @@ class ArchiveValidationProcess(BaseProcess):
             return self._handle_skip("Skipped due to timeout")
         except Exception as e:
             logger.error(f"Error validating {media.dat_game_entry.name}: {e}")
-            return ResultObject.error(
-                error_type="ValidationError",
-                message=f"Error validating: {str(e)}",
-                exception=e,
-                context={"media_id": media.id},
-            )
+            return self._handle_skip(f"Skipped due to error: {e}")
 
         if not zip_path:
             logger.warning(f"No valid ZIP found: {media.dat_game_entry.name}")

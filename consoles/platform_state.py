@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Any
+from rom_management.processing.models import CHDExistingPreference
 
 
 @dataclass
@@ -14,9 +15,7 @@ class PlatformState:
     matched_media_sigs: List[str] = field(
         default_factory=list
     )  # SHA1 or CRC signatures
-    _chd_trust_existing: Optional[bool] = (
-        None  # wether to trust existing CHDs during build
-    )
+    _chd_handling_preference: CHDExistingPreference = CHDExistingPreference.ASK
 
     # Validated ZIP paths: {signature: zip_path}
     # This persists the ZIP path found during validation so CHD build can find it later

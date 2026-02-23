@@ -19,6 +19,7 @@ from consoles.platform_state import PlatformState
 from media_registry import MediaRegistry, CDMedia
 from dat import RomDat
 from softwarelist import SoftwareList
+from rom_management.processing.models import CHDExistingPreference
 
 
 @pytest.fixture
@@ -82,7 +83,7 @@ class TestPlatformInitialization:
         assert platform.softwarelist is None
         assert platform.redump_db is None
         assert platform.mr is None
-        assert platform._chd_handling_preference is None
+        assert platform._chd_handling_preference == CHDExistingPreference.ASK
         assert platform._chd_build_index == 0
 
     def test_initialization_creates_platform_state(self):
@@ -117,26 +118,26 @@ class TestPlatformState:
         mock_platform.softwarelist = mock_softwarelist
         mock_platform.dat_directories = {"/tmp/dats": []}
         mock_platform._chd_build_index = 5
-        mock_platform._chd_handling_preference = "overwrite"
+        mock_platform._chd_handling_preference = CHDExistingPreference.OVERWRITE
         mock_platform.validated_chds = set()
 
         state = mock_platform.save_state()
 
         assert isinstance(state, PlatformState)
         assert state._chd_build_index == 5
-        assert state._chd_handling_preference == "overwrite"
+        assert state._chd_handling_preference == CHDExistingPreference.OVERWRITE
 
     def test_load_state_restores_platform_state(self, mock_platform):
         """Test load_state restores platform from saved state"""
         state = PlatformState()
         state._chd_build_index = 10
-        state._chd_handling_preference = "skip"
+        state._chd_handling_preference = CHDExistingPreference.SKIP
         state.dat_directories = ["/tmp/dats1", "/tmp/dats2"]
 
         mock_platform.load_state(state)
 
         assert mock_platform._chd_build_index == 10
-        assert mock_platform._chd_handling_preference == "skip"
+        assert mock_platform._chd_handling_preference == CHDExistingPreference.SKIP
         assert "/tmp/dats1" in mock_platform.dat_directories
 
     def test_reset_preserves_dat_directories(self, mock_platform):
@@ -147,7 +148,7 @@ class TestPlatformState:
         mock_platform.softwarelist = Mock()
         mock_platform.redump_db = Mock()
         mock_platform.mr = Mock()
-        mock_platform._chd_handling_preference = "overwrite"
+        mock_platform._chd_handling_preference = CHDExistingPreference.OVERWRITE
         mock_platform._chd_build_index = 15
 
         mock_platform.reset()
@@ -158,7 +159,7 @@ class TestPlatformState:
         assert mock_platform.softwarelist is None
         assert mock_platform.redump_db is None
         assert mock_platform.mr is None
-        assert mock_platform._chd_handling_preference is None
+        assert mock_platform._chd_handling_preference == CHDExistingPreference.ASK
         assert mock_platform._chd_build_index == 0
 
 
@@ -167,28 +168,34 @@ class TestPlatformCHDPreferences:
 
     def test_chd_handling_preference_property(self, mock_platform):
         """Test chd_handling_preference property returns current preference"""
-        mock_platform._chd_handling_preference = "skip"
+        mock_platform._chd_handling_preference = CHDExistingPreference.SKIP
 
-        assert mock_platform.chd_handling_preference == "skip"
+        assert mock_platform.chd_handling_preference == CHDExistingPreference.SKIP
 
     def test_set_chd_preference_valid(self, mock_platform):
-        """Test set_chd_preference accepts valid values"""
-        mock_platform.set_chd_preference("overwrite")
-        assert mock_platform._chd_handling_preference == "overwrite"
+        """Test set_chd_preference accepts valid enum values"""
+        mock_platform.set_chd_preference(CHDExistingPreference.OVERWRITE)
+        assert mock_platform._chd_handling_preference == CHDExistingPreference.OVERWRITE
 
-        mock_platform.set_chd_preference("skip")
-        assert mock_platform._chd_handling_preference == "skip"
+        mock_platform.set_chd_preference(CHDExistingPreference.SKIP)
+        assert mock_platform._chd_handling_preference == CHDExistingPreference.SKIP
 
-        mock_platform.set_chd_preference("ask")
-        assert mock_platform._chd_handling_preference == "ask"
+        mock_platform.set_chd_preference(CHDExistingPreference.ASK)
+        assert mock_platform._chd_handling_preference == CHDExistingPreference.ASK
+
+        mock_platform.set_chd_preference(CHDExistingPreference.TRUST)
+        assert mock_platform._chd_handling_preference == CHDExistingPreference.TRUST
 
     def test_set_chd_preference_invalid_raises_error(self, mock_platform):
-        """Test set_chd_preference raises ValueError for invalid values"""
+        """Test set_chd_preference raises ValueError for non-enum values"""
         with pytest.raises(ValueError):
             mock_platform.set_chd_preference("invalid")
 
         with pytest.raises(ValueError):
             mock_platform.set_chd_preference("")
+
+        with pytest.raises(ValueError):
+            mock_platform.set_chd_preference("overwrite")  # String, not enum
 
 
 class TestPlatformProperties:

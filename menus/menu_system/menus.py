@@ -401,6 +401,12 @@ class MenuSystem:
                         result.payload.destination_menu = destination_menu
                     return result
 
+                elif result.is_error():
+                    print(f"\n❌ Error: {result.payload.message}")
+                    if result.payload.destination_menu:
+                        self._navigate_to_menu(result.payload.destination_menu)
+                    return result
+
         except KeyboardInterrupt:
             # User pressed Ctrl+C
             print("\n\nProcess interrupted by user.")
@@ -425,7 +431,11 @@ class MenuSystem:
         while not result.is_complete():
             if result.is_skip():
                 # Item was skipped, display message and continue automatically
-                if result.payload and hasattr(result.payload, "message") and result.payload.message:
+                if (
+                    result.payload
+                    and hasattr(result.payload, "message")
+                    and result.payload.message
+                ):
                     print(f"⚠️  {result.payload.message}")
                 result = self.runner.execute_next_step()
                 continue
@@ -436,6 +446,11 @@ class MenuSystem:
 
             if result.is_success() or result.is_progress():
                 result = self.runner.execute_next_step()
+            elif result.is_error():
+                print(f"\n❌ Error: {result.payload.message}")
+                if result.payload.destination_menu:
+                    self._navigate_to_menu(result.payload.destination_menu)
+                return
             else:
                 break
 

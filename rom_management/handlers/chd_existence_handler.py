@@ -1,7 +1,11 @@
 import os
 from typing import Optional, Dict, Any, TYPE_CHECKING
-from rom_management.processing.models import ResultObject
-from rom_management.processing.models import Action, MediaProcessingItem
+from rom_management.processing.models import (
+    ResultObject,
+    Action,
+    MediaProcessingItem,
+    CHDExistingPreference,
+)
 from .base import SpecialHandler
 
 if TYPE_CHECKING:
@@ -12,7 +16,12 @@ if TYPE_CHECKING:
 class CHDExistenceHandler(SpecialHandler):
     """
     Handles scenarios where a CHD already exists during CHD build process.
-    Provides options to overwrite, skip, or set preferences.
+
+    Preferences (in precedence order):
+    - TRUST: Trust existing CHD, add to validated_chds
+    - OVERWRITE: Remove existing CHD and rebuild
+    - SKIP: Skip without validating (don't add to validated_chds)
+    - ASK: Prompt user each time (default)
     """
 
     PROCESS_CATEGORY = "existing CHD"
@@ -29,10 +38,9 @@ class CHDExistenceHandler(SpecialHandler):
 
         Returns:
             - ResultObject.not_applicable() for non-CHDBuildProcess, no existing CHD, or if already handled
-            - ResultObject.success() for CHDBuildProcess with existing CHD
+            - ResultObject.skip() if preference is SKIP (skip without validating)
+            - ResultObject.success() for CHDBuildProcess with existing CHD (handler will handle it)
         """
-        from rom_management.processing.models import ResultObject
-
         # CHD existence handler only applies within CHDBuildProcess
         if process is None:
             return ResultObject.not_applicable(
@@ -46,25 +54,81 @@ class CHDExistenceHandler(SpecialHandler):
                 message="CHD existence handler is for CHD build process only"
             )
 
-        # Check if category already skipped
-        if self.PROCESS_CATEGORY in process._skipped_categories:
-            return ResultObject.not_applicable(message="Existing CHDs already skipped")
-
-        # Check platform preferences
-        pref = getattr(process.platform, "chd_preference", None)
-        if pref == "overwrite":
-            return ResultObject.not_applicable(message="Overwrite preference set")
-        elif pref == "skip":
-            return ResultObject.not_applicable(message="Trust preference set")
-
-        # CRITICAL: Check if CHD actually exists - if not, this handler is not applicable
+        # CRITICAL: Check if CHD actually exists FIRST - if not, this handler is not applicable
         chd_path = self._get_expected_chd_path(process, media)
         if not chd_path or not os.path.exists(chd_path):
             return ResultObject.not_applicable(
                 message="No existing CHD found - handler not applicable"
             )
 
+        # Check if category already skipped via SKIP_ALL
+        if self.PROCESS_CATEGORY in process._skipped_categories:
+            return ResultObject.skip(message="Existing CHDs skipped via SKIP_ALL")
+
+        # CHD exists - check preferences
+        pref = process.platform.chd_handling_preference
+
+        if pref == CHDExistingPreference.SKIP:
+            # Preference is to skip without validating
+            return ResultObject.skip(message="Skipping existing CHD per preference")
+
+        # TRUST, OVERWRITE, or ASK - include handler, execute() will handle appropriately
         return ResultObject.success()
+
+    def execute(
+        self, media: "CDMedia", file_data: Any = None, process: Any = None
+    ) -> "ResultObject":
+        """Execute CHD existence handling.
+
+        Called when validate_preconditions returned success (CHD exists).
+
+        Args:
+            media: The CDMedia object being processed
+            file_data: Not used for CHD existence check
+            process: The BaseProcess instance
+
+        Returns:
+            - ResultObject.success() if preference is TRUST or OVERWRITE (handled automatically)
+            - ResultObject.pending_input() if preference is ASK (prompt user)
+        """
+        chd_path = self._get_expected_chd_path(process, media)
+        pref = process.platform.chd_handling_preference
+
+        # Handle automatic preferences
+        if pref == CHDExistingPreference.TRUST:
+            return self._do_trust(process, chd_path)
+
+        if pref == CHDExistingPreference.OVERWRITE:
+            return self._do_overwrite(process, chd_path)
+
+        # Preference is ASK - prompt user
+        from rom_management import CHD
+
+        matched_chd = CHD(chd_path=chd_path)
+        existing_version = None
+        if matched_chd.is_valid:
+            chd_info = matched_chd._get_chd_info()
+            existing_version = chd_info.get("file_version")
+
+        return ResultObject.pending_input(
+            query_id="generic_query",
+            message=f"CHD already exists for {media.dat_game_entry.name}",
+            item=process.current_item,
+            valid_actions=[
+                Action.TRUST_EXISTING,
+                Action.OVERWRITE,
+                Action.SET_TRUST_PREFERENCE,
+                Action.SET_OVERWRITE_PREFERENCE,
+                Action.SKIP,
+                Action.SKIP_ALL,
+                Action.STOP,
+            ],
+            category=self.PROCESS_CATEGORY,
+            options_context={
+                "existing_version": existing_version,
+                "chd_path": chd_path,
+            },
+        )
 
     def execute_action(
         self,
@@ -72,7 +136,7 @@ class CHDExistenceHandler(SpecialHandler):
         process: "BaseProcess",
         params: Optional[Dict[str, Any]] = None,
     ) -> "ResultObject":
-        """Execute CHD existence actions
+        """Execute CHD existence actions from user input.
 
         Args:
             action: The Action enum representing user's choice
@@ -82,49 +146,59 @@ class CHDExistenceHandler(SpecialHandler):
         Returns:
             ResultObject from executing the action
         """
-        from rom_management.processing.models import (
-            ProcessStatus,
-            Action,
-        )
+        # Handle actions that don't need chd_path first
+        if action == Action.STOP:
+            return process._handle_stop()
+
+        # Get chd_path for actions that need it
+        if not isinstance(process.current_item, MediaProcessingItem):
+            return ResultObject.error(
+                error_type="InvalidState",
+                message="Current item is not a MediaProcessingItem",
+            )
+        chd_path = self._get_expected_chd_path(process, process.current_item.media)
 
         if action == Action.TRUST_EXISTING:
-            return self._handle_trust_existing(process)
+            return self._do_trust(process, chd_path)
 
         if action == Action.OVERWRITE:
-            return self._handle_overwrite(process)
+            return self._do_overwrite(process, chd_path)
 
-        elif action == Action.SET_OVERWRITE_PREFERENCE:
-            return self._handle_set_overwrite_preference(process)
+        if action == Action.SET_TRUST_PREFERENCE:
+            process.platform.set_chd_preference(CHDExistingPreference.TRUST)
+            print("Set preference to trust all existing CHDs")
+            return self._do_trust(process, chd_path)
 
-        elif action == Action.SET_TRUST_PREFERENCE:
-            return self._handle_set_trust_preference(process)
+        if action == Action.SET_OVERWRITE_PREFERENCE:
+            process.platform.set_chd_preference(CHDExistingPreference.OVERWRITE)
+            print("Set preference to overwrite all existing CHDs")
+            return self._do_overwrite(process, chd_path)
 
-        elif action == Action.SKIP:
-            return self._handle_skip_existing(process)
+        if action == Action.SKIP:
+            return self._do_skip(process)
 
-        elif action == Action.SKIP_ALL:
-            return process._handle_skip_all(
-                f"Skip all {self.PROCESS_CATEGORY}", category=self.PROCESS_CATEGORY
-            )
-
-        elif action == Action.STOP:
-            return process._handle_stop()
+        if action == Action.SKIP_ALL:
+            process.platform.set_chd_preference(CHDExistingPreference.SKIP)
+            print("Set preference to skip all existing CHDs")
+            return self._do_skip(process)
 
         return ResultObject.error(
             error_type="UnknownAction",
             message=f"Unknown action for CHDExistenceHandler: {action.value}",
         )
 
-    def _handle_trust_existing(self, process: "BaseProcess") -> "ResultObject":
-        """Handle TRUST_EXISTING action - mark existing CHD as validated and continue
+    def _do_trust(self, process: "BaseProcess", chd_path: str) -> "ResultObject":
+        """Trust existing CHD: create CHD object, add to validated_chds, advance to next item.
+
+        This skips extraction and CHD creation entirely.
 
         Args:
             process: The BaseProcess instance
+            chd_path: Path to the existing CHD file
 
         Returns:
-            ResultObject.success() after marking CHD as validated
+            ResultObject.success() after marking CHD as validated and advancing
         """
-        from rom_management.processing.models import ResultObject
         from rom_management import CHD
 
         if not isinstance(process.current_item, MediaProcessingItem):
@@ -134,7 +208,6 @@ class CHDExistenceHandler(SpecialHandler):
             )
 
         media = process.current_item.media
-        chd_path = self._get_expected_chd_path(process, media)
 
         if chd_path and os.path.exists(chd_path):
             matched_chd = CHD(chd_path=chd_path, source=media)
@@ -148,29 +221,16 @@ class CHDExistenceHandler(SpecialHandler):
         process.processed_items += 1
         return ResultObject.success(message="Trusted existing CHD")
 
-    def _handle_overwrite(self, process: "BaseProcess") -> "ResultObject":
-        """
-        Handle OVERWRITE action - remove existing CHD and retry
+    def _do_overwrite(self, process: "BaseProcess", chd_path: str) -> "ResultObject":
+        """Overwrite existing CHD: remove file, return success so process continues to build.
 
         Args:
             process: The BaseProcess instance
+            chd_path: Path to the existing CHD file
 
         Returns:
-            ResultObject from executing step (will re-build CHD)
+            ResultObject.success() after removing CHD (process will build new one)
         """
-        from rom_management.processing.models import ResultObject
-        from rom_management.processing.models import MediaProcessingItem
-
-        # Get CHD path from current item's media
-        if not isinstance(process.current_item, MediaProcessingItem):
-            return ResultObject.error(
-                error_type="InvalidState",
-                message="Current item is not a MediaProcessingItem",
-            )
-
-        media = process.current_item.media
-        chd_path = self._get_expected_chd_path(process, media)
-
         if chd_path and os.path.exists(chd_path):
             try:
                 os.remove(chd_path)
@@ -182,23 +242,36 @@ class CHDExistenceHandler(SpecialHandler):
                     exception=e,
                 )
 
-        # Retry CHD creation step
-        return self._execute_step_and_advance(process)
+        # Return success - process will continue to build CHD normally
+        return ResultObject.success(message="Removed existing CHD")
+
+    def _do_skip(self, process: "BaseProcess") -> "ResultObject":
+        """Skip existing CHD: advance to next item without adding to validated_chds.
+
+        Args:
+            process: The BaseProcess instance
+
+        Returns:
+            ResultObject.success() after skipping
+        """
+        if process.current_item and hasattr(process.current_item, "media"):
+            print(
+                f"Skipping existing CHD for {process.current_item.media.dat_game_entry.name}"
+            )
+        return process._handle_skip("Skipped existing CHD")
 
     def _get_expected_chd_path(
         self, process: "BaseProcess", media: "CDMedia"
     ) -> Optional[str]:
-        """Get expected CHD path for a media item
+        """Get expected CHD path for a media item.
 
         Args:
             process: The BaseProcess instance
             media: The CDMedia object
 
         Returns:
-            The expected CHD path as a string
+            The expected CHD path as a string, or None if cannot be determined
         """
-        import os
-
         if not media.dat_game_entry or not media.dat_game_entry.name:
             return None
 
@@ -213,57 +286,3 @@ class CHDExistenceHandler(SpecialHandler):
             title,
             f"{file_name}.chd",
         )
-
-    def _handle_skip_existing(self, process: "BaseProcess") -> "ResultObject":
-        """Handle SKIP action - skip current CHD and continue
-
-        Args:
-            process: The BaseProcess instance
-
-        Returns:
-            ResultObject.success() after skipping
-        """
-        from rom_management.processing.models import ResultObject
-
-        if process.current_item and hasattr(process.current_item, "media"):
-            print(
-                f"Skipping existing CHD for {process.current_item.media.dat_game_entry.name}"
-            )
-        return process._handle_skip("Skipped existing CHD")
-
-    def _handle_set_overwrite_preference(
-        self, process: "BaseProcess"
-    ) -> "ResultObject":
-        """
-        Handle SET_OVERWRITE_PREFERENCE action - set preference to overwrite all existing CHDs
-
-        Args:
-            process: The BaseProcess instance
-
-        Returns:
-            ResultObject from executing step (will overwrite without prompting again)
-        """
-        process.platform.set_chd_preference("overwrite")
-        print("Set preference to overwrite all existing CHDs")
-        return self._execute_step_and_advance(process)
-
-    def _handle_set_trust_preference(self, process: "BaseProcess") -> "ResultObject":
-        """Handle SET_TRUST_PREFERENCE action - set preference to trust all existing CHDs
-
-        Args:
-            process: The BaseProcess instance
-
-        Returns:
-            ResultObject.success() after setting preference
-        """
-        from rom_management.processing.models import ResultObject
-
-        process.platform.set_chd_preference("skip")
-        if process.current_item and hasattr(process.current_item, "media"):
-            print(
-                f"Skipping existing CHD for {process.current_item.media.dat_game_entry.name}"
-            )
-        print("Set preference to trust existing CHDs for remaining items")
-        process.current_item = None
-        process.processed_items += 1
-        return ResultObject.success(message="Set trust preference for remaining CHDs")

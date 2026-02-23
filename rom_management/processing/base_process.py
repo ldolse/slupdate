@@ -136,9 +136,10 @@ class BaseProcess(ABC):
             # Pass self (process) so handler can access current_item
             result = handler.execute(media, file_data, self)
 
-            # Mark handler as completed BEFORE checking result
-            # (so even if it returns pending_input, we don't re-run it)
-            self.current_item._completed_handlers.add(handler.name)
+            # Mark handler as completed if item still exists
+            # (handler may have advanced the item, e.g., TRUST_EXISTING)
+            if self.current_item is not None:
+                self.current_item._completed_handlers.add(handler.name)
 
             if result.requires_input():
                 logger.debug(f"Handler {handler.name} requires input, stopping")

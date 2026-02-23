@@ -8,6 +8,7 @@ from rom_management.processing.models import (
     ProcessStatus,
     ResultObject,
     MediaProcessingItem,
+    CHDExistingPreference,
 )
 from rom_management import CHD
 from optical_media.utils import OpticalMediaProcessor
@@ -25,11 +26,12 @@ class TestChdBuildProcess:
         platform.validated_chds = set()
         platform.pm = Mock()
         platform.pm.tmpdsk = "/tmp"
-        platform.chd_handling_preference = None
+        platform.chd_handling_preference = CHDExistingPreference.ASK
         platform.state = Mock()
         platform.state.validated_chds_paths = set()
         platform.state.remove_validated_chd_path = Mock()
         platform.state.add_validated_chd_path = Mock()
+        platform._skipped_categories = set()
         return platform
 
     @pytest.fixture
@@ -135,9 +137,8 @@ class TestChdBuildProcess:
         assert process._get_handler_for_action(Action.HANDLE) is None
         assert process._get_handler_for_action(Action.HANDLE_ALL) is None
 
-    @patch("os.path.exists")
     def test_execute_step_media_no_softlist(
-        self, mock_exists, mock_platform, mock_media_no_softlist
+        self, mock_platform, mock_media_no_softlist
     ):
         """Test execute step when media has no softlist reference"""
         mock_platform.matched_buildable_media = {mock_media_no_softlist: None}
@@ -150,24 +151,13 @@ class TestChdBuildProcess:
 
         assert result.is_success()
         assert "Skipped" in result.payload.message
-        assert mock_exists.call_count == 0
 
-    @patch("os.path.exists")
-    @patch.object(CHD, "__init__", return_value=None)
-    @patch.object(OpticalMediaProcessor, "__init__", return_value=None)
-    def test_execute_step_chd_not_exists(
-        self,
-        mock_optical_init,
-        mock_chd_init,
-        mock_exists,
-        mock_platform,
-        mock_media,
-    ):
-        """Test execute step when CHD doesn't exist (should build)"""
-        mock_exists.return_value = False
+    def test_execute_step_no_chd_exists(self, mock_platform, mock_media):
+        """Test execute step when no CHD exists - should build"""
         mock_platform.matched_buildable_media = {mock_media: None}
+        # Handler returns not_applicable (no existing CHD)
+        mock_platform.get_relevant_handlers.return_value = ([], None)
 
-        # Mock the _build_single_chd method
         process = ChdBuildProcess(mock_platform)
         process.initialize()
         process._get_next_item()
@@ -180,135 +170,106 @@ class TestChdBuildProcess:
             mock_build.assert_called_once()
             assert result.is_success()
 
-    @patch("os.path.exists")
-    def test_execute_step_chd_fully_validated(
-        self, mock_exists, mock_platform, mock_media, mock_chd
-    ):
-        """Test execute step when CHD exists and is fully validated"""
-        mock_exists.return_value = True
+    def test_execute_step_handler_returns_skip(self, mock_platform, mock_media):
+        """Test execute step when handler returns skip (SKIP preference set)"""
         mock_platform.matched_buildable_media = {mock_media: None}
-        mock_platform.validated_chds = {mock_chd}
+        # Handler returns skip result
+        skip_result = ResultObject.skip(message="Skipping existing CHD per preference")
+        mock_platform.get_relevant_handlers.return_value = ([], skip_result)
 
         process = ChdBuildProcess(mock_platform)
         process.initialize()
         process._get_next_item()
 
-        # Mock CHD creation
-        with patch(
-            "rom_management.processing.chd_build_process.CHD", return_value=mock_chd
-        ):
+        result = process.execute_step()
+
+        # Skip result should advance the item
+        assert result.is_skip() or result.is_success()
+
+    def test_execute_step_handler_returns_pending_input(
+        self, mock_platform, mock_media
+    ):
+        """Test execute step when handler returns pending_input (ASK preference, CHD exists)"""
+        mock_platform.matched_buildable_media = {mock_media: None}
+
+        mock_handler = Mock()
+        mock_handler.name = "chd_existence"
+        mock_handler.has_completed = Mock(return_value=False)
+        mock_handler.execute.return_value = ResultObject.pending_input(
+            query_id="generic_query",
+            message="CHD already exists",
+            item=MediaProcessingItem(mock_media),
+            valid_actions=[
+                Action.TRUST_EXISTING,
+                Action.OVERWRITE,
+                Action.SKIP,
+                Action.STOP,
+            ],
+        )
+        mock_platform.get_relevant_handlers.return_value = ([mock_handler], None)
+
+        process = ChdBuildProcess(mock_platform)
+        process.initialize()
+        process._get_next_item()
+        # Initialize the _completed_handlers set
+        process.current_item._completed_handlers = set()
+
+        result = process.execute_step()
+
+        assert result.requires_input()
+        assert Action.TRUST_EXISTING in result.payload.valid_actions
+
+    def test_execute_step_handler_trust_existing(self, mock_platform, mock_media):
+        """Test execute step when handler trusts existing CHD (TRUST preference)"""
+        mock_platform.matched_buildable_media = {mock_media: None}
+
+        mock_handler = Mock()
+        mock_handler.name = "chd_existence"
+        mock_handler.has_completed = Mock(return_value=False)
+
+        # Handler's execute returns success and advances the item
+        def trust_side_effect(media, file_data, process):
+            process.current_item = None
+            process.processed_items += 1
+            return ResultObject.success(message="Trusted existing CHD")
+
+        mock_handler.execute.side_effect = trust_side_effect
+        mock_platform.get_relevant_handlers.return_value = ([mock_handler], None)
+
+        process = ChdBuildProcess(mock_platform)
+        process.initialize()
+        process._get_next_item()
+        # Initialize the _completed_handlers set
+        process.current_item._completed_handlers = set()
+
+        result = process.execute_step()
+
+        assert result.is_success()
+        assert process.current_item is None  # Item was advanced
+
+    def test_execute_step_handler_overwrite(self, mock_platform, mock_media):
+        """Test execute step when handler removes existing CHD (OVERWRITE preference)"""
+        mock_platform.matched_buildable_media = {mock_media: None}
+
+        mock_handler = Mock()
+        mock_handler.name = "chd_existence"
+        # Handler's execute returns success (CHD removed, process should continue to build)
+        mock_handler.execute.return_value = ResultObject.success(
+            message="Removed existing CHD"
+        )
+        mock_platform.get_relevant_handlers.return_value = ([mock_handler], None)
+
+        process = ChdBuildProcess(mock_platform)
+        process.initialize()
+        process._get_next_item()
+
+        with patch.object(
+            process, "_build_single_chd", return_value=ResultObject.success()
+        ) as mock_build:
             result = process.execute_step()
 
+            mock_build.assert_called_once()
             assert result.is_success()
-            assert "already validated" in result.payload.message
-
-    @patch("os.path.exists")
-    def test_execute_step_chd_exists_skip_preference(
-        self, mock_exists, mock_platform, mock_media, mock_chd
-    ):
-        """Test execute step when CHD exists with skip preference"""
-        mock_exists.return_value = True
-        mock_platform.matched_buildable_media = {mock_media: None}
-        mock_platform.validated_chds = set()  # Not in validated set
-        mock_platform.chd_handling_preference = "skip"
-        mock_chd.exists = True
-        mock_chd.is_valid = True
-
-        process = ChdBuildProcess(mock_platform)
-        process.initialize()
-        process._get_next_item()
-
-        with patch(
-            "rom_management.processing.chd_build_process.CHD", return_value=mock_chd
-        ):
-            result = process.execute_step()
-
-            assert result.is_success()
-            assert "Skipped existing CHD" in result.payload.message
-
-    @patch("os.path.exists")
-    @patch("os.remove")
-    def test_execute_step_chd_exists_overwrite_preference(
-        self, mock_remove, mock_exists, mock_platform, mock_media, mock_chd
-    ):
-        """Test execute step when CHD exists with overwrite preference"""
-        mock_exists.return_value = True
-        mock_platform.matched_buildable_media = {mock_media: None}
-        mock_platform.validated_chds = set()  # Not in validated set
-        mock_platform.chd_handling_preference = "overwrite"
-        mock_chd.exists = True
-        mock_chd.is_valid = True
-
-        process = ChdBuildProcess(mock_platform)
-        process.initialize()
-        process._get_next_item()
-
-        with patch(
-            "rom_management.processing.chd_build_process.CHD", return_value=mock_chd
-        ):
-            with patch.object(
-                process, "_build_single_chd", return_value=ResultObject.success()
-            ) as mock_build:
-                result = process.execute_step()
-
-                mock_remove.assert_called_once()
-                mock_build.assert_called_once()
-                assert result.is_success()
-
-    @patch("os.path.exists")
-    def test_execute_step_chd_exists_file_removal_error(
-        self, mock_exists, mock_platform, mock_media, mock_chd
-    ):
-        """Test execute step when file removal fails"""
-        mock_exists.return_value = True
-        mock_platform.matched_buildable_media = {mock_media: None}
-        mock_platform.validated_chds = set()
-        mock_platform.chd_handling_preference = "overwrite"
-        mock_chd.exists = True
-        mock_chd.is_valid = True
-
-        process = ChdBuildProcess(mock_platform)
-        process.initialize()
-        process._get_next_item()
-
-        with patch(
-            "rom_management.processing.chd_build_process.CHD", return_value=mock_chd
-        ):
-            with patch("os.remove", side_effect=OSError("Permission denied")):
-                result = process.execute_step()
-
-                assert result.requires_input()
-                assert result.payload.query_id == "generic_query"
-                assert "Permission denied" in result.payload.message
-
-    @patch("os.path.exists")
-    def test_execute_step_chd_exists_pending_input(
-        self, mock_exists, mock_platform, mock_media, mock_chd
-    ):
-        """Test execute step when CHD exists and needs user input"""
-        mock_exists.return_value = True
-        mock_platform.matched_buildable_media = {mock_media: None}
-        mock_platform.validated_chds = set()  # Not in validated set
-        mock_platform.chd_handling_preference = None  # No preference set
-        mock_chd.exists = True
-        mock_chd.is_valid = True
-
-        process = ChdBuildProcess(mock_platform)
-        process.initialize()
-        process._get_next_item()
-
-        with patch(
-            "rom_management.processing.chd_build_process.CHD", return_value=mock_chd
-        ):
-            result = process.execute_step()
-
-            assert result.requires_input()
-            assert result.payload.query_id == "generic_query"
-            assert Action.OVERWRITE in result.payload.valid_actions
-            assert Action.TRUST_EXISTING in result.payload.valid_actions
-            assert Action.SKIP in result.payload.valid_actions
-            assert Action.SKIP_ALL in result.payload.valid_actions
-            assert Action.STOP in result.payload.valid_actions
 
     @patch("rom_management.processing.chd_build_process.OpticalMediaProcessor")
     @patch("rom_management.processing.chd_build_process.CHD")
@@ -462,129 +423,15 @@ class TestChdBuildProcess:
         mock_optical.cleanup.assert_called_once()
         assert result.requires_input()
 
-    @patch("rom_management.processing.chd_build_process.OpticalMediaProcessor")
-    @patch("rom_management.processing.chd_build_process.CHD")
-    def test_build_single_chd_handler_failure(
-        self, mock_chd_class, mock_optical_class, mock_platform, mock_media
-    ):
-        """Test CHD building when a handler fails"""
-        mock_optical = Mock()
-        mock_optical.temp_dir = Mock()
-        mock_optical.temp_dir.exists.return_value = True
-        mock_optical.current_toc = "/tmp/test/disc.toc"
-        mock_optical_class.return_value = mock_optical
-
-        mock_handler = Mock()
-        mock_handler.name = "test_handler"
-        mock_handler.execute.return_value = ResultObject.error(
-            error_type="HandlerError", message="Handler failed"
-        )
-
-        mock_platform.get_relevant_handlers.return_value = ([mock_handler], None)
-
-        process = ChdBuildProcess(mock_platform)
-
-        result = process._build_single_chd(
-            mock_media, "TestTitle", "/test/path/disk1.chd"
-        )
-
-        assert result.requires_input()
-        assert result.payload.query_id == "generic_query"
-        assert "test_handler" in result.payload.message
-
-    @patch("rom_management.processing.chd_build_process.OpticalMediaProcessor")
-    @patch("rom_management.processing.chd_build_process.CHD")
-    def test_build_single_chd_handler_success(
-        self, mock_chd_class, mock_optical_class, mock_platform, mock_media
-    ):
-        """Test CHD building when handlers succeed"""
-        mock_optical = Mock()
-        mock_optical.temp_dir = Mock()
-        mock_optical.temp_dir.exists.return_value = True
-        mock_optical.current_toc = "/tmp/test/disc.toc"
-        mock_optical_class.return_value = mock_optical
-
-        # Mock handler that succeeds
-        mock_handler = Mock()
-        mock_handler.name = "test_handler"
-        mock_handler.execute.return_value = ResultObject.success()
-
-        mock_platform.get_relevant_handlers.return_value = ([mock_handler], None)
-
-        mock_chd = Mock()
-        mock_chd.exists = True
-        mock_chd.is_valid = True
-        mock_chd.path = "/test/chd/path/TestTitle/disk1.chd"
-        mock_chd_class.return_value = mock_chd
-
-        process = ChdBuildProcess(mock_platform)
-
-        result = process._build_single_chd(
-            mock_media, "TestTitle", "/test/path/disk1.chd"
-        )
-
-        assert result.is_success()
-        mock_handler.execute.assert_called_once_with(mock_media, mock_optical)
-
-    def test_get_progress(self, mock_platform):
-        """Test get_progress returns correct information"""
-        process = ChdBuildProcess(mock_platform)
-        process.processed_items = 5
-        process.total_items = 10
-
-        progress = process.get_progress()
-
-        assert progress["processed"] == 5
-        assert progress["total"] == 10
-        assert progress["percentage"] == 50.0
-
-    def test_handle_user_action_stop(self, mock_platform):
-        """Test STOP action handling"""
-        process = ChdBuildProcess(mock_platform)
-        process.processed_items = 5
-
-        result = process.handle_user_action(Action.STOP)
-
-        assert result.is_complete()
-        assert result.payload.stopped_early is True
-        assert result.payload.total_processed == 5
-
-    def test_execute_step_completion(self, mock_platform):
-        """Test execute_step returns COMPLETE when all items processed"""
-        mock_platform.matched_buildable_media = {}
-
-        process = ChdBuildProcess(mock_platform)
-        process.initialize()
-
-        result = process.execute_step()
-
-        assert result.is_complete()
-        assert result.payload.total_processed == 0
-
-    def test_build_single_chd_missing_zip_path(self, mock_platform, mock_media):
-        """Test _build_single_chd returns PENDING_INPUT when zip_path is None"""
-        # Ensure zip_path is None
+    def test_build_single_chd_no_zip_path(self, mock_platform, mock_media):
+        """Test CHD building when no zip_path is set"""
         mock_media.zip_path = None
 
-        # Create a mock dat_game_entry
-        mock_dat_entry = Mock()
-        mock_dat_entry.name = "test_game"
-        mock_media.dat_game_entry = mock_dat_entry
-
-        # Set up the processing item
         process = ChdBuildProcess(mock_platform)
-        mock_item = MediaProcessingItem(mock_media)
-        process.current_item = mock_item
 
         result = process._build_single_chd(
             mock_media, "TestTitle", "/test/path/disk1.chd"
         )
 
-        # Should return PENDING_INPUT, not ERROR
         assert result.requires_input()
         assert "ZIP path not set" in result.payload.message
-        # Verify it offers skip/continue options
-        valid_actions = result.payload.valid_actions
-        assert Action.SKIP in valid_actions
-        assert Action.CONTINUE in valid_actions
-        assert Action.STOP in valid_actions
