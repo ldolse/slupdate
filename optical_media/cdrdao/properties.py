@@ -124,60 +124,60 @@ def tracks(self) -> List[Track]:
         tracks.append(aaru_track)
     return tracks
 
-    @tracks.setter
-    def tracks(self, value: List[Track]):
-        self._tracks = value
+@tracks.setter
+def tracks(self, value: List[Track]):
+    self._tracks = value
 
-    @property
-    def dump_hardware(self) -> Optional[List]:
-        return None
+@property
+def dump_hardware(self) -> Optional[List]:
+    return None
 
-    @property
-    def aaru_metadata(self) -> Optional[Any]:
-        return None
+@property
+def aaru_metadata(self) -> Optional[Any]:
+    return None
 
-    @property
-    def supported_media_tags(self) -> List[MediaTagType]:
-        return [MediaTagType.CD_MCN]
+@property
+def supported_media_tags(self) -> List[MediaTagType]:
+    return [MediaTagType.CD_MCN]
 
-    @property
-    def supported_sector_tags(self) -> List[SectorTagType]:
-        return [
-            SectorTagType.CdSectorEcc, SectorTagType.CdSectorEccP, SectorTagType.CdSectorEccQ,
-            SectorTagType.CdSectorEdc, SectorTagType.CdSectorHeader, SectorTagType.CdSectorSubchannel,
-            SectorTagType.CdSectorSubHeader, SectorTagType.CdSectorSync, SectorTagType.CdTrackFlags,
-            SectorTagType.CdTrackIsrc
-        ]
+@property
+def supported_sector_tags(self) -> List[SectorTagType]:
+    return [
+        SectorTagType.CdSectorEcc, SectorTagType.CdSectorEccP, SectorTagType.CdSectorEccQ,
+        SectorTagType.CdSectorEdc, SectorTagType.CdSectorHeader, SectorTagType.CdSectorSubchannel,
+        SectorTagType.CdSectorSubHeader, SectorTagType.CdSectorSync, SectorTagType.CdTrackFlags,
+        SectorTagType.CdTrackIsrc
+    ]
 
-    @property
-    def supported_media_types(self) -> List[MediaType]:
-        return [
-            MediaType.CD, MediaType.CDDA, MediaType.CDEG, MediaType.CDG, MediaType.CDI,
-            MediaType.CDMIDI, MediaType.CDMRW, MediaType.CDPLUS, MediaType.CDR,
-            MediaType.CDROM, MediaType.CDROMXA, MediaType.CDRW, MediaType.CDV,
-            MediaType.DDCD, MediaType.DDCDR, MediaType.DDCDRW, MediaType.MEGACD,
-            MediaType.PS1CD, MediaType.PS2CD, MediaType.SuperCDROM2, MediaType.SVCD,
-            MediaType.SATURNCD, MediaType.ThreeDO, MediaType.VCD, MediaType.VCDHD,
-            MediaType.NeoGeoCD, MediaType.PCFX, MediaType.CDTV, MediaType.CD32,
-            MediaType.Nuon, MediaType.Playdia, MediaType.Pippin, MediaType.FMTOWNS,
-            MediaType.MilCD, MediaType.VideoNow, MediaType.VideoNowColor,
-            MediaType.VideoNowXp, MediaType.CVD, MediaType.PCD
-        ]
+@property
+def supported_media_types(self) -> List[MediaType]:
+    return [
+        MediaType.CD, MediaType.CDDA, MediaType.CDEG, MediaType.CDG, MediaType.CDI,
+        MediaType.CDMIDI, MediaType.CDMRW, MediaType.CDPLUS, MediaType.CDR,
+        MediaType.CDROM, MediaType.CDROMXA, MediaType.CDRW, MediaType.CDV,
+        MediaType.DDCD, MediaType.DDCDR, MediaType.DDCDRW, MediaType.MEGACD,
+        MediaType.PS1CD, MediaType.PS2CD, MediaType.SuperCDROM2, MediaType.SVCD,
+        MediaType.SATURNCD, MediaType.ThreeDO, MediaType.VCD, MediaType.VCDHD,
+        MediaType.NeoGeoCD, MediaType.PCFX, MediaType.CDTV, MediaType.CD32,
+        MediaType.Nuon, MediaType.Playdia, MediaType.Pippin, MediaType.FMTOWNS,
+        MediaType.MilCD, MediaType.VideoNow, MediaType.VideoNowColor,
+        MediaType.VideoNowXp, MediaType.CVD, MediaType.PCD
+    ]
 
-    @property
-    def supported_options(self) -> List[Tuple[str, Type, str, Any]]:
-        return [
-            ("separate", bool, "Write each track to a separate file", False)
-        ]
+@property
+def supported_options(self) -> List[Tuple[str, Type, str, Any]]:
+    return [
+        ("separate", bool, "Write each track to a separate file", False)
+    ]
 
-    @property
-    def known_extensions(self) -> List[str]:
-        return [".toc"]
+@property
+def known_extensions(self) -> List[str]:
+    return [".toc"]
 
-    @property
-    def is_writing(self) -> bool:
-        return self._is_writing
+@property
+def is_writing(self) -> bool:
+    return self._is_writing
 
-    @property
-    def error_message(self) -> Optional[str]:
-        return self._error_message
+@property
+def error_message(self) -> Optional[str]:
+    return self._error_message
